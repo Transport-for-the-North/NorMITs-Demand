@@ -29,7 +29,7 @@ from normits_demand.pathing.distribution_model import DistributionModelArgumentB
 
 # ## CONSTANTS ## #
 # Trip end import args
-notem_iteration_name = '9.6'
+notem_iteration_name = '9.7'
 tour_props_version = 'v%s' % notem_iteration_name
 
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
@@ -39,7 +39,7 @@ tram_export_home = r"I:\NorMITs Demand\Tram"
 # Distribution running args
 base_year = 2018
 scenario = nd.Scenario.SC01_JAM
-dm_iteration_name = '9.3.4'
+dm_iteration_name = '9.7.1'
 dm_import_home = r"I:\NorMITs Demand\import"
 dm_export_home = r"E:\NorMITs Demand\Distribution Model"
 
@@ -50,10 +50,10 @@ SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_wday'
 
 
 def main():
-    mode = nd.Mode.CAR
+    # mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
     # mode = nd.Mode.TRAIN
-    # mode = nd.Mode.TRAM
+    mode = nd.Mode.TRAM
 
     # Running params
     use_tram = True
@@ -374,7 +374,7 @@ def main():
             'outer_max_iters': 50,
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
-            'calibrate': True,
+            'calibrate': False,
         }
 
         # Choose the correct kwargs

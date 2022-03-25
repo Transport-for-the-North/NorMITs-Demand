@@ -2032,6 +2032,7 @@ class MultiAreaGravityModelCalibrator:
                  furness_tol: float,
                  use_perceived_factors: bool = True,
                  running_log_path: nd.PathLike = None,
+                 memory_optimised: bool = False,
                  ):
         # TODO(BT): Write MultiAreaGravityModelCalibrator __init__ docs
         # Set up logging
@@ -2060,6 +2061,7 @@ class MultiAreaGravityModelCalibrator:
         self.furness_tol = furness_tol
         self.use_perceived_factors = use_perceived_factors
         self.running_log_path = running_log_path
+        self.memory_optimised = memory_optimised
 
         self.target_convergence = target_convergence
 
@@ -2377,6 +2379,104 @@ class MultiAreaGravityModelCalibrator:
 
         return furnessed_matrix, results
 
+    def _calibrate_cpu_optimised(
+        self,
+        init_params: Dict[str, Any],
+        estimate_init_params: bool,
+        calibrate_params: bool,
+        diff_step: float,
+        ftol: float,
+        xtol: float,
+        grav_max_iters: int,
+        verbose: int,
+    ) -> Dict[Any, SingleTLDCalibratorThread]:
+        """Internal cpu optimised function of `self.calibrate()`
+
+        See Also
+        --------
+        `self.calibrate()`
+        """
+        # Create the shared arrays for all to communicate
+        init_mat = np.zeros_like(self.cost_matrix)
+        with contextlib.ExitStack() as ctx_manager:
+            shared_arrays = self._setup_shared_arrays(
+                init_mat=init_mat,
+                ctx_manager=ctx_manager,
+            )
+
+            # Set up the furness threads for gravity threads
+            furness_setup = self._setup_furness_threads(shared_arrays)
+
+            # Start the gravity processes
+            calibrator_threads = dict.fromkeys(self.calib_areas)
+            for area_id in self.calib_areas:
+                # Get just the costs for this area
+                area_cost = self.cost_matrix * furness_setup.area_mats[area_id]
+
+                # Set up where to put the logs
+                dir_name, fname = os.path.split(self.running_log_path)
+                area_dir_name = os.path.join(dir_name, self.calibration_naming[area_id])
+                file_ops.create_folder(area_dir_name)
+                area_running_log_path = os.path.join(area_dir_name, fname)
+
+                # Replace the log if it already exists
+                if os.path.isfile(area_running_log_path):
+                    os.remove(area_running_log_path)
+
+                # Start a thread to calibrate each area
+                # TODO(BT): pass in objects rather than individual
+                calibrator_threads[area_id] = SingleTLDCalibratorThread(
+                    thread_name=self.calibration_naming[area_id],
+                    cost_function=self.cost_function,
+                    cost_matrix=area_cost,
+                    init_params=init_params,
+                    estimate_init_params=estimate_init_params,
+                    target_cost_distribution=self.target_cost_distributions[area_id],
+                    target_convergence=self.target_convergence,
+                    running_log_path=area_running_log_path,
+                    gravity_putter_q=furness_setup.gravity_putter_qs[area_id],
+                    gravity_getter_q=furness_setup.gravity_getter_qs[area_id],
+                    gravity_putter_array=shared_arrays.gravity_in,
+                    gravity_getter_array=shared_arrays.gravity_out,
+                    jacobian_putter_array=shared_arrays.jacobian_in,
+                    jacobian_getter_array=shared_arrays.jacobian_out,
+                    jacobian_putter_q=furness_setup.jacobian_putter_qs[area_id],
+                    jacobian_getter_q=furness_setup.jacobian_getter_qs[area_id],
+                    thread_complete_event=furness_setup.complete_events[area_id],
+                    all_done_event=furness_setup.all_complete_event,
+                    calibrate_params=calibrate_params,
+                    diff_step=diff_step,
+                    ftol=ftol,
+                    xtol=xtol,
+                    grav_max_iters=grav_max_iters,
+                    verbose=verbose,
+                )
+                calibrator_threads[area_id].start()
+
+            multithreading.wait_for_thread_dict_return_or_error(
+                return_threads=calibrator_threads,
+                error_threads_list=furness_setup.all_threads,
+            )
+
+    def _calibrate_memory_optimised(
+        self,
+        init_params: Dict[str, Any],
+        estimate_init_params: bool,
+        calibrate_params: bool,
+        diff_step: float,
+        ftol: float,
+        xtol: float,
+        grav_max_iters: int,
+        verbose: int,
+    ) -> Dict[Any, SingleTLDCalibratorThread]:
+        """Internal memory optimised function of `self.calibrate()`
+
+        See Also
+        --------
+        `self.calibrate()`
+        """
+        raise NotImplementedError
+
     def calibrate(
         self,
         init_params: Dict[str, Any],
@@ -2482,72 +2582,34 @@ class MultiAreaGravityModelCalibrator:
         for key in self.initial_cost_params:
             self.initial_cost_params[key] = init_params.copy()
 
-        # Create the shared arrays for all to communicate
-        init_mat = np.zeros_like(self.cost_matrix)
-        with contextlib.ExitStack() as ctx_manager:
-            shared_arrays = self._setup_shared_arrays(
-                init_mat=init_mat,
-                ctx_manager=ctx_manager,
+        # Choose whether to run memory or CPU optimised
+        if self.memory_optimised:
+            calibrators = self._calibrate_memory_optimised(
+                init_params=init_params,
+                estimate_init_params=estimate_init_params,
+                calibrate_params=calibrate_params,
+                diff_step=diff_step,
+                ftol=ftol,
+                xtol=xtol,
+                grav_max_iters=grav_max_iters,
+                verbose=verbose,
             )
-
-            # Set up the furness threads for gravity threads
-            furness_setup = self._setup_furness_threads(shared_arrays)
-
-            # Start the gravity processes
-            calibrator_threads = dict.fromkeys(self.calib_areas)
-            for area_id in self.calib_areas:
-                # Get just the costs for this area
-                area_cost = self.cost_matrix * furness_setup.area_mats[area_id]
-
-                # Set up where to put the logs
-                dir_name, fname = os.path.split(self.running_log_path)
-                area_dir_name = os.path.join(dir_name, self.calibration_naming[area_id])
-                file_ops.create_folder(area_dir_name)
-                area_running_log_path = os.path.join(area_dir_name, fname)
-
-                # Replace the log if it already exists
-                if os.path.isfile(area_running_log_path):
-                    os.remove(area_running_log_path)
-
-                # Start a thread to calibrate each area
-                # TODO(BT): pass in objects rather than individual
-                calibrator_threads[area_id] = SingleTLDCalibratorThread(
-                    thread_name=self.calibration_naming[area_id],
-                    cost_function=self.cost_function,
-                    cost_matrix=area_cost,
-                    init_params=init_params,
-                    estimate_init_params=estimate_init_params,
-                    target_cost_distribution=self.target_cost_distributions[area_id],
-                    target_convergence=self.target_convergence,
-                    running_log_path=area_running_log_path,
-                    gravity_putter_q=furness_setup.gravity_putter_qs[area_id],
-                    gravity_getter_q=furness_setup.gravity_getter_qs[area_id],
-                    gravity_putter_array=shared_arrays.gravity_in,
-                    gravity_getter_array=shared_arrays.gravity_out,
-                    jacobian_putter_array=shared_arrays.jacobian_in,
-                    jacobian_getter_array=shared_arrays.jacobian_out,
-                    jacobian_putter_q=furness_setup.jacobian_putter_qs[area_id],
-                    jacobian_getter_q=furness_setup.jacobian_getter_qs[area_id],
-                    thread_complete_event=furness_setup.complete_events[area_id],
-                    all_done_event=furness_setup.all_complete_event,
-                    calibrate_params=calibrate_params,
-                    diff_step=diff_step,
-                    ftol=ftol,
-                    xtol=xtol,
-                    grav_max_iters=grav_max_iters,
-                    verbose=verbose,
-                )
-                calibrator_threads[area_id].start()
-
-            multithreading.wait_for_thread_dict_return_or_error(
-                return_threads=calibrator_threads,
-                error_threads_list=furness_setup.all_threads,
+        else:
+            calibrators = self._calibrate_cpu_optimised(
+                init_params=init_params,
+                estimate_init_params=estimate_init_params,
+                calibrate_params=calibrate_params,
+                diff_step=diff_step,
+                ftol=ftol,
+                xtol=xtol,
+                grav_max_iters=grav_max_iters,
+                verbose=verbose,
             )
 
         # Save the optimal cost params for each area
         for area_id in self.calib_areas:
-            optimal_params = calibrator_threads[area_id].optimal_cost_params
-            perceived_factors = calibrator_threads[area_id]._perceived_factors
+            optimal_params = calibrators[area_id].optimal_cost_params
+            perceived_factors = calibrators[area_id]._perceived_factors
             self.optimal_cost_params[area_id] = optimal_params
             self.perceived_factors[area_id] = perceived_factors
 
