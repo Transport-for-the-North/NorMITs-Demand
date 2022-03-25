@@ -95,7 +95,7 @@ def main():
         nhb_seg_name = 'p_m_tp'
 
         # Define target tld dirs
-        target_tld_version = 'v1'
+        target_tld_version = 'v1.1'
         geo_constraint_type = 'trip_OD'
 
         upper_calibration_area = 'gb'
@@ -177,7 +177,7 @@ def main():
         nhb_seg_name = 'p_m_tp'
 
         # Define target tld dirs
-        target_tld_version = 'v1'
+        target_tld_version = 'v1.1'
         geo_constraint_type = 'trip_OD'
 
         # Define kwargs for the distribution tiers
@@ -255,7 +255,7 @@ def main():
         nhb_seg_name = 'p_m_ca_tp'
 
         # Define target tld dirs
-        target_tld_version = 'v1'
+        target_tld_version = 'v1.1'
         geo_constraint_type = 'trip_OD'
 
         # Define kwargs for the distribution tiers
@@ -333,7 +333,7 @@ def main():
         nhb_seg_name = 'p_m_tp'
 
         # Define target tld dirs
-        target_tld_version = 'v1'
+        target_tld_version = 'v1.1'
         geo_constraint_type = 'trip_OD'
 
         # Define kwargs for the distribution tiers
@@ -482,11 +482,11 @@ def main():
 
     # ## RUN THE MODEL ## #
     if run_hb:
-        trip_origin = 'hb'
+        trip_origin = nd.TripOrigin.HB
 
         # Build the trip end kwargs
         subset_name = SUBSET_SEG_BASE_NAME.format(
-            trip_origin=trip_origin,
+            trip_origin=trip_origin.value,
             te_model_name=te_model_name,
         )
         trip_end_kwargs = {
@@ -525,10 +525,10 @@ def main():
         )
 
     if run_nhb:
-        trip_origin = 'nhb'
+        trip_origin = nd.TripOrigin.NHB
 
         # Build the trip end kwargs
-        kwargs = {'trip_origin': trip_origin, 'te_model_name': te_model_name}
+        kwargs = {'trip_origin': trip_origin.value, 'te_model_name': te_model_name}
         subset_name = SUBSET_SEG_BASE_NAME.format(**kwargs)
         reduce_name = REDUCE_SEG_BASE_NAME.format(**kwargs)
         trip_end_kwargs = {
@@ -574,7 +574,7 @@ def main():
         elif 'nhb_distributor' in locals():
             nhb_distributor.compile_to_assignment_format()
         else:
-            trip_origin = 'hb'
+            trip_origin = nd.TripOrigin.HB
             arg_builder = DistributionModelArgumentBuilder(
                 trip_origin=trip_origin,
                 trip_end_getter=trip_end_getter,
