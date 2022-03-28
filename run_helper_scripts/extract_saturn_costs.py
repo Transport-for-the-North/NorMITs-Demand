@@ -228,7 +228,7 @@ def ufms_to_csvs(path: Path, converter: ufm_converter.UFMConverter) -> None:
         Class for converting between UFMs and CSVs.
     """
     for mat in path.parent.glob(f"{path.stem}*.UFM"):
-        converter.ufm_to_tba2(mat)
+        converter.ufm_to_csv(mat)
 
 
 def skim_assignments(

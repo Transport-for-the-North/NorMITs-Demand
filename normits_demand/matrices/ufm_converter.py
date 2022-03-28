@@ -6,6 +6,7 @@
 
 ##### IMPORTS #####
 # Standard imports
+import enum
 import os
 import subprocess
 from pathlib import Path
@@ -14,11 +15,37 @@ from pathlib import Path
 
 # Local imports
 from normits_demand import logging as nd_log
+from normits_demand.core import enumerations as nd_enum
 
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
 
 ##### CLASSES #####
+class CSVFormat(nd_enum.AutoName):
+    """Available CSV formats when converting between UFMs and CSV.
+
+    Not all format defined are available for conversions in both
+    directions.
+
+    Enumerations
+    ------------
+    TUBA2
+        TUBA 2 format is 3 columns without a header row containing
+        the origin zone number, destination zone number and the
+        matrix value. This format excludes any cells which are 0.
+    TUBA3
+        TUBA 3 format is a fixed width format with 4 columns starting at
+        the following positions: 0, 9,
+    SQUARE
+        Square matrix with no header row and the first
+        column containing zone name.
+    """
+
+    TUBA2 = enum.auto()
+    TUBA3 = enum.auto()
+    SQUARE = enum.auto()
+
+
 class UFMConverter:
     """Class for converting matrices to and from SATURN's UFM file format.
 
@@ -45,12 +72,10 @@ class UFMConverter:
             self._environment = update_env(self._saturn_folder)
         return self._environment
 
-    def ufm_to_tba2(self, ufm: Path, csv: Path = None) -> Path:
-        """Convert UFM file to a CSV in TUBA 2 format.
-
-        TUBA 2 format is 3 columns without a header row containing
-        the origin zone number, destination zone number and the
-        matrix value. This format excludes any cells which are 0.
+    def ufm_to_csv(
+        self, ufm: Path, csv: Path = None, csv_format: CSVFormat = CSVFormat.TUBA2
+    ) -> Path:
+        """Convert UFM file to a CSV in specific format.
 
         Parameters
         ----------
@@ -59,6 +84,8 @@ class UFMConverter:
         csv : Path, optional
             Path to output CSV file, defaults to `ufm.csv`
             if not given.
+        csv_format : CSVFormat, default CSVFormat.TUBA2
+            Format that the output CSV should be saved in.
 
         Returns
         -------
@@ -69,6 +96,8 @@ class UFMConverter:
         ------
         FileNotFoundError
             If the output CSV file isn't created.
+        NotImplementedError
+            If `csv_format` isn't 'TUBA2' or 'TUBA3'.
         """
         ufm = ufm.resolve()
         if csv is None:
@@ -76,9 +105,16 @@ class UFMConverter:
         else:
             csv = csv.resolve()
 
-        LOG.debug("Converting UFM to TUBA 2 CSV: %s", ufm)
+        if csv_format == CSVFormat.TUBA2:
+            args = ["UFM2TBA2", str(ufm), str(csv)]
+        elif csv_format == CSVFormat.TUBA3:
+            args = ["UFM2TBA3", str(ufm), str(csv.with_suffix(""))]
+        else:
+            raise NotImplementedError(f"ufm_to_csv not implemented for {csv_format}")
+
+        LOG.debug("Converting UFM to %s CSV: %s", csv_format.value, ufm)
         comp_proc = subprocess.run(
-            ["UFM2TBA2", str(ufm), str(csv)],
+            args,
             capture_output=True,
             env=self.environment,
             cwd=ufm.parent,
@@ -86,11 +122,13 @@ class UFMConverter:
             shell=True,
         )
 
-        msg_data = (csv, cmd_strip(comp_proc.stdout), cmd_strip(comp_proc.stderr))
-        if csv.exists():
-            LOG.debug("Created CSV: %s\n%s\n%s", *msg_data)
+        msg_data = (cmd_strip(comp_proc.stdout), cmd_strip(comp_proc.stderr))
+        for suff in (csv.suffix, ".CSV", ".TXT"):
+            if csv.with_suffix(suff).exists():
+                LOG.debug("Created CSV: %s\n%s\n%s", csv.with_suffix(suff), *msg_data)
+                break
         else:
-            LOG.error("Failed to create CSV: %s\n%s\n%s", *msg_data)
+            LOG.error("Failed to create CSV: %s\n%s\n%s", csv, *msg_data)
             raise FileNotFoundError(f"error creating {csv}")
         return csv
 
@@ -121,6 +159,9 @@ class UFMConverter:
         FileNotFoundError
             If the output UFM file isn't created.
         """
+        # TODO Change this to a private method and add a csv_to_ufm method which
+        # takes in a CSVFormat and chooses the correct method to run
+
         # Should be square matrix with zone names in first column and no header rows
         LOG.debug("Converting CSV in square format to UFM: %s", csv)
         if ufm is None:
