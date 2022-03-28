@@ -35,7 +35,9 @@ class CSVFormat(nd_enum.AutoName):
         matrix value. This format excludes any cells which are 0.
     TUBA3
         TUBA 3 format is a fixed width format with 4 columns starting at
-        the following positions: 0, 9,
+        the following positions: 0, 9, 17 and 25. The columns include the
+        origin zone, destination zone, matrix level and the matrix value.
+        This format excludes any cells which are 0.
     SQUARE
         Square matrix with no header row and the first
         column containing zone name.
@@ -257,6 +259,75 @@ class UFMConverter:
             LOG.error("Failed creating UFM: %s\n%s\n%s", *msg_data)
             raise FileNotFoundError(f"error creating {ufm}")
         return ufm
+
+    def _ufm_omx_conversion(self, path: Path, from_: str, to: str) -> Path:
+        """Internal method for `ufm_to_omx` and `omx_to_ufm` methods."""
+        to = to.upper().strip()
+        if to not in ("OMX", "UFM"):
+            raise ValueError(f"to should be OMX or UFM not '{to}'")
+
+        path = Path(path).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"{from_} doesn't exist: {path}")
+
+        LOG.debug("Converting %s to %s: %s", from_, to, path)
+        comp_proc = subprocess.run(
+            [f"{from_}2{to}", str(path.with_suffix(""))],
+            capture_output=True,
+            env=self.environment,
+            cwd=path.parent,
+            check=False,
+            shell=True,
+        )
+
+        out = path.with_suffix(f".{to}")
+        msg_data = (to, out, cmd_strip(comp_proc.stdout), cmd_strip(comp_proc.stderr))
+        if out.exists():
+            LOG.debug("Created %s: %s\n%s\n%s", *msg_data)
+        else:
+            LOG.error("Failed to create %s: %s\n%s\n%s", *msg_data)
+            raise FileNotFoundError(f"error creating: {out}")
+        return out
+
+    def ufm_to_omx(self, ufm: Path) -> Path:
+        """Convert a UFM file to the OMX format.
+
+        Parameters
+        ----------
+        ufm : Path
+            Path to existing UFM file.
+
+        Returns
+        -------
+        Path
+            Output OMX file, will be '{ufm}.OMX'.
+
+        Raises
+        ------
+        FileNotFoundError
+            If `ufm` doesn't exist or OMX file isn't created.
+        """
+        return self._ufm_omx_conversion(ufm, "UFM", "OMX")
+
+    def omx_to_ufm(self, omx: Path) -> Path:
+        """Convert a OMX file to a UFM file.
+
+        Parameters
+        ----------
+        omx : Path
+            Path to existing UFM file.
+
+        Returns
+        -------
+        Path
+            Output UFM file, will be '{omx}.UFM'.
+
+        Raises
+        ------
+        FileNotFoundError
+            If `omx` doesn't exist or UFM file isn't created.
+        """
+        return self._ufm_omx_conversion(omx, "OMX", "UFM")
 
 
 ##### FUNCTIONS #####
