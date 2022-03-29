@@ -1922,15 +1922,6 @@ class JacobianFurnessThreadQueues(FurnessThreadBase):
     def get_furness_data(self):
         """Grabs the needed data for the furness to run
 
-        Parameters
-        ----------
-        need_area_keys:
-            A list of the area keys that we still need to get data for.
-            This key can be used in index:
-            self.getter_qs
-            self.putter_qs
-            self.area_mats
-
         Returns
         -------
         seed_mats:
@@ -2749,6 +2740,95 @@ class MultiAreaGravityModelCalibrator:
             jacobian_furness=jacobian_furness,
         )
 
+    def _setup_furness_threads_queues(self) -> FurnessSetup:
+        """Sets up all the furness/jacobian threads for calibration runs"""
+        # Init
+        gravity_furness_key = 'furness',
+        jacobian_key = 'jacobian',
+
+        # Function to construct FurnessThreadInterface objects
+        def create_interface_input(constructor):
+            ret_val = dict()
+            for name in [gravity_furness_key, jacobian_key]:
+                nested_dict = dict.fromkeys(self.calib_areas)
+                for key in nested_dict:
+                    nested_dict[key] = constructor()
+                ret_val[name] = nested_dict
+            return ret_val
+
+        # Use above function to create objects
+        interface_putter_qs = create_interface_input(lambda: queue.Queue(1))
+        interface_getter_qs = create_interface_input(lambda: queue.Queue(1))
+        furness_return_qs = create_interface_input(lambda: queue.Queue(10))
+        furness_wait_events = create_interface_input(lambda: threading.Event())
+
+        # Generate the complete event
+        all_complete_event = threading.Event()
+
+        # Generate the area mats and complete events for each thread
+        area_mats = dict.fromkeys(self.calib_areas)
+        complete_events = dict.fromkeys(self.calib_areas)
+        for area_id in self.calib_areas:
+            area_mats[area_id] = self.calibration_matrix == area_id
+            complete_events[area_id] = threading.Event()
+
+        # Initialise the interface between gravity and furnesses
+        furness_interface = FurnessThreadInterfaceQueues(
+            name='FurnessInterface',
+            daemon=True,
+            furness_wait_events=furness_wait_events,
+            area_mats=area_mats,
+            getter_qs=interface_getter_qs,
+            putter_qs=interface_putter_qs,
+            complete_events=complete_events,
+            all_complete_event=all_complete_event,
+            thread_ids=self.calib_areas,
+            gravity_furness_key=gravity_furness_key,
+            jacobian_key=jacobian_key,
+        )
+        furness_interface.start()
+
+        # Initialise the central gravity furness thread
+        gravity_furness = GravityFurnessThreadQueues(
+            name='Furness',
+            daemon=True,
+            row_targets=self.row_targets,
+            col_targets=self.col_targets,
+            getter_qs=interface_putter_qs[gravity_furness_key],
+            putter_qs=furness_return_qs[gravity_furness_key],
+            area_mats=area_mats,
+            furness_tol=self.furness_tol,
+            furness_max_iters=self.furness_max_iters,
+            warning=True,
+        )
+        gravity_furness.start()
+
+        # Initialise the central jacobian furness thread
+        jacobian_furness = JacobianFurnessThreadQueues(
+            name='Jacobian',
+            daemon=True,
+            getter_qs=interface_putter_qs[jacobian_key],
+            putter_qs=furness_return_qs[jacobian_key],
+            area_mats=area_mats,
+            furness_tol=1e-6,
+            furness_max_iters=50,
+            warning=False,
+        )
+        jacobian_furness.start()
+
+        return FurnessSetup(
+            area_mats=area_mats,
+            gravity_putter_qs=interface_getter_qs[gravity_furness_key],
+            gravity_getter_qs=furness_return_qs[gravity_furness_key],
+            jacobian_putter_qs=interface_getter_qs[jacobian_key],
+            jacobian_getter_qs=furness_return_qs[jacobian_key],
+            complete_events=complete_events,
+            all_complete_event=all_complete_event,
+            furness_interface=furness_interface,
+            gravity_furness=gravity_furness,
+            jacobian_furness=jacobian_furness,
+        )
+
     def _setup_shared_arrays(self,
                              init_mat: np.ndarray,
                              ctx_manager: contextlib.ExitStack,
@@ -2982,7 +3062,7 @@ class MultiAreaGravityModelCalibrator:
         """
         # ## SETUP FOR THREADS ## #
         # Set up the furness threads for gravity threads
-        # furness_setup = self._setup_furness_threads()
+        furness_setup = self._setup_furness_threads_queues()
 
         # ## START EACH THREAD ## #
         # Start the gravity processes
