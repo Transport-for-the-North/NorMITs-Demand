@@ -2525,7 +2525,7 @@ class MultiAreaGravityModelCalibrator:
                  furness_tol: float,
                  use_perceived_factors: bool = True,
                  running_log_path: nd.PathLike = None,
-                 memory_optimised: bool = False,
+                 memory_optimised: bool = True,
                  ):
         # TODO(BT): Write MultiAreaGravityModelCalibrator __init__ docs
         # Set up logging

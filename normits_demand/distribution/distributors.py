@@ -838,6 +838,7 @@ class GravityDistributor(AbstractDistributor):
             furness_max_iters=kwargs.get('furness_max_iters'),
             furness_tol=kwargs.get('furness_tol'),
             use_perceived_factors=kwargs.get('use_perceived_factors'),
+            memory_optimised=kwargs.get('memory_optimised'),
         )
 
         optimal_cost_params = calib.calibrate(
