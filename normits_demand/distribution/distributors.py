@@ -878,7 +878,7 @@ class GravityDistributor(AbstractDistributor):
 
         # Generate the reports
         # Multiprocess here only if we aren't already
-        process_count = -2 if self.process_count == 0 else self.process_count
+        process_count = -2 if self.process_count == 0 else 0
         multiprocessing.multiprocess(
             fn=self._write_out_reports,
             kwargs=kwarg_list,
