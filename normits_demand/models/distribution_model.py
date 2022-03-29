@@ -366,11 +366,19 @@ class DistributionModel(DistributionModelExportPaths):
         # Matrix Trip ENd totals
         #   Inter / Intra Report by segment?
         #   Aggregate segments and report again too? (CBO)
+        nd.constants.USER_CLASS_PURPOSES
         # Sector Reports Dvec style
         #   Output 24x24 square at 24hr
         # TLD curve
         #   single mile bands - p/m (ca ) segments full matrix
         #   NorMITs Vis
+        from normits_demand.cost import utils as cost_utils
+        cost_utils.calculate_cost_distribution(
+            matrix=,
+            cost_matrix=, #Ben writing, returns dictionary of cost matrices
+            bin_edges= #vector
+        )
+
         print("test")
         print("demand dir:" + self.export_paths.full_pa_dir)
         print("output dir:" + self.report_paths.pa_reports_dir)
