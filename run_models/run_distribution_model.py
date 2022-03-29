@@ -57,8 +57,9 @@ def main():
 
     # Running params
     use_tram = True
+    memory_optimised_multi_area_grav = True
 
-    calibrate_params = False
+    calibrate_params = True
 
     run_hb = True
     run_nhb = False
@@ -132,6 +133,7 @@ def main():
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
             'calibrate_params': calibrate_params,
+            'memory_optimised': memory_optimised_multi_area_grav,
             'estimate_init_params': False,
             'use_perceived_factors': True,
         }
@@ -210,6 +212,7 @@ def main():
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
             'calibrate_params': calibrate_params,
+            'memory_optimised': memory_optimised_multi_area_grav,
             'estimate_init_params': False,
             'use_perceived_factors': True,
         }
@@ -288,6 +291,7 @@ def main():
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
             'calibrate_params': calibrate_params,
+            'memory_optimised': memory_optimised_multi_area_grav,
             'estimate_init_params': False,
             'use_perceived_factors': True,
         }
@@ -364,6 +368,7 @@ def main():
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
             'calibrate_params': calibrate_params,
+            'memory_optimised': memory_optimised_multi_area_grav,
             'estimate_init_params': False,
             'use_perceived_factors': True,
         }
@@ -391,6 +396,23 @@ def main():
         raise ValueError(
             "Don't know what mode %s is!" % mode.value
         )
+
+    # ## DEAL WITH PROCESS COUNT NEEDS ## #
+    process_count = -2
+    upper_model_process_count = process_count
+    lower_model_process_count = process_count
+
+    # Need to limit process count for memory usage if MSOA
+    if upper_zoning_system.name == 'msoa':
+        max_process_count = 8
+
+        if os.cpu_count() > 10 and (process_count > 8 or process_count < 0):
+            upper_model_process_count = max_process_count
+
+        # Limit further if multi-area
+        if not isinstance(upper_calibration_areas, str):
+            n_areas = len(upper_calibration_areas)
+            upper_model_process_count = int(max_process_count / n_areas)
 
     # ## SETUP TRIP END ARGS ## #
     kwargs = {
@@ -460,7 +482,8 @@ def main():
         'lower_model_method': lower_model_method,
         'lower_distributor_kwargs': None,
         'export_home': dm_export_home,
-        'process_count': -2,
+        'upper_model_process_count': upper_model_process_count,
+        'lower_model_process_count': lower_model_process_count,
     }
 
     # Init params fnames
