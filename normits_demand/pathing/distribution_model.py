@@ -571,6 +571,14 @@ class DMArgumentBuilderBase(abc.ABC):
     def build_pa_to_od_arguments(self) -> Dict[str, Any]:
         pass
 
+    @abc.abstractmethod
+    def build_pa_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        pass
+
+    @abc.abstractmethod
+    def build_od_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        pass
+
 
 class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
     # Costs constants
@@ -1084,6 +1092,15 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             'seg_params': seg_params,
             'fh_th_factors_dir': fh_th_factors_dir,
         }
+
+    def get_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        return self._build_cost_matrices(zoning_system)
+
+    def build_pa_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        return self.get_report_arguments(zoning_system)
+
+    def build_od_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        return self.get_report_arguments(zoning_system)
 
 
 # ## DEFINE EXPORT PATHS ##

@@ -32,6 +32,8 @@ from normits_demand.utils import file_ops
 from normits_demand.utils import translation
 from normits_demand.utils import vehicle_occupancy
 from normits_demand.utils import general as du
+from normits_demand.utils import pandas_utils as pd_utils
+from normits_demand.cost import utils as cost_utils
 from normits_demand.matrices import matrix_processing
 from normits_demand.matrices import pa_to_od
 
@@ -372,12 +374,10 @@ class DistributionModel(DistributionModelExportPaths):
         # TLD curve
         #   single mile bands - p/m (ca ) segments full matrix
         #   NorMITs Vis
-        from normits_demand.cost import utils as cost_utils
-        cost_utils.calculate_cost_distribution(
-            matrix=,
-            cost_matrix=, #Ben writing, returns dictionary of cost matrices
-            bin_edges= #vector
-        )
+
+        # Init
+        report_zoning = self.compile_zoning_system
+        cost_dict = self.arg_builder.build_pa_report_arguments(report_zoning)
 
         print("test")
         print("demand dir:" + self.export_paths.full_pa_dir)
@@ -390,6 +390,10 @@ class DistributionModel(DistributionModelExportPaths):
 
         desc = "Generating PA Reports"
         for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc):
+            # Get the cost for this segment
+            segment_name = self.running_segmentation.get_segment_name(segment_params)
+            cost_matrix = cost_dict[segment_name]
+
             fname = self.running_segmentation.generate_file_name(
                 segment_params=segment_params,
                 file_desc="synthetic_pa",
@@ -409,7 +413,7 @@ class DistributionModel(DistributionModelExportPaths):
             sector_zoning = nd.get_zoning_system("ca_sector_2020")
             sector_df = translation.translate_matrix_zoning(
                 matrix=df,
-                from_zoning_system=self.compile_zoning_system,
+                from_zoning_system=report_zoning,
                 to_zoning_system=sector_zoning,
             )
             print(sector_df)
@@ -457,6 +461,13 @@ class DistributionModel(DistributionModelExportPaths):
             ter_list.append(dfr)
             tec_list.append(dfc)
 
+            # ## GENERATE COST DISTRIBUTION CURVES ## #
+            achieved_distribution = cost_utils.calculate_cost_distribution(
+                matrix=df.values,
+                cost_matrix=cost_matrix,
+                bin_edges=[0, 1, 10, 100]
+            )
+
         # Trip Ends to DVector
         master_ter = pd.concat(ter_list, ignore_index=True)
         master_tec = pd.concat(tec_list, ignore_index=True)
@@ -464,12 +475,12 @@ class DistributionModel(DistributionModelExportPaths):
         dvec_r = nd.DVector(
             import_data=master_ter,
             segmentation=self.running_segmentation,
-            zoning_system=self.compile_zoning_system
+            zoning_system=report_zoning
         )
         dvec_c = nd.DVector(
             import_data=master_tec,
             segmentation=self.running_segmentation,
-            zoning_system=self.compile_zoning_system
+            zoning_system=report_zoning
         )
 
         # Dvector reports
@@ -487,89 +498,8 @@ class DistributionModel(DistributionModelExportPaths):
         # Export Sectors - openpyxl
         master_sector = pd.concat(sector_list)
 
-        def append_df_to_excel(filename, dframe, sheet_name='Sheet1', startrow=None,
-                               truncate_sheet=False,
-                               **to_excel_kwargs):
-            """
-            Append a DataFrame [dframe] to existing Excel file [filename]
-            into [sheet_name] Sheet.
-            If [filename] doesn't exist, then this function will create it.
-
-            @param filename: File path or existing ExcelWriter
-                             (Example: '/path/to/file.xlsx')
-            @param dframe: DataFrame to save to workbook
-            @param sheet_name: Name of sheet which will contain DataFrame.
-                               (default: 'Sheet1')
-            @param startrow: upper left cell row to dump data frame.
-                             Per default (startrow=None) calculate the last row
-                             in the existing DF and write to the next row...
-            @param truncate_sheet: truncate (remove and recreate) [sheet_name]
-                                   before writing DataFrame to Excel file
-            @param to_excel_kwargs: arguments which will be passed to `DataFrame.to_excel()`
-                                    [can be a dictionary]
-            @return: None
-
-            Usage examples:
-
-            append_df_to_excel('d:/temp/test.xlsx', df)
-
-            append_df_to_excel('d:/temp/test.xlsx', df, header=None, index=False)
-
-            append_df_to_excel('d:/temp/test.xlsx', df, sheet_name='Sheet2',
-                                index=False)
-
-            append_df_to_excel('d:/temp/test.xlsx', df, sheet_name='Sheet2',
-                                index=False, startrow=25)
-
-            (c) [MaxU](https://stackoverflow.com/users/5741205/maxu?tab=profile)
-            """
-            # Excel file doesn't exist - saving and exiting
-            if not os.path.isfile(filename):
-                dframe.to_excel(
-                    filename,
-                    sheet_name=sheet_name,
-                    startrow=startrow if startrow is not None else 0,
-                    **to_excel_kwargs)
-                return
-
-            # ignore [engine] parameter if it was passed
-            if 'engine' in to_excel_kwargs:
-                to_excel_kwargs.pop('engine')
-
-            writer = pd.ExcelWriter(filename, engine='openpyxl', mode='a')
-
-            # try to open an existing workbook
-            writer.book = load_workbook(filename)
-
-            # get the last row in the existing Excel sheet
-            # if it was not specified explicitly
-            if startrow is None and sheet_name in writer.book.sheetnames:
-                startrow = writer.book[sheet_name].max_row
-
-            # truncate sheet
-            if truncate_sheet and sheet_name in writer.book.sheetnames:
-                # index of [sheet_name] sheet
-                idx = writer.book.sheetnames.index(sheet_name)
-                # remove [sheet_name]
-                writer.book.remove(writer.book.worksheets[idx])
-                # create an empty sheet [sheet_name] using old index
-                writer.book.create_sheet(sheet_name, idx)
-
-            # copy existing sheets
-            writer.sheets = {ws.title: ws for ws in writer.book.worksheets}
-
-            if startrow is None:
-                startrow = 0
-
-            # write out the new sheet
-            dframe.to_excel(writer, sheet_name, startrow=startrow, **to_excel_kwargs)
-
-            # save the workbook
-            writer.save()
-
-        from openpyxl import load_workbook
         path = os.path.join(out_dir, 'Reporting_Summary.xlsx')
-        append_df_to_excel(
+        pd_utils.append_df_to_excel(
             filename=path,
             dframe=master_sector,
             sheet_name='sector_data',
@@ -577,8 +507,6 @@ class DistributionModel(DistributionModelExportPaths):
             index=False,
             header=True
         )
-
-        pass
 
     def _recombine_pa_matrices(self):
         # ## GET THE FULL PA MATRICES ## #
