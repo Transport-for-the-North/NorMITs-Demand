@@ -72,11 +72,12 @@ class GravityResults:
     achieved_rmse: float
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass()
 class PartialFurnessRequest:
     seed_mat: np.ndarray
     row_targets: np.ndarray
     col_targets: np.ndarray
+    ignore_result: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -520,7 +521,12 @@ class GravityModelBase(abc.ABC):
 
         return achieved_residuals
 
-    def _jacobian_function(self, cost_args: List[float], diff_step: float):
+    def _jacobian_function(
+            self,
+            cost_args: List[float],
+            diff_step: float,
+            ignore_result: bool = False,
+    ):
         """Returns the Jacobian for _gravity_function
 
         Uses the matrices stored in self._jacobian_mats (which were stored in
@@ -563,6 +569,7 @@ class GravityModelBase(abc.ABC):
             seed_matrices=estimated_mats,
             row_targets=self._jacobian_mats['final'].sum(axis=1),
             col_targets=self._jacobian_mats['final'].sum(axis=0),
+            ignore_result=ignore_result,
         )
 
         # Calculate the Jacobian
@@ -665,6 +672,7 @@ class GravityModelBase(abc.ABC):
                          seed_matrices: Dict[str, np.ndarray],
                          row_targets: np.ndarray,
                          col_targets: np.ndarray,
+                         ignore_result: bool = False,
                          ) -> Tuple[np.array, int, float]:
         """Runs a doubly constrained furness on the seed matrix
 
@@ -685,6 +693,10 @@ class GravityModelBase(abc.ABC):
         col_targets:
             The target values for the sum of each column
             i.e np.sum(seed_matrix, axis=0)
+
+        ignore_result:
+            Whether to ignore the return result or not. Useful when a Jacobian
+            furness is only being called to satisfy other threads.
 
         Returns
         -------
@@ -1302,14 +1314,14 @@ class FurnessThreadInterfaceBase(abc.ABC, multithreading.ReturnOrErrorThread):
             for thread_id in thread_statuses:
                 thread_statuses[thread_id] = self._get_thread_status(thread_id)
 
+            # Check which threads are complete
+            complete = dict.fromkeys(self.thread_ids)
+            for thread_id in self.thread_ids:
+                complete[thread_id] = self.complete_events[thread_id].is_set()
+
             # Check if all the threads are complete
             if self._all_threads_complete():
                 self.all_complete_event.set()
-
-            # If all done, mark all done event and exit
-            if self._all_status_same(thread_statuses.values(), self.ThreadStatus.DONE):
-                self.all_complete_event.set()
-                break
 
             # If all waiting for furness, cache data and send
             if self._all_status_same(thread_statuses.values(), self.ThreadStatus.GRAVITY):
@@ -1463,6 +1475,7 @@ class FurnessThreadInterfaceSharedArrays(FurnessThreadInterfaceBase):
 
         # Send the cached queue data - informs array has data
         q_data = copy.copy(q_cache[thread_id])
+        q_data.ignore_result = True
         self.putter_qs[furness_key][thread_id].put(q_data)
 
 
@@ -1531,8 +1544,9 @@ class FurnessThreadInterfaceQueues(FurnessThreadInterfaceBase):
         putter_q = self.putter_qs[self.furness_keys.jacobian][thread_id]
         q_cache = self._jacobian_q_cache[thread_id]
 
-        # Send the cached queue data
+        # Send the cached data and mark it so we know not to care about result
         q_data = copy.copy(q_cache)
+        q_data.ignore_result = True
         putter_q.put(q_data)
 
 
@@ -1815,6 +1829,11 @@ class JacobianFurnessThreadSharedArrays(FurnessThreadBase):
         col_targets:
             The col targets to be used for the furness.
             i.e the target of np.sum(furnessed_matrix, axis=0)
+
+        all_ignore:
+            Boolean value. True if all callers want to ignore this run of the
+            Jacobian. Used to optimise runs as the Jacobian will not be run
+            if none of the callers care about the result.
         """
         # Init
         seed_mats = dict.fromkeys(self._jac_keys)
@@ -1830,15 +1849,18 @@ class JacobianFurnessThreadSharedArrays(FurnessThreadBase):
         # Get the row and col targets
         row_targets_list = list()
         col_targets_list = list()
+        ignore_list = list()
         for key, request in partial_furness_requests.items():
             row_targets_list.append(request.row_targets)
             col_targets_list.append(request.col_targets)
+            ignore_list.append(request.ignore_result)
 
         # Combine individual items
         row_targets = functools.reduce(operator.add, row_targets_list)
         col_targets = functools.reduce(operator.add, col_targets_list)
+        all_ignore = all(ignore_list)
 
-        return seed_mats, row_targets, col_targets
+        return seed_mats, row_targets, col_targets, all_ignore
 
     def run_furness(self) -> None:
         """Runs a furness once all data received, and passes data back
@@ -1851,32 +1873,35 @@ class JacobianFurnessThreadSharedArrays(FurnessThreadBase):
         None
         """
         # Get seed mats
-        seed_mats, row_targets, col_targets = self.get_furness_data()
+        seed_mats, row_targets, col_targets, all_ignore = self.get_furness_data()
 
-        # furness and return array
-        for key, seed_matrix in seed_mats.items():
-            furnessed_mat, *_ = furness.doubly_constrained_furness(
-                seed_vals=seed_matrix,
-                row_targets=row_targets,
-                col_targets=col_targets,
-                tol=self.furness_tol,
-                max_iters=self.furness_max_iters,
-                warning=self.warning,
-            )
+        # Only run and return data if any threads care about the result
+        if not all_ignore:
+            # ## FURNESS ## #
+            for key, seed_matrix in seed_mats.items():
+                furnessed_mat, *_ = furness.doubly_constrained_furness(
+                    seed_vals=seed_matrix,
+                    row_targets=row_targets,
+                    col_targets=col_targets,
+                    tol=self.furness_tol,
+                    max_iters=self.furness_max_iters,
+                    warning=self.warning,
+                )
 
-            # Put the furnessed matrix in the return array
-            self.putter_arrays[key].write_local_data(furnessed_mat)
+                # ## RETURN RESULTS ## #
+                # Put the furnessed matrix in the return array
+                self.putter_arrays[key].write_local_data(furnessed_mat)
 
-        # Put the data back on the queues
-        # Also lets threads know data is waiting
-        for area_id in self.calib_area_keys:
-            data = FurnessResults(
-                mat=self.area_mats[area_id],  # Return area_mat
-                # Not used anyway
-                completed_iters=np.inf,
-                achieved_rmse=np.inf,
-            )
-            self.putter_qs[area_id].put(data)
+            # Put the data back on the queues
+            # Also lets threads know data is waiting
+            for area_id in self.calib_area_keys:
+                data = FurnessResults(
+                    mat=self.area_mats[area_id],  # Return area_mat
+                    # Not used anyway
+                    completed_iters=np.inf,
+                    achieved_rmse=np.inf,
+                )
+                self.putter_qs[area_id].put(data)
 
 
 class JacobianFurnessThreadQueues(FurnessThreadBase):
@@ -1935,6 +1960,11 @@ class JacobianFurnessThreadQueues(FurnessThreadBase):
         col_targets:
             The col targets to be used for the furness.
             i.e the target of np.sum(furnessed_matrix, axis=0)
+
+        all_ignore:
+            Boolean value. True if all callers want to ignore this run of the
+            Jacobian. Used to optimise runs as the Jacobian will not be run
+            if none of the callers care about the result.
         """
         # Get all the data
         partial_furness_requests = multithreading.get_data_from_queue_dict(self.getter_qs)
@@ -1943,16 +1973,20 @@ class JacobianFurnessThreadQueues(FurnessThreadBase):
         seed_mat_list = list()
         row_targets_list = list()
         col_targets_list = list()
+        ignore_list = list()
         for key, request in partial_furness_requests.items():
             seed_mat_list.append(request.seed_mat)
             row_targets_list.append(request.row_targets)
             col_targets_list.append(request.col_targets)
+            ignore_list.append(request.ignore_result)
 
+        # Combine individual items
         seed_mat = functools.reduce(operator.add, seed_mat_list)
         row_targets = functools.reduce(operator.add, row_targets_list)
         col_targets = functools.reduce(operator.add, col_targets_list)
+        all_ignore = all(ignore_list)
 
-        return seed_mat, row_targets, col_targets
+        return seed_mat, row_targets, col_targets, all_ignore
 
     def run_furness(self) -> None:
         """Runs a furness once all data received, and passes data back
@@ -1965,27 +1999,29 @@ class JacobianFurnessThreadQueues(FurnessThreadBase):
         None
         """
         # ## GET DATA ## #
-        seed_mat, row_targets, col_targets = self.get_furness_data()
+        seed_mat, row_targets, col_targets, all_ignore = self.get_furness_data()
 
-        # ## FURNESS ## #
-        furnessed_mat, iters, rmse = furness.doubly_constrained_furness(
-            seed_vals=seed_mat,
-            row_targets=row_targets,
-            col_targets=col_targets,
-            tol=self.furness_tol,
-            max_iters=self.furness_max_iters,
-            warning=self.warning,
-        )
-        
-        # ## RETURN RESULTS ## #
-        # Split back out into areas and return
-        for area_id in self.calib_area_keys:
-            data = FurnessResults(
-                mat=furnessed_mat * self.area_mats[area_id],
-                completed_iters=iters,
-                achieved_rmse=rmse,
+        # Only run and return data if any threads care about the result
+        if not all_ignore:
+            # ## FURNESS ## #
+            furnessed_mat, iters, rmse = furness.doubly_constrained_furness(
+                seed_vals=seed_mat,
+                row_targets=row_targets,
+                col_targets=col_targets,
+                tol=self.furness_tol,
+                max_iters=self.furness_max_iters,
+                warning=self.warning,
             )
-            self.putter_qs[area_id].put(data)
+
+            # ## RETURN RESULTS ## #
+            # Split back out into areas and return
+            for area_id in self.calib_area_keys:
+                data = FurnessResults(
+                    mat=furnessed_mat * self.area_mats[area_id],
+                    completed_iters=iters,
+                    achieved_rmse=rmse,
+                )
+                self.putter_qs[area_id].put(data)
 
 
 class SingleTLDCalibratorThreadBase(multithreading.ReturnOrErrorThread, GravityModelBase):
@@ -2100,6 +2136,7 @@ class SingleTLDCalibratorThreadBase(multithreading.ReturnOrErrorThread, GravityM
             self._jacobian_function(
                 cost_args=self._order_cost_params(self.optimal_cost_params),
                 diff_step=self.diff_step,
+                ignore_result=True,
             )
 
             self._gravity_function(
@@ -2122,6 +2159,7 @@ class SingleTLDCalibratorThreadBase(multithreading.ReturnOrErrorThread, GravityM
                          seed_matrices: Dict[str, np.ndarray],
                          row_targets: np.ndarray,
                          col_targets: np.ndarray,
+                         ignore_result: bool = False,
                          ) -> Tuple[np.array, int, float]:
         raise NotImplementedError(
             "When a class inherits from %s it needs to implement a method "
@@ -2267,6 +2305,7 @@ class SingleTLDCalibratorThreadSharedArrays(SingleTLDCalibratorThreadBase):
                          seed_matrices: Dict[str, np.ndarray],
                          row_targets: np.ndarray,
                          col_targets: np.ndarray,
+                         ignore_result: bool = False,
                          ) -> Tuple[np.array, int, float]:
         """Runs a doubly constrained furness on the seed matrix
 
@@ -2287,6 +2326,10 @@ class SingleTLDCalibratorThreadSharedArrays(SingleTLDCalibratorThreadBase):
         col_targets:
             The target values for the sum of each column
             i.e np.sum(matrix, axis=0)
+
+        ignore_result:
+            Whether to ignore the return result or not. Useful when a Jacobian
+            furness is only being called to satisfy other threads.
 
         Returns
         -------
@@ -2320,19 +2363,25 @@ class SingleTLDCalibratorThreadSharedArrays(SingleTLDCalibratorThreadBase):
             seed_mat=None,
             row_targets=row_targets,
             col_targets=col_targets,
+            ignore_result=ignore_result,
         )
         self.jacobian_putter_q.put(request)
 
         # ## RECEIVE ## #
-        # Wait until we're told there is data to collect
-        furness_data = multithreading.get_data_from_queue(self.jacobian_getter_q)
-
-        # Extract our chunk of the matrix
         return_mats = dict.fromkeys(seed_matrices.keys())
-        for cost_param, getter_array in self.jacobian_getter_array.items():
-            furnessed_mat = getter_array.get_local_copy()
-            furnessed_mat *= furness_data.mat
-            return_mats[cost_param] = furnessed_mat
+        if not ignore_result:
+            # Wait until we're told there is data to collect
+            furness_data = multithreading.get_data_from_queue(self.jacobian_getter_q)
+
+            # Extract our chunk of the matrix
+            for cost_param, getter_array in self.jacobian_getter_array.items():
+                furnessed_mat = getter_array.get_local_copy()
+                furnessed_mat *= furness_data.mat
+                return_mats[cost_param] = furnessed_mat
+        else:
+            # Just fill with 0s. Data doesn't matter
+            for cost_param in return_mats.keys():
+                return_mats[cost_param] = np.zeros_like(seed_matrices[cost_param])
 
         return return_mats
 
@@ -2429,6 +2478,14 @@ class SingleTLDCalibratorThreadQueues(SingleTLDCalibratorThreadBase):
                 "The gravity threads must have come out of sync somewhere."
             )
 
+        # Empty out the Jacobian queue if it has data
+        # Would be from other threads needing Jacobian
+        multithreading.empty_queue(
+            q=self.jacobian_getter_q,
+            wait_for_items=True,
+            wait_time=0.3,
+        )
+
         # ## SEND ## #
         # Add the data to the shared array - and mark queue
         self.gravity_putter_q.put(seed_matrix)
@@ -2447,6 +2504,7 @@ class SingleTLDCalibratorThreadQueues(SingleTLDCalibratorThreadBase):
                          seed_matrices: Dict[str, np.ndarray],
                          row_targets: np.ndarray,
                          col_targets: np.ndarray,
+                         ignore_result: bool = False,
                          ) -> Tuple[np.array, int, float]:
         """Runs a doubly constrained furness on the seed matrix
 
@@ -2467,6 +2525,10 @@ class SingleTLDCalibratorThreadQueues(SingleTLDCalibratorThreadBase):
         col_targets:
             The target values for the sum of each column
             i.e np.sum(matrix, axis=0)
+
+        ignore_result:
+            Whether to ignore the return result or not. Useful when a Jacobian
+            furness is only being called to satisfy other threads.
 
         Returns
         -------
@@ -2496,13 +2558,18 @@ class SingleTLDCalibratorThreadQueues(SingleTLDCalibratorThreadBase):
                 seed_mat=seed_matrix,
                 row_targets=row_targets,
                 col_targets=col_targets,
+                ignore_result=ignore_result,
             )
             self.jacobian_putter_q.put(request)
 
             # ## RECEIVE ## #
-            # Wait for data and collect
-            furness_data = multithreading.get_data_from_queue(self.jacobian_getter_q)
-            return_mats[cost_param] = furness_data.mat
+            if not ignore_result:
+                # Wait for data and collect
+                furness_data = multithreading.get_data_from_queue(self.jacobian_getter_q)
+                return_mats[cost_param] = furness_data.mat
+            else:
+                # Just return 0s. Values don't matter
+                return_mats[cost_param] = np.zeros_like(seed_matrix)
 
         return return_mats
 
@@ -2759,7 +2826,7 @@ class MultiAreaGravityModelCalibrator:
         # Use above function to create objects
         interface_putter_qs = create_interface_input(lambda: queue.Queue(1))
         interface_getter_qs = create_interface_input(lambda: queue.Queue(1))
-        furness_return_qs = create_interface_input(lambda: queue.Queue(10))
+        furness_return_qs = create_interface_input(lambda: queue.Queue())
         furness_wait_events = create_interface_input(lambda: threading.Event())
 
         # Generate the complete event
@@ -3256,6 +3323,7 @@ class MultiAreaGravityModelCalibrator:
             self.initial_convergence[area_id] = results[area_id].convergence
 
         # Do a run with optimal_params, so we know what we achieved
+        # TODO(BT): Add a log of this final run to each log - or new log?
         matrix, results = self._gravity_function(
             cost_param_dict=self.optimal_cost_params,
             perceived_factors=self.perceived_factors,

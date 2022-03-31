@@ -48,7 +48,7 @@ Below, a brief summary of patches made since the previous version can be found.
     - Initial implementation of a multi-area gravity model. Each area calibrates
       its own cost params, and aims for its own target cost distribution. All
       areas share the same Furness and Jacobian matrices via threading.
-  - Added a built int cache method for trip end inputs
+  - Added a built in cache method for trip end inputs
 - Concurrency
   - Multi-threading framework added to make multi-threading simpler in codebase
   - `SharedNumpyArrayHelper` added to make communication of large numpy 
