@@ -832,6 +832,108 @@ def pandas_vector_zone_translation(vector: pd.DataFrame,
     )
 
 
+def translate_vector_zoning(
+    vector: Union[pd.DataFrame, np.ndarray],
+    from_zoning_system: nd_core.ZoningSystem,
+    to_zoning_system: nd_core.ZoningSystem,
+    weighting: str = None,
+    translation_dtype: np.dtype = None,
+    check_totals: bool = True,
+    vector_infill: float = 0.0,
+    translate_infill: float = 0.0,
+) -> Union[pd.DataFrame, np.ndarray]:
+    """Translates matrix from from_zoning_system to to_zoning_system
+
+    Can take either a numpy array or a pandas DataFrame. This function will
+    grab the correct translation and translate matrix depending on whether
+    matrix is a np.ndarray or pd.DataFrame
+
+    Parameters
+    ----------
+    vector:
+        The vector to translate. If a pd.DataFrame is given,
+        `pandas_vector_zone_translation()` is used for the translation. If a
+        np.ndarray is given `numpy_vector_zone_translation()` is used for
+        the translation.
+
+    from_zoning_system:
+        The zoning system that vector is currently in.
+
+    to_zoning_system:
+        The zoning system to translate vector to.
+
+    weighting:
+        The weighting to use when translating vector.
+
+    translation_dtype:
+        The numpy datatype to use to do the translation. If None, then the
+        dtype of the vector is used. As this is a 2d translation, it can
+        use a lot of memory if float64 is used. Where such high precision
+        isn't needed, a more memory efficient dtype can be passed in instead
+        and the translation will be carried out in it.
+
+    check_totals:
+        Whether to check that the input and output vector sum to the same
+        total.
+
+    vector_infill:
+        The value to use to infill any missing matrix values. Only used when
+        vector is a pd.DataFrame.
+
+    translate_infill:
+        The value to use to infill any missing translation factors.  Only used
+        when vector is a pd.DataFrame.
+
+    Returns
+    -------
+    translated_matrix:
+        Matrix, translated into to_zoning_system. The return type is the same
+        as the type of the given matrix.
+
+    See Also
+    --------
+    `pandas_vector_zone_translation()`
+    `numpy_vector_zone_translation()`
+    """
+    # Init
+    weight_col = "weight"
+
+    # Do the pandas translation
+    if isinstance(vector, pd.DataFrame):
+        # Get the translation
+        translation = get_long_translation(
+            from_zoning_system=from_zoning_system,
+            to_zoning_system=to_zoning_system,
+            weighting=weighting,
+            weight_col_name=weight_col,
+        )
+
+        return pandas_vector_zone_translation(
+            vector=vector,
+            translation=translation,
+            from_zone_col=from_zoning_system.col_name,
+            to_zone_col=to_zoning_system.col_name,
+            factors_col=weight_col,
+            from_unique_zones=from_zoning_system.unique_zones,
+            to_unique_zones=to_zoning_system.unique_zones,
+            translation_dtype=translation_dtype,
+            check_totals=check_totals,
+            translate_infill=translate_infill,
+            vector_infill=vector_infill,
+        )
+
+    elif isinstance(vector, np.ndarray):
+        raise NotImplementedError(
+            "Functionality not implemented to translate a np.ndarray in "
+            "utils.translation.translate_vector_zoning()"
+        )
+    else:
+        raise ValueError(
+            "Expected matrix to be of type np.ndarray or pd.DataFrame, not %s"
+            % type(vector)
+        )
+
+
 def translate_matrix_zoning(
     matrix: Union[pd.DataFrame, np.ndarray],
     from_zoning_system: nd_core.ZoningSystem,
