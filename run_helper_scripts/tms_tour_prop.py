@@ -28,10 +28,10 @@ import normits_demand as nd
 from normits_demand.utils import general as du
 
 # ## GLOBALS ## #
-MODES = [nd.MODE.TRAIN.get_mode_values()]
+MODES = [nd.Mode.TRAIN]
 YEARS = [2018]
 TPS = [1, 2, 3, 4]
-ZONING_SYSTEM = "miham"
+ZONING_SYSTEM = "miranda"
 NOTEM_ITER = '9.6'
 out_folder = r"C:\WSP_Projects\MidMITs\01 Pre-processing\Tour Proportions"
 
@@ -41,9 +41,10 @@ phi_fname = "mode_%d_fhp_tp_pa_to_od.csv"
 prod_vec_fname = "hb_msoa_notem_segmented_%d_dvec.pkl"
 zone_translate_dir = r"I:\NorMITs Demand\import\zone_translation\one_to_one"
 
-MODEL_FNAME = "hb_tour_proportions_yr%d_p%d_m%d.pkl"
-LAD_FNAME = "hb_lad_tour_proportions_yr%d_p%d_m%d.pkl"
-TFN_FNAME = "hb_tfn_tour_proportions_yr%d_p%d_m%d.pkl"
+MODEL_DESC = "tour_proportions"
+LAD_DESC = "lad_tour_proportions"
+TFN_DESC = "tfn_tour_proportions"
+TRIP_ORIGIN = "hb"
 # out_folder = r"I:\NorMITs Demand\import\noham\pre_me_tour_proportions\example_new"
 
 
@@ -54,7 +55,7 @@ def tms_tour_prop():
 
             # ## GRAB PHI FACTORS BY MODE ## #
             print("Reading in Phi factors...")
-            phi_file = phi_fname % mode
+            phi_file = phi_fname % mode.get_mode_num()
             phi_df = pd.read_csv(os.path.join(phi_import_folder, phi_file))
 
             # Rename cols to match notem
@@ -85,13 +86,20 @@ def tms_tour_prop():
             notem_file = prod_vec_fname % year
             notem_dvec = nd.DVector.load(os.path.join(notem_import_folder, notem_file))
 
-            # Convert to needed segments and translate
-            if MODES==[nd.MODE.TRAIN.get_mode_values()]:
+            # Define segmentations by mode, out_seg is used to define what
+            # output files will be produced one file per segment
+            if mode == nd.Mode.TRAIN:
                 week_seg = nd.get_segmentation_level("hb_p_ca_tp_week")
                 wday_seg = nd.get_segmentation_level("hb_p_ca_tp_wday")
-            else:
+                out_seg = nd.get_segmentation_level("hb_p_m_ca_rail")
+            elif mode == nd.Mode.CAR:
                 week_seg = nd.get_segmentation_level("hb_p_tp_week")
                 wday_seg = nd.get_segmentation_level("hb_p_tp_wday")
+                out_seg = nd.get_segmentation_level("hb_p_m_car")
+            else:
+                raise NotImplementedError(f"segmentation not implemented for mode = {mode}")
+
+            # Convert to needed segments and translate
             zoning = nd.get_zoning_system(ZONING_SYSTEM)
 
             notem_dvec = notem_dvec.aggregate(week_seg)
@@ -122,7 +130,6 @@ def tms_tour_prop():
 
             # ## STICK INTO O/D NESTED DICT ## #
             zones = zoning.unique_zones
-            purposes = full_df['p'].unique()
 
             # Load the zone aggregation dictionaries for this zoning
             try:
@@ -147,11 +154,14 @@ def tms_tour_prop():
                 return np.zeros((len(TPS), len(TPS)))
 
             # Do by purpose
-            desc = 'Generating tour props per purpose'
-            for purpose in tqdm(purposes, desc=desc):
-                print("Start purpose %s..." % purpose)
-                p_df = full_df[full_df['p'] == purpose].reset_index(drop=True)
-                p_df = p_df.drop(columns='p')
+            desc = f'Generating tour props at segmentation {out_seg.name}'
+            ignore = {"m", "tp"}
+            for seg_params in tqdm(list(out_seg), desc=desc, dynamic_ncols=True):
+                # Get values for specific segment, including all time periods
+                masks = [full_df[k] == val for k, val in seg_params.items() if k not in ignore]
+                tqdm.write("Start segment %s..." % out_seg.get_segment_name(seg_params))
+                p_df = full_df[np.all(masks, axis=0)].reset_index(drop=True)
+                p_df = p_df.drop(columns=[k for k in seg_params if k not in ignore])
 
                 # Loop through zones
                 model_tour_props = dict.fromkeys(zones)
@@ -200,7 +210,7 @@ def tms_tour_prop():
                         tfn_tour_props[orig] = dest_dict
 
                 # Normalise all of the tour proportion matrices to 1
-                print("Normalising to 1...")
+                tqdm.write("Normalising to 1...")
                 for agg_tour_props in [model_tour_props, lad_tour_props, tfn_tour_props]:
                     if agg_tour_props is None:
                         continue
@@ -217,19 +227,34 @@ def tms_tour_prop():
                 if tfn_tour_props:
                     tfn_tour_props = du.defaultdict_to_regular(tfn_tour_props)
 
-                print("Writing files out...")
-                out_file = MODEL_FNAME % (year, purpose, mode)
-                out_path = os.path.join(out_folder, out_file)
+                tqdm.write("Writing files out...")
+                out_file = out_seg.generate_file_name(
+                    seg_params,
+                    MODEL_DESC,
+                    TRIP_ORIGIN,
+                    year=year,
+                )
+                out_path = os.path.join(out_folder, out_file + ".pkl")
                 nd.write_pickle(model_tour_props, out_path)
 
                 if lad_tour_props:
-                    out_file = LAD_FNAME % (year, purpose, mode)
-                    out_path = os.path.join(out_folder, out_file)
+                    out_file = out_seg.generate_file_name(
+                        seg_params,
+                        LAD_DESC,
+                        TRIP_ORIGIN,
+                        year=year,
+                    )
+                    out_path = os.path.join(out_folder, out_file + ".pkl")
                     nd.write_pickle(lad_tour_props, out_path)
 
                 if tfn_tour_props:
-                    out_file = TFN_FNAME % (year, purpose, mode)
-                    out_path = os.path.join(out_folder, out_file)
+                    out_file = out_seg.generate_file_name(
+                        seg_params,
+                        TFN_DESC,
+                        TRIP_ORIGIN,
+                        year=year,
+                    )
+                    out_path = os.path.join(out_folder, out_file + ".pkl")
                     nd.write_pickle(tfn_tour_props, out_path)
 
 
