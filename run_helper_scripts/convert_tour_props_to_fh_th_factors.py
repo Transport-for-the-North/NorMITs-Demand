@@ -16,7 +16,7 @@ import os
 import sys
 import warnings
 
-from typing import Dict
+from typing import Dict, Any, Tuple
 
 from itertools import product
 
@@ -52,19 +52,23 @@ TRIP_ORIGIN = 'hb'
 PURPOSES = [1, 2, 3, 4, 5, 6, 7, 8]
 TP_NEEDED = [1, 2, 3, 4]
 ZONE_TRANSLATION_DIR = r'I:\NorMITs Demand\import\zone_translation\one_to_one'
+TOUR_PROPS_SEGMENTATIONS = {
+    nd.Mode.CAR: nd.get_segmentation_level("hb_p_m_car"),
+    nd.Mode.TRAIN: nd.get_segmentation_level("hb_p_m_ca_rail"),
+}
 
 
-def get_io(purpose, mode):
+def get_io(
+        segmentation: nd.SegmentationLevel, segment_params: Dict[str, Any]
+    ) -> Tuple[Dict, Dict, Dict, str, str]:
 
     # Generate the output factor paths
-    fh_factor_fname = du.get_dist_name(
+    fh_factor_fname = segmentation.generate_file_name(
+        segment_params,
+        file_desc="fh_factors",
         trip_origin=TRIP_ORIGIN,
-        matrix_format='fh_factors',
-        year=str(BASE_YEAR),
-        purpose=str(purpose),
-        mode=str(mode),
-        suffix='.pkl'
-    )
+        year=BASE_YEAR
+    ) + ".pkl"
     fh_factor_path = os.path.join(TOUR_FACTOR_DIR, fh_factor_fname)
 
     th_factor_fname = fh_factor_fname.replace('fh_factors', 'th_factors')
@@ -72,14 +76,12 @@ def get_io(purpose, mode):
 
     # ## Load the tour proportions - always generated on base year ## #
     # Load the model zone tour proportions
-    tour_prop_fname = du.get_dist_name(
+    tour_prop_fname = segmentation.generate_file_name(
+        segment_params,
+        file_desc="tour_proportions",
         trip_origin=TRIP_ORIGIN,
-        matrix_format='tour_proportions',
-        year=str(BASE_YEAR),
-        purpose=str(purpose),
-        mode=str(mode),
-        suffix='.pkl'
-    )
+        year=BASE_YEAR
+    ) + ".pkl"
     model_tour_props = nd.read_pickle(os.path.join(TOUR_PROP_DIR, tour_prop_fname))
 
     # Load the aggregated tour props
@@ -152,11 +154,12 @@ def maybe_get_aggregated_tour_proportions(orig: int,
 
 
 def main():
+    tour_props_seg = TOUR_PROPS_SEGMENTATIONS[MODE]
 
     # ## CONVERT PURPOSE BY PURPOSE ## #
-    for p in PURPOSES:
+    for seg_params in tour_props_seg:
         # Get the tour props and export path
-        io = get_io(purpose=p, mode=MODE.get_mode_num())
+        io = get_io(tour_props_seg, seg_params)
         model_tour_props, lad_tour_props, tfn_tour_props = io[:3]
         fh_factor_path, th_factor_path = io[3:5]
 
@@ -227,7 +230,7 @@ def main():
 
         # ## CREATE FACTORS FOR EACH OD ## #
         total = len(idx) ** 2
-        desc = "Converting p%s to factors" % p
+        desc = "Converting %s to factors" % tour_props_seg.get_segment_name(seg_params)
         for orig, dest in tqdm(product(idx, idx), total=total, desc=desc):
 
             # Will get the aggregated tour props if needed
