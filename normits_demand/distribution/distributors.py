@@ -654,6 +654,10 @@ class GravityDistributor(AbstractDistributor):
             matrix_dir = self.export_paths.matrix_dir
             overall_path = self.report_paths.overall_log
 
+        # Replace the log if it already exists
+        if os.path.isfile(overall_path):
+            os.remove(overall_path)
+
         # ## DISTRIBUTION REPORTS ## #
         # Generate the base filename
         fname = running_segmentation.generate_file_name(
