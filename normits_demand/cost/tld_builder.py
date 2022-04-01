@@ -494,37 +494,67 @@ class TripLengthDistributionBuilder:
     def run_tour_props(self,
                        default_to_p: bool = True):
 
-        # TODO: Translate R method to Python
-
         target_cols = ['SurveyYear', 'TravelWeekDay_B01ID', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc',
                        'ns', 'main_mode', 'hb_purpose', 'nhb_purpose', 'nhb_purpose_hb_leg', 'Sex_B01ID',
+                       'TripPurpFrom_B01ID', 'TripPurpTo_B01ID',
                        'trip_origin', 'start_time', 'end_time', 'TripDisIncSW', 'TripOrigGOR_B02ID',
-                       'TripDestGOR_B02ID', 'tfn_at', 'trip_group', 'trip_type', 'frh_p', 'frh_tp', 'toh_tp', 'weighted_trip']
+                       'TripDestGOR_B02ID', 'tfn_at', 'trip_group', 'trip_type', 'agg_purpose',
+                       'frh_p', 'frh_tp', 'toh_tp', 'tour_p', 'weighted_trip', 'W5']
 
-        output_dat = self.nts_import.reindex(target_cols, axis=1)
+        output_dat = extract.nts_import.reindex(target_cols, axis=1)
 
+        escort_p = list(range(17, 22))
+
+        phi_type = 'hb_toh'
+
+        filter_escorts = False
+        filter_escort_edu = True
+
+        mode_col = 'main_mode'
+        purpose_col = 'nhb_purpose_hb_leg'
+        time_frh_col = 'frh_tp'
+        time_toh_col = 'start_time'
+        toh_col = 'TripPurpTo_B01ID'
+        trip_col = 'W5'
+        filter_short_distance = False
+        short_distance_cutoff = 1
+
+        # This makes absolutely no difference as one is built from the other
+        if toh_col == 'trip_type':
+            toh_filter_value = 'toh'
+        elif toh_col == 'TripPurpTo_B01ID':
+            toh_filter_value = 23
+
+        # Pick a mode
         subset = output_dat[output_dat['main_mode'] == 3]
+
+        # Apply any filters
+        if filter_escorts:
+            subset = subset[~subset['TripPurpFrom_B01ID'].isin(escort_p)]
+            subset = subset[~subset['TripPurpTo_B01ID'].isin(escort_p)]
+
+        if filter_escort_edu:
+            subset = subset[~((subset['TripPurpFrom_B01ID'] == 20) & (subset['TripPurpTo_B01ID'] ==23))]
+
         f_t = ['frh', 'toh']
-        # Drop NHB trips
-        subset = subset[subset['trip_type'].isin(f_t)]
 
-        toh = subset[subset['trip_type'] == 'toh']
-        tohgroupcols = ['main_mode', 'hb_purpose', 'frh_p', 'frh_tp', 'start_time']
-        toh = toh.groupby(tohgroupcols)
-        toh = toh['weighted_trip'].sum()
-        toh = toh.reset_index()
+        if phi_type == 'hb_toh':
+            # Drop NHB trips
+            subset = subset[subset['trip_type'].isin(f_t)]
 
-        # phis on the toh_purpose
+        # Filter for toh only depending on method
+        toh = subset[subset[toh_col] == toh_filter_value]
 
-        toh.to_csv('car_phi_test.csv', index=False)
+        if filter_short_distance:
+            toh = toh[toh['TripDisIncSW'] > short_distance_cutoff]
 
-        toh = subset[subset['trip_type'] == 'toh']
-        tohgroupcols = ['main_mode', 'hb_purpose', 'nhb_purpose_hb_leg', 'frh_tp', 'start_time']
-        toh = toh.groupby(tohgroupcols)
-        toh = toh['weighted_trip'].sum()
-        toh = toh.reset_index()
+        tohgroupcols = [mode_col, purpose_col, time_frh_col, time_toh_col]
+        phi = toh.groupby(tohgroupcols)
 
-        toh.to_csv('toh_phi_test.csv', index=False)
+        phi_trip = phi[trip_col].sum()
+        phi_trip = phi_trip.reset_index()
+
+        phi_trip.to_csv('car_phi_test_4.csv', index=False)
 
         return 0
 
