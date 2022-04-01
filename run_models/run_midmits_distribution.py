@@ -210,7 +210,6 @@ def mode_lookup(
     elif mode == nd.Mode.TRAIN:
         zone_systems = dist_params.DistributionZoneSystems(
             nd.get_zoning_system('msoa'),
-            nd.get_zoning_system('msoa'),
             nd.get_zoning_system('miranda'),
         )
         segmentations = dist_params.DistributionSegmentations(
