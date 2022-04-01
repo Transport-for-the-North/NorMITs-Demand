@@ -1903,6 +1903,11 @@ class JacobianFurnessThreadSharedArrays(FurnessThreadBase):
                 )
                 self.putter_qs[area_id].put(data)
 
+        else:
+            # Make sure the putter queues are empty
+            for q in self.putter_qs.values():
+                multithreading.empty_queue(q)
+
 
 class JacobianFurnessThreadQueues(FurnessThreadBase):
     """Collects partial matrices and runs a furness
@@ -1961,10 +1966,11 @@ class JacobianFurnessThreadQueues(FurnessThreadBase):
             The col targets to be used for the furness.
             i.e the target of np.sum(furnessed_matrix, axis=0)
 
-        all_ignore:
-            Boolean value. True if all callers want to ignore this run of the
-            Jacobian. Used to optimise runs as the Jacobian will not be run
-            if none of the callers care about the result.
+        ignore_threads:
+            Dictionary of booleans. True if callers wants to ignore this
+            run of the Jacobian. Used to optimise runs as the
+            Jacobian will not be run if none of the callers
+            care about the result.
         """
         # Get all the data
         partial_furness_requests = multithreading.get_data_from_queue_dict(self.getter_qs)
@@ -1973,20 +1979,19 @@ class JacobianFurnessThreadQueues(FurnessThreadBase):
         seed_mat_list = list()
         row_targets_list = list()
         col_targets_list = list()
-        ignore_list = list()
-        for key, request in partial_furness_requests.items():
+        ignore_threads = dict.fromkeys(self.getter_qs.keys())
+        for thread_id, request in partial_furness_requests.items():
             seed_mat_list.append(request.seed_mat)
             row_targets_list.append(request.row_targets)
             col_targets_list.append(request.col_targets)
-            ignore_list.append(request.ignore_result)
+            ignore_threads[thread_id] = request.ignore_result
 
         # Combine individual items
         seed_mat = functools.reduce(operator.add, seed_mat_list)
         row_targets = functools.reduce(operator.add, row_targets_list)
         col_targets = functools.reduce(operator.add, col_targets_list)
-        all_ignore = all(ignore_list)
 
-        return seed_mat, row_targets, col_targets, all_ignore
+        return seed_mat, row_targets, col_targets, ignore_threads
 
     def run_furness(self) -> None:
         """Runs a furness once all data received, and passes data back
@@ -1999,10 +2004,10 @@ class JacobianFurnessThreadQueues(FurnessThreadBase):
         None
         """
         # ## GET DATA ## #
-        seed_mat, row_targets, col_targets, all_ignore = self.get_furness_data()
+        seed_mat, row_targets, col_targets, ignore_threads = self.get_furness_data()
 
         # Only run and return data if any threads care about the result
-        if not all_ignore:
+        if not all(ignore_threads.values()):
             # ## FURNESS ## #
             furnessed_mat, iters, rmse = furness.doubly_constrained_furness(
                 seed_vals=seed_mat,
@@ -2022,6 +2027,11 @@ class JacobianFurnessThreadQueues(FurnessThreadBase):
                     achieved_rmse=rmse,
                 )
                 self.putter_qs[area_id].put(data)
+
+        # Empty out any queues that we are ignoring - stop build up of items
+        for area_id, ignore in ignore_threads.items():
+            if ignore:
+                multithreading.empty_queue(self.putter_qs[area_id])
 
 
 class SingleTLDCalibratorThreadBase(multithreading.ReturnOrErrorThread, GravityModelBase):
@@ -2731,7 +2741,7 @@ class MultiAreaGravityModelCalibrator:
         # Use above function to create objects
         interface_putter_qs = create_interface_input(lambda: queue.Queue(1))
         interface_getter_qs = create_interface_input(lambda: queue.Queue(1))
-        furness_return_qs = create_interface_input(lambda: queue.Queue(10))
+        furness_return_qs = create_interface_input(lambda: queue.Queue(5))
         furness_wait_events = create_interface_input(lambda: threading.Event())
 
         # Generate the complete event
@@ -2826,7 +2836,7 @@ class MultiAreaGravityModelCalibrator:
         # Use above function to create objects
         interface_putter_qs = create_interface_input(lambda: queue.Queue(1))
         interface_getter_qs = create_interface_input(lambda: queue.Queue(1))
-        furness_return_qs = create_interface_input(lambda: queue.Queue())
+        furness_return_qs = create_interface_input(lambda: queue.Queue(5))
         furness_wait_events = create_interface_input(lambda: threading.Event())
 
         # Generate the complete event
