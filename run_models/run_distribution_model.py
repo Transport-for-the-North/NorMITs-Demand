@@ -14,34 +14,33 @@ File purpose:
 import os
 import sys
 
-from typing import Tuple
-
 # Third Party
 
 # Local Imports
 sys.path.append("..")
+# pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
 
 from normits_demand import converters
 from normits_demand.models import DistributionModel
 from normits_demand.pathing.distribution_model import DistributionModelArgumentBuilder
+# pylint: enable=import-error,wrong-import-position
 
 
 # ## CONSTANTS ## #
 # Trip end import args
-notem_iteration_name = '9.7'
-tour_props_version = 'v%s' % notem_iteration_name
+NOTEM_ITERATION_NAME = '9.7'
+TOUR_PROPS_VERSION = 'v%s' % NOTEM_ITERATION_NAME
 
-notem_export_home = r"I:\NorMITs Demand\NoTEM"
-tram_export_home = r"I:\NorMITs Demand\Tram"
-# cache_path = "E:/dm_cache"
+NOTEM_EXPORT_HOME = r"I:\NorMITs Demand\NoTEM"
+TRAM_EXPORT_HOME = r"I:\NorMITs Demand\Tram"
 
 # Distribution running args
-base_year = 2018
-scenario = nd.Scenario.SC01_JAM
-dm_iteration_name = '9.7.1'
-dm_import_home = r"I:\NorMITs Demand\import"
-dm_export_home = r"F:\NorMITs Demand\Distribution Model"
+BASE_YEAR = 2018
+SCENARIO = nd.Scenario.SC01_JAM
+DM_ITERATION_NAME = '9.7.1'
+DM_IMPORT_HOME = r"I:\NorMITs Demand\import"
+DM_EXPORT_HOME = r"F:\NorMITs Demand\Distribution Model"
 
 # General constants
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
@@ -418,20 +417,20 @@ def main():
     # ## SETUP TRIP END ARGS ## #
     kwargs = {
         'output_zoning': upper_zoning_system,
-        'base_year': base_year,
-        'scenario': scenario,
-        'notem_iteration_name': notem_iteration_name,
+        'base_year': BASE_YEAR,
+        'scenario': SCENARIO,
+        'notem_iteration_name': NOTEM_ITERATION_NAME,
         'time_format': nd.core.TimeFormat.AVG_DAY,
     }
     if use_tram:
         trip_end_getter = converters.TramToDistributionModel(
-            export_home=tram_export_home,
+            export_home=TRAM_EXPORT_HOME,
             **kwargs,
         )
         te_model_name = 'tram'
     else:
         trip_end_getter = converters.NoTEMToDistributionModel(
-            export_home=notem_export_home,
+            export_home=NOTEM_EXPORT_HOME,
             **kwargs,
         )
         te_model_name = 'notem'
@@ -451,8 +450,8 @@ def main():
 
     # arg builder
     dmab_kwargs = {
-        'year': base_year,
-        'import_home': dm_import_home,
+        'year': BASE_YEAR,
+        'import_home': DM_IMPORT_HOME,
         'running_mode': mode,
         'target_tld_version': target_tld_version,
         'upper_zoning_system': upper_zoning_system,
@@ -469,7 +468,7 @@ def main():
         'lower_calibration_zones_fname': lower_calibration_zones_fname,
         'lower_calibration_areas': lower_calibration_areas,
         'lower_calibration_naming': lower_calibration_naming,
-        'tour_props_version': tour_props_version,
+        'tour_props_version': TOUR_PROPS_VERSION,
         'tour_props_zoning_name': tour_props_zoning_name,
         'init_params_cols': gm_cost_function.parameter_names,
         'intrazonal_cost_infill': intrazonal_cost_infill,
@@ -477,12 +476,12 @@ def main():
 
     # Distribution model
     dm_kwargs = {
-        'iteration_name': dm_iteration_name,
+        'iteration_name': DM_ITERATION_NAME,
         'upper_model_method': upper_model_method,
         'upper_distributor_kwargs': None,
         'lower_model_method': lower_model_method,
         'lower_distributor_kwargs': None,
-        'export_home': dm_export_home,
+        'export_home': DM_EXPORT_HOME,
         'upper_model_process_count': upper_model_process_count,
         'lower_model_process_count': lower_model_process_count,
     }

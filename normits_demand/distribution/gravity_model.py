@@ -108,6 +108,8 @@ class SharedArrays:
     jacobian_in: Dict[str, np.ndarray]
     jacobian_out: Dict[str, np.ndarray]
 
+jimmy = 23
+
 
 class FurnessThreadBase(abc.ABC, multithreading.ReturnOrErrorThread):
     """Base class for running a threaded furness
@@ -495,11 +497,11 @@ class GravityModelBase(abc.ABC):
 
         # Append this iteration to log file
         file_ops.safe_dataframe_to_csv(
-                pd.DataFrame(log_dict, index=[0]),
-                self.running_log_path,
-                mode='a',
-                header=(not os.path.exists(self.running_log_path)),
-                index=False,
+            pd.DataFrame(log_dict, index=[0]),
+            self.running_log_path,
+            mode='a',
+            header=(not os.path.exists(self.running_log_path)),
+            index=False,
         )
 
         # Update loop params and return the achieved band shares
@@ -795,6 +797,7 @@ class GravityModelCalibrator(GravityModelBase):
                          seed_matrices: Dict[str, np.ndarray],
                          row_targets: np.ndarray,
                          col_targets: np.ndarray,
+                         ignore_result: bool = False,
                          ) -> Tuple[np.array, int, float]:
         """Runs a doubly constrained furness on the seed matrix
 
@@ -815,6 +818,10 @@ class GravityModelCalibrator(GravityModelBase):
         col_targets:
             The target values for the sum of each column
             i.e np.sum(seed_matrix, axis=0)
+
+        ignore_result:
+            Whether to ignore the return result or not. Useful when a Jacobian
+            furness is only being called to satisfy other threads.
 
         Returns
         -------
@@ -2211,7 +2218,7 @@ class SingleTLDCalibratorThreadSharedArrays(SingleTLDCalibratorThreadBase):
         gravity_getter_array:
             A shared array between processes that will be used by the gravity
             furness to receive furnessed matrices.
-            
+
         jacobian_putter_q:
             A queue object that the jacobian furness will use to let the
             furness handler know there is data in jacobian_putter_array to collect.
@@ -2230,7 +2237,7 @@ class SingleTLDCalibratorThreadSharedArrays(SingleTLDCalibratorThreadBase):
 
         args:
             Used to pass further arguments to `SingleTLDCalibratorThreadBase`
-            
+
         kwargs:
             Used to pass further arguments to `SingleTLDCalibratorThreadBase`
 
@@ -2670,7 +2677,7 @@ class MultiAreaGravityModelCalibrator:
         # Attributes to store from runs
         self.achieved_band_share = dict.fromkeys(self.calib_areas)
         self.perceived_factors = dict.fromkeys(self.calib_areas)
-        
+
     @staticmethod
     def _update_tcds(
         target_cost_distributions: Dict[Any, pd.DataFrame],
@@ -2725,8 +2732,8 @@ class MultiAreaGravityModelCalibrator:
     ) -> FurnessSetup:
         """Sets up all the furness/jacobian threads for calibration runs"""
         # Init
-        gravity_furness_key = 'furness',
-        jacobian_key = 'jacobian',
+        gravity_furness_key = 'furness'
+        jacobian_key = 'jacobian'
 
         # Function to construct FurnessThreadInterface objects
         def create_interface_input(constructor):
@@ -2820,8 +2827,8 @@ class MultiAreaGravityModelCalibrator:
     def _setup_furness_threads_queues(self) -> FurnessSetup:
         """Sets up all the furness/jacobian threads for calibration runs"""
         # Init
-        gravity_furness_key = 'furness',
-        jacobian_key = 'jacobian',
+        gravity_furness_key = 'furness'
+        jacobian_key = 'jacobian'
 
         # Function to construct FurnessThreadInterface objects
         def create_interface_input(constructor):
@@ -3446,4 +3453,3 @@ def gravity_model(row_targets: np.ndarray,
     )
 
     return matrix, iters, rmse
-
