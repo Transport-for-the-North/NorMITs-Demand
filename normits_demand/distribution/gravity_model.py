@@ -108,8 +108,6 @@ class SharedArrays:
     jacobian_in: Dict[str, np.ndarray]
     jacobian_out: Dict[str, np.ndarray]
 
-jimmy = 23
-
 
 class FurnessThreadBase(abc.ABC, multithreading.ReturnOrErrorThread):
     """Base class for running a threaded furness
@@ -2715,7 +2713,7 @@ class MultiAreaGravityModelCalibrator:
                 % (len(self.cost_function.kw_order), len(args))
             )
 
-        return {k: v for k, v in zip(self.cost_function.kw_order, args)}
+        return dict(zip(self.cost_function.kw_order, args))
 
     def _order_cost_params(self, params: Dict[str, Any]) -> List[Any]:
         """Order params into a list that self.cost_function expects"""

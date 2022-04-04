@@ -61,7 +61,7 @@ def main():
 
     calibrate_params = True
 
-    run_hb = True
+    run_hb = False
     run_nhb = True
 
     run_all = False
@@ -557,8 +557,8 @@ def main():
         trip_end_kwargs = {
             'reduce_segmentation': nd.get_segmentation_level(reduce_name),
             'subset_segmentation': nd.get_segmentation_level(subset_name),
-            'aggregation_segmentation': hb_agg_seg,
-            'modal_segmentation': hb_running_seg,
+            'aggregation_segmentation': nhb_agg_seg,
+            'modal_segmentation': nhb_running_seg,
         }
 
         arg_builder = DistributionModelArgumentBuilder(

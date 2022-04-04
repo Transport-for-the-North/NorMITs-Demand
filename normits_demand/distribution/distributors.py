@@ -655,6 +655,7 @@ class GravityDistributor(AbstractDistributor):
             overall_path = self.report_paths.overall_log
 
         # Replace the log if it already exists
+        print(overall_path)
         if os.path.isfile(overall_path):
             os.remove(overall_path)
 
@@ -803,16 +804,16 @@ class GravityDistributor(AbstractDistributor):
         )
 
     def _multi_area_distribution(
-            self,
-            segment_params: Dict[str, Any],
-            np_productions: np.ndarray,
-            np_attractions: np.ndarray,
-            np_cost: np.ndarray,
-            np_calibration_matrix: np.ndarray,
-            calibration_naming: Dict[Any, str],
-            target_cost_distributions: Dict[Any, pd.DataFrame],
-            running_segmentation: nd.SegmentationLevel,
-            **kwargs,
+        self,
+        segment_params: Dict[str, Any],
+        np_productions: np.ndarray,
+        np_attractions: np.ndarray,
+        np_cost: np.ndarray,
+        np_calibration_matrix: np.ndarray,
+        calibration_naming: Dict[Any, str],
+        target_cost_distributions: Dict[Any, pd.DataFrame],
+        running_segmentation: nd.SegmentationLevel,
+        **kwargs,
     ):
         # ## SET UP SEGMENT LOG ## #
         # Logging set up
@@ -939,10 +940,6 @@ class GravityDistributor(AbstractDistributor):
             index=self.running_zones,
             fill_value=0,
         )
-
-        # # TODO(BT): Fix this problem at the cost source
-        # # Fill any zero costs with 0.2
-        # cost_matrix = cost_matrix.mask(cost_matrix == 0, 0.2)
 
         # sort the productions and attractions
         productions = productions.set_index(self.zone_col)

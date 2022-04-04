@@ -74,12 +74,12 @@ class ToDistributionModel:
 
     def convert(
         self,
+        *args,
         trip_origin: nd_core.TripOrigin,
         ignore_cache: bool = False,
-        *args,
         **kwargs,
     ) -> Tuple[nd_core.DVector, nd_core.DVector]:
-        """Reads in and converts the trip origin Dvectors
+        """Reads in and converts the trip origin DVectors
 
         Wrapper class for `self.convert_hb()` or `self.convert_nhb()`.
 
@@ -120,18 +120,19 @@ class ToDistributionModel:
         """
         if trip_origin == nd_core.TripOrigin.HB:
             return self.convert_hb(ignore_cache=ignore_cache, *args, **kwargs)
-        elif trip_origin == nd_core.TripOrigin.NHB:
+
+        if trip_origin == nd_core.TripOrigin.NHB:
             return self.convert_nhb(ignore_cache=ignore_cache, *args, **kwargs)
-        else:
-            raise ValueError(
-                "Don't know how to convert the trip ends for trip origin: %s"
-                % trip_origin.value
-            )
+
+        raise ValueError(
+            "Don't know how to convert the trip ends for trip origin: %s"
+            % trip_origin.value
+        )
 
     def convert_hb(
         self,
-        ignore_cache: bool = False,
         *args,
+        ignore_cache: bool = False,
         **kwargs,
     ) -> Tuple[nd_core.DVector, nd_core.DVector]:
         """Reads in and converts the hb_production and hb_attraction Dvectors
