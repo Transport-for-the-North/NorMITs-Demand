@@ -42,6 +42,7 @@ from tqdm import tqdm
 import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand import core
+from normits_demand import logging as nd_log
 
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
@@ -50,6 +51,10 @@ from normits_demand.utils import file_ops
 from normits_demand.utils import compress
 
 from normits_demand.concurrency import multiprocessing
+
+
+# ## CONSTANTS ## #
+LOG = nd_log.get_logger(__name__)
 
 
 # ## CLASSES ## #
@@ -2315,23 +2320,32 @@ class DVector:
         df.to_csv(segment_totals_path, index=False)
 
         # Segment by CA Sector total reports - 1 to 1, No weighting
-        tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
-        dvec = self.translate_zoning(tfn_ca_sectors)
-        dvec.to_df().to_csv(ca_sector_path, index=False)
+        try:
+            tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
+            dvec = self.translate_zoning(tfn_ca_sectors)
+            dvec.to_df().to_csv(ca_sector_path, index=False)
+        except nd.ZoningError as err:
+            LOG.error("Error creating CA sector report: %s", err)
 
         # Segment by IE Sector total reports - 1 to 1, No weighting
-        ie_sectors = nd.get_zoning_system('ie_sector')
-        dvec = self.translate_zoning(ie_sectors)
-        dvec.to_df().to_csv(ie_sector_path, index=False)
+        try:
+            ie_sectors = nd.get_zoning_system('ie_sector')
+            dvec = self.translate_zoning(ie_sectors)
+            dvec.to_df().to_csv(ie_sector_path, index=False)
+        except nd.ZoningError as err:
+            LOG.error("Error creating IE sector report: %s", err)
 
         if lad_report_seg is None:
             return
 
         # Segment by LAD segment total reports - 1 to 1, No weighting
-        lad = nd.get_zoning_system('lad_2020')
-        dvec = self.aggregate(lad_report_seg)
-        dvec = dvec.translate_zoning(lad)
-        dvec.to_df().to_csv(lad_report_path, index=False)
+        try:
+            lad = nd.get_zoning_system('lad_2020')
+            dvec = self.aggregate(lad_report_seg)
+            dvec = dvec.translate_zoning(lad)
+            dvec.to_df().to_csv(lad_report_path, index=False)
+        except nd.ZoningError as err:
+            LOG.error("Error creating LAD report: %s", err)
 
     def segment_apply(self,
                       func: Callable[[np.ndarray], np.ndarray],
