@@ -199,6 +199,7 @@ class GravityModelBase(abc.ABC):
                  cost_matrix: np.ndarray,
                  target_cost_distribution: pd.DataFrame,
                  running_log_path: os.PathLike,
+                 cost_min_max_buf: float = 0.1,
                  ):
         # Validate attributes
         target_cost_distribution = pd_utils.reindex_cols(
@@ -224,6 +225,7 @@ class GravityModelBase(abc.ABC):
 
         # Set attributes
         self.cost_function = cost_function
+        self.cost_min_max_buf = cost_min_max_buf
         self.cost_matrix = cost_matrix
         self.target_cost_distribution = self._update_tcd(target_cost_distribution)
         self.tcd_bin_edges = self._get_tcd_bin_edges(target_cost_distribution)
@@ -289,7 +291,7 @@ class GravityModelBase(abc.ABC):
                 % (len(self.cost_function.kw_order), len(args))
             )
 
-        return {k: v for k, v in zip(self.cost_function.kw_order, args)}
+        return dict(zip(self.cost_function.kw_order, args))
 
     def _order_cost_params(self, params: Dict[str, Any]) -> List[Any]:
         """Order params into a list that self.cost_function expects"""
@@ -306,10 +308,13 @@ class GravityModelBase(abc.ABC):
 
     def _order_bounds(self) -> Tuple[List[Any], List[Any]]:
         """Order min and max into a tuple of lists that self.cost_function expects"""
-        return(
-            self._order_cost_params(self.cost_function.param_min),
-            self._order_cost_params(self.cost_function.param_max),
-        )
+        min_vals = self._order_cost_params(self.cost_function.param_min)
+        max_vals = self._order_cost_params(self.cost_function.param_max)
+
+        min_vals = [x + self.cost_min_max_buf for x in min_vals]
+        max_vals = [x - self.cost_min_max_buf for x in max_vals]
+
+        return min_vals, max_vals
 
     def _cost_distribution(self,
                            matrix: np.ndarray,
