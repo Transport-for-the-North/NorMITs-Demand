@@ -83,10 +83,10 @@ class PartialFurnessRequest:
 @dataclasses.dataclass(frozen=True)
 class FurnessSetup:
     area_mats: Dict[Any, np.ndarray]
-    gravity_putter_qs: Dict[Any, np.ndarray]
-    gravity_getter_qs: Dict[Any, np.ndarray]
-    jacobian_putter_qs: Dict[Any, np.ndarray]
-    jacobian_getter_qs: Dict[Any, np.ndarray]
+    gravity_putter_qs: Dict[Any, queue.Queue]
+    gravity_getter_qs: Dict[Any, queue.Queue]
+    jacobian_putter_qs: Dict[Any, queue.Queue]
+    jacobian_getter_qs: Dict[Any, queue.Queue]
 
     complete_events: Dict[Any, threading.Event]
     all_complete_event: threading.Event
@@ -103,10 +103,10 @@ class FurnessSetup:
 
 @dataclasses.dataclass(frozen=True)
 class SharedArrays:
-    gravity_in: np.ndarray
-    gravity_out: np.ndarray
-    jacobian_in: Dict[str, np.ndarray]
-    jacobian_out: Dict[str, np.ndarray]
+    gravity_in: communication.SharedNumpyArrayHelper
+    gravity_out: communication.SharedNumpyArrayHelper
+    jacobian_in: Dict[str, communication.SharedNumpyArrayHelper]
+    jacobian_out: Dict[str, communication.SharedNumpyArrayHelper]
 
 
 class FurnessThreadBase(abc.ABC, multithreading.ReturnOrErrorThread):
@@ -195,12 +195,10 @@ class GravityModelBase(abc.ABC):
     _least_squares_method = 'trf'
 
     def __init__(self,
-                 row_targets: np.ndarray,
-                 col_targets: np.ndarray,
                  cost_function: cost.CostFunction,
                  cost_matrix: np.ndarray,
                  target_cost_distribution: pd.DataFrame,
-                 running_log_path: nd.PathLike = None,
+                 running_log_path: os.PathLike,
                  ):
         # Validate attributes
         target_cost_distribution = pd_utils.reindex_cols(
@@ -225,8 +223,6 @@ class GravityModelBase(abc.ABC):
                 )
 
         # Set attributes
-        self.row_targets = row_targets
-        self.col_targets = col_targets
         self.cost_function = cost_function
         self.cost_matrix = cost_matrix
         self.target_cost_distribution = self._update_tcd(target_cost_distribution)
@@ -234,20 +230,25 @@ class GravityModelBase(abc.ABC):
         self.running_log_path = running_log_path
 
         # Running attributes
-        self._loop_num = -1
-        self._loop_start_time = None
-        self._loop_end_time = None
-        self._jacobian_mats = None
-        self._perceived_factors = None
+        self._loop_num: int = -1
+        self._loop_start_time: float = -1.0
+        self._loop_end_time: float = -1.0
+        self._jacobian_mats: Dict[str, np.ndarray] = dict()
+        self._perceived_factors: np.ndarray = np.ones_like(self.cost_matrix)
 
         # Additional attributes
-        self.initial_cost_params = None
-        self.initial_convergence = None
-        self.optimal_cost_params = None
-        self.achieved_band_share = None
-        self.achieved_convergence = None
-        self.achieved_residuals = None
-        self.achieved_distribution = None
+        self.initial_cost_params: Dict[str, Any] = dict()
+        self.optimal_cost_params: Dict[str, Any] = dict()
+        self.initial_convergence: float = 0
+        self.achieved_convergence: float = 0
+        self.achieved_band_share: np.ndarray = np.zeros_like(self.target_band_share)
+        self.achieved_residuals: np.ndarray = np.full_like(np.inf, self.target_band_share)
+        self.achieved_distribution: np.ndarray = np.zeros_like(cost_matrix)
+
+    @property
+    def target_band_share(self) -> np.ndarray:
+        """Returns the target band share from target cost distribution"""
+        return self.target_cost_distribution['band_share'].values
 
     @staticmethod
     def _update_tcd(tcd: pd.DataFrame) -> pd.DataFrame:
@@ -275,8 +276,8 @@ class GravityModelBase(abc.ABC):
         """Sets running params to their default values for a run"""
         self._loop_num = 1
         self._loop_start_time = timing.current_milli_time()
-        self.initial_cost_params = None
-        self.initial_convergence = None
+        self.initial_cost_params = dict()
+        self.initial_convergence = 0
         self._perceived_factors = np.ones_like(self.cost_matrix)
 
     def _cost_params_to_kwargs(self, args: List[Any]) -> Dict[str, Any]:
@@ -460,11 +461,7 @@ class GravityModelBase(abc.ABC):
             self._jacobian_mats[cost_param] = adj_cost
 
         # Furness trips to trip ends
-        matrix, iters, rmse = self.gravity_furness(
-            seed_matrix=init_matrix,
-            row_targets=self.row_targets,
-            col_targets=self.col_targets,
-        )
+        matrix, iters, rmse = self.gravity_furness(seed_matrix=init_matrix)
 
         # Store for the jacobian calculations
         self._jacobian_mats['final'] = matrix.copy()
@@ -494,18 +491,19 @@ class GravityModelBase(abc.ABC):
         })
 
         # Append this iteration to log file
-        file_ops.safe_dataframe_to_csv(
-            pd.DataFrame(log_dict, index=[0]),
-            self.running_log_path,
-            mode='a',
-            header=(not os.path.exists(self.running_log_path)),
-            index=False,
-        )
+        if self.running_log_path is not None:
+            file_ops.safe_dataframe_to_csv(
+                pd.DataFrame(log_dict, index=[0]),
+                self.running_log_path,
+                mode='a',
+                header=(not os.path.exists(self.running_log_path)),
+                index=False,
+            )
 
         # Update loop params and return the achieved band shares
         self._loop_num += 1
         self._loop_start_time = timing.current_milli_time()
-        self._loop_end_time = None
+        self._loop_end_time = -1
 
         # Update performance params
         self.achieved_band_share = achieved_band_shares
@@ -631,11 +629,10 @@ class GravityModelBase(abc.ABC):
         self._gravity_function(optimal_params, diff_step=diff_step)
 
     @abc.abstractmethod
-    def gravity_furness(self,
-                        seed_matrix: np.ndarray,
-                        row_targets: np.ndarray,
-                        col_targets: np.ndarray,
-                        ) -> Tuple[np.array, int, float]:
+    def gravity_furness(
+        self,
+        seed_matrix: np.ndarray,
+    ) -> Tuple[np.ndarray, int, float]:
         """Runs a doubly constrained furness on the seed matrix
 
         Wrapper around furness.doubly_constrained_furness, to be used when
@@ -645,14 +642,6 @@ class GravityModelBase(abc.ABC):
         ----------
         seed_matrix:
             Initial values for the furness.
-
-        row_targets:
-            The target values for the sum of each row.
-            i.e np.sum(seed_matrix, axis=1)
-
-        col_targets:
-            The target values for the sum of each column
-            i.e np.sum(seed_matrix, axis=0)
 
         Returns
         -------
@@ -673,7 +662,7 @@ class GravityModelBase(abc.ABC):
                          row_targets: np.ndarray,
                          col_targets: np.ndarray,
                          ignore_result: bool = False,
-                         ) -> Tuple[np.array, int, float]:
+                         ) -> Dict[str, np.ndarray]:
         """Runs a doubly constrained furness on the seed matrix
 
         Wrapper around furness.doubly_constrained_furness, to be used when
@@ -724,8 +713,8 @@ class GravityModelCalibrator(GravityModelBase):
                  target_convergence: float,
                  furness_max_iters: int,
                  furness_tol: float,
+                 running_log_path: os.PathLike,
                  use_perceived_factors: bool = True,
-                 running_log_path: nd.PathLike = None,
                  ):
         # TODO(BT): Write GravityModelCalibrator __init__ docs
         super().__init__(
@@ -733,27 +722,20 @@ class GravityModelCalibrator(GravityModelBase):
             cost_matrix=cost_matrix,
             target_cost_distribution=target_cost_distribution,
             running_log_path=running_log_path,
-            row_targets=row_targets,
-            col_targets=col_targets,
         )
 
         # Set attributes
         self.row_targets = row_targets
         self.col_targets = col_targets
-        self.target_cost_distribution = self._update_tcd(target_cost_distribution)
-        self.tcd_bin_edges = self._get_tcd_bin_edges(target_cost_distribution)
         self.furness_max_iters = furness_max_iters
         self.furness_tol = furness_tol
         self.use_perceived_factors = use_perceived_factors
-        self.running_log_path = running_log_path
 
         self.target_convergence = target_convergence
 
     def gravity_furness(self,
                         seed_matrix: np.ndarray,
-                        row_targets: np.ndarray,
-                        col_targets: np.ndarray,
-                        ) -> Tuple[np.array, int, float]:
+                        ) -> Tuple[np.ndarray, int, float]:
         """Runs a doubly constrained furness on the seed matrix
 
         Wrapper around furness.doubly_constrained_furness, using class
@@ -763,14 +745,6 @@ class GravityModelCalibrator(GravityModelBase):
         ----------
         seed_matrix:
             Initial values for the furness.
-
-        row_targets:
-            The target values for the sum of each row.
-            i.e np.sum(seed_matrix, axis=1)
-
-        col_targets:
-            The target values for the sum of each column
-            i.e np.sum(seed_matrix, axis=0)
 
         Returns
         -------
@@ -785,8 +759,8 @@ class GravityModelCalibrator(GravityModelBase):
         """
         return furness.doubly_constrained_furness(
             seed_vals=seed_matrix,
-            row_targets=row_targets,
-            col_targets=col_targets,
+            row_targets=self.row_targets,
+            col_targets=self.col_targets,
             tol=self.furness_tol,
             max_iters=self.furness_max_iters,
         )
@@ -796,7 +770,7 @@ class GravityModelCalibrator(GravityModelBase):
                          row_targets: np.ndarray,
                          col_targets: np.ndarray,
                          ignore_result: bool = False,
-                         ) -> Tuple[np.array, int, float]:
+                         ) -> Dict[str, np.ndarray]:
         """Runs a doubly constrained furness on the seed matrix
 
         Wrapper around furness.doubly_constrained_furness, to be used when
@@ -1118,7 +1092,7 @@ class FurnessThreadInterfaceBase(abc.ABC, multithreading.ReturnOrErrorThread):
         )
 
         # Validate inputs
-        name_dict = {
+        name_dict: Dict[str, Dict[Any, Any]] = {
             'furness_wait_events': furness_wait_events,
             'getter_qs': getter_qs,
             'putter_qs': putter_qs,
@@ -1903,7 +1877,7 @@ class JacobianFurnessThreadSharedArrays(FurnessThreadBase):
                 data = FurnessResults(
                     mat=self.area_mats[area_id],  # Return area_mat
                     # Not used anyway
-                    completed_iters=np.inf,
+                    completed_iters=0,
                     achieved_rmse=np.inf,
                 )
                 self.putter_qs[area_id].put(data)
@@ -2054,9 +2028,10 @@ class SingleTLDCalibratorThreadBase(multithreading.ReturnOrErrorThread, GravityM
                  init_params: Dict[str, Any],
                  thread_complete_event: threading.Event,
                  all_done_event: threading.Event,
+                 running_log_path: os.PathLike,
+                 *args,
                  use_perceived_factors: bool = True,
                  estimate_init_params: bool = False,
-                 running_log_path: nd.PathLike = None,
                  calibrate_params: bool = True,
                  diff_step: float = 1e-8,
                  ftol: float = 1e-4,
@@ -2064,11 +2039,10 @@ class SingleTLDCalibratorThreadBase(multithreading.ReturnOrErrorThread, GravityM
                  grav_max_iters: int = 100,
                  verbose: int = 0,
                  thread_name: str = None,
-                 *args,
                  **kwargs,
                  ):
         # Call parent classes
-        multithreading.ReturnOrErrorThread.__init__(
+        multithreading.ReturnOrErrorThread.__init__(  # type: ignore
             self,
             name=thread_name,
             *args,
@@ -2078,8 +2052,6 @@ class SingleTLDCalibratorThreadBase(multithreading.ReturnOrErrorThread, GravityM
         # self.gravity_furness for more info.
         GravityModelBase.__init__(
             self,
-            row_targets=None,
-            col_targets=None,
             cost_function=cost_function,
             cost_matrix=cost_matrix,
             target_cost_distribution=target_cost_distribution,
@@ -2159,11 +2131,11 @@ class SingleTLDCalibratorThreadBase(multithreading.ReturnOrErrorThread, GravityM
                 diff_step=self.diff_step,
             )
 
+        return self.optimal_cost_params
+
     def gravity_furness(self,
                         seed_matrix: np.ndarray,
-                        row_targets: np.ndarray,
-                        col_targets: np.ndarray,
-                        ) -> Tuple[np.array, int, float]:
+                        ) -> Tuple[np.ndarray, int, float]:
         raise NotImplementedError(
             "When a class inherits from %s it needs to implement a method "
             "for gravity_furness()"
@@ -2175,7 +2147,7 @@ class SingleTLDCalibratorThreadBase(multithreading.ReturnOrErrorThread, GravityM
                          row_targets: np.ndarray,
                          col_targets: np.ndarray,
                          ignore_result: bool = False,
-                         ) -> Tuple[np.array, int, float]:
+                         ) -> Dict[str, np.ndarray]:
         raise NotImplementedError(
             "When a class inherits from %s it needs to implement a method "
             "for jacobian_furness()"
@@ -2257,9 +2229,7 @@ class SingleTLDCalibratorThreadSharedArrays(SingleTLDCalibratorThreadBase):
 
     def gravity_furness(self,
                         seed_matrix: np.ndarray,
-                        row_targets: np.ndarray,
-                        col_targets: np.ndarray,
-                        ) -> Tuple[np.array, int, float]:
+                        ) -> Tuple[np.ndarray, int, float]:
         """Runs a doubly constrained furness on the seed matrix
 
         Wrapper around furness.doubly_constrained_furness, using class
@@ -2269,14 +2239,6 @@ class SingleTLDCalibratorThreadSharedArrays(SingleTLDCalibratorThreadBase):
         ----------
         seed_matrix:
             Initial values for the furness.
-
-        row_targets:
-            The target values for the sum of each row.
-            i.e np.sum(seed_matrix, axis=1)
-
-        col_targets:
-            The target values for the sum of each column
-            i.e np.sum(seed_matrix, axis=0)
 
         Returns
         -------
@@ -2321,7 +2283,7 @@ class SingleTLDCalibratorThreadSharedArrays(SingleTLDCalibratorThreadBase):
                          row_targets: np.ndarray,
                          col_targets: np.ndarray,
                          ignore_result: bool = False,
-                         ) -> Tuple[np.array, int, float]:
+                         ) -> Dict[str, np.ndarray]:
         """Runs a doubly constrained furness on the seed matrix
 
         Wrapper around furness.doubly_constrained_furness, to be used when
@@ -2375,7 +2337,7 @@ class SingleTLDCalibratorThreadSharedArrays(SingleTLDCalibratorThreadBase):
 
         # Create a request and place on the queue
         request = PartialFurnessRequest(
-            seed_mat=None,
+            seed_mat=np.array([0]),
             row_targets=row_targets,
             col_targets=col_targets,
             ignore_result=ignore_result,
@@ -2453,9 +2415,7 @@ class SingleTLDCalibratorThreadQueues(SingleTLDCalibratorThreadBase):
 
     def gravity_furness(self,
                         seed_matrix: np.ndarray,
-                        row_targets: np.ndarray,
-                        col_targets: np.ndarray,
-                        ) -> Tuple[np.array, int, float]:
+                        ) -> Tuple[np.ndarray, int, float]:
         """Runs a doubly constrained furness on the seed matrix
 
         Wrapper around furness.doubly_constrained_furness, using class
@@ -2465,14 +2425,6 @@ class SingleTLDCalibratorThreadQueues(SingleTLDCalibratorThreadBase):
         ----------
         seed_matrix:
             Initial values for the furness.
-
-        row_targets:
-            The target values for the sum of each row.
-            i.e np.sum(seed_matrix, axis=1)
-
-        col_targets:
-            The target values for the sum of each column
-            i.e np.sum(seed_matrix, axis=0)
 
         Returns
         -------
@@ -2520,7 +2472,7 @@ class SingleTLDCalibratorThreadQueues(SingleTLDCalibratorThreadBase):
                          row_targets: np.ndarray,
                          col_targets: np.ndarray,
                          ignore_result: bool = False,
-                         ) -> Tuple[np.array, int, float]:
+                         ) -> Dict[str, np.ndarray]:
         """Runs a doubly constrained furness on the seed matrix
 
         Wrapper around furness.doubly_constrained_furness, to be used when
@@ -2605,8 +2557,8 @@ class MultiAreaGravityModelCalibrator:
                  target_convergence: float,
                  furness_max_iters: int,
                  furness_tol: float,
+                 running_log_path: os.PathLike,
                  use_perceived_factors: bool = True,
-                 running_log_path: nd.PathLike = None,
                  memory_optimised: bool = True,
                  ):
         # TODO(BT): Write MultiAreaGravityModelCalibrator __init__ docs
@@ -2669,7 +2621,7 @@ class MultiAreaGravityModelCalibrator:
         self.optimal_cost_params = dict.fromkeys(self.calib_areas)
         self.achieved_convergence = dict.fromkeys(self.calib_areas)
         self.achieved_residuals = dict.fromkeys(self.calib_areas)
-        self.achieved_full_distribution = None
+        self.achieved_full_distribution: np.ndarray = np.full_like(-1, self.cost_matrix)
         self.achieved_distribution = dict.fromkeys(self.calib_areas)
 
         # Attributes to store from runs

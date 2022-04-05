@@ -260,7 +260,7 @@ def doubly_constrained_furness(seed_vals: np.array,
                                tol: float = 1e-9,
                                max_iters: int = 5000,
                                warning: bool = True,
-                               ) -> Tuple[np.array, int, float]:
+                               ) -> Tuple[np.ndarray, int, float]:
     """
     Performs a doubly constrained furness for max_iters or until tol is met
 

@@ -7,4 +7,9 @@ disable = [
     "C0326",            # Compatibility with black
     "line-too-long",    # Compatibility with black
     "line-many-line",
+    "use-dict-literal",
+    "use-list-literal",
 ]
+
+[tool.mypy]
+ignore_missing_imports = true
