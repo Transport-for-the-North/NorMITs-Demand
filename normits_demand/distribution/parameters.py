@@ -11,7 +11,7 @@ from typing import NamedTuple, Optional, Union, Dict, Any
 
 # Local imports
 import normits_demand as nd
-from normits_demand import cost, pathing
+from normits_demand import cost
 
 
 ##### CLASSES #####
@@ -50,12 +50,12 @@ class DistributionModelPaths(NamedTuple):
     notem_export_home: Union[Path, str]
     tram_export_home: Union[Path, str]
 
-
 class DistributionModelParameters(NamedTuple):
     """Stores all parameters required for running the distribution model."""
     paths: DistributionModelPaths
-    export_paths: pathing.NoTEMExportPaths
     iteration: str
+    trip_end_iteration: str
+    scenario: nd.Scenario
     base_year: int
     mode: nd.Mode
     use_tram: bool

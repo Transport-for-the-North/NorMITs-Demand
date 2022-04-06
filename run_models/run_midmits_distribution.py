@@ -21,8 +21,6 @@ import run_distribution_model
 import run_mitem
 import normits_demand as nd
 from normits_demand import converters
-from normits_demand import pathing
-from normits_demand import constants as consts
 from normits_demand.distribution import parameters as dist_params
 from normits_demand.models import DistributionModel
 from normits_demand.pathing.distribution_model import DistributionModelArgumentBuilder
@@ -41,31 +39,24 @@ def main() -> None:
     base_year = 2018
     mode = nd.Mode.TRAIN
     use_tram = False
+    scenario = nd.Scenario.SC01_JAM
     # Distribution model paths
     paths = dist_params.DistributionModelPaths(
         import_home=r"I:\NorMITs Demand\import",
         export_home=r"T:\MidMITs Demand\Distribution Model",
         notem_export_home=run_mitem.mitem_export_home,
         tram_export_home=None,
-        cache_path="c:/dm_cache",
-        overwrite_cache=False,
-    )
-    # Trip end export paths
-    export_paths = pathing.MiTEMExportPaths(
-        path_years=[base_year],
-        scenario=consts.SC01_JAM,
-        iteration_name=mitem_iteration_name,
-        export_home=paths.notem_export_home,
     )
 
     params = mode_lookup(
         paths,
-        export_paths,
         dm_iteration_name,
         base_year,
         mode,
         use_tram,
         tour_props_version=f"v{mitem_iteration_name}",
+        scenario=scenario,
+        trip_end_iteration=mitem_iteration_name,
     )
     model_runs = dist_params.DistributionModelRuns(
         run_hb=True,
@@ -84,12 +75,13 @@ def main() -> None:
 
 def mode_lookup(
     paths: dist_params.DistributionModelPaths,
-    export_paths: pathing.NoTEMExportPaths,
     iteration_name: str,
     base_year: int,
     mode: nd.Mode,
     use_tram: bool,
     tour_props_version: str,
+    scenario: nd.Scenario,
+    trip_end_iteration: str,
 ) -> dist_params.DistributionModelParameters:
     """Lookup distribution model parameters for a single mode.
 
@@ -97,9 +89,6 @@ def mode_lookup(
     ----------
     paths : dist_params.DistributionModelPaths
         The import, export and cache paths for the distribution model.
-    export_paths : pathing.NoTEMExportPaths
-        The export paths class for the model being ran, NoTEMExportPaths,
-        TramExportPaths or MiTEMExportPaths.
     iteration_name : str
         Name of the distribution model iteration.
     base_year : int
@@ -263,8 +252,9 @@ def mode_lookup(
 
     return dist_params.DistributionModelParameters(
         paths=paths,
-        export_paths=export_paths,
         iteration=iteration_name,
+        trip_end_iteration=trip_end_iteration,
+        scenario=scenario,
         base_year=base_year,
         mode=mode,
         use_tram=use_tram,
@@ -338,8 +328,8 @@ def run_models(
     kwargs = {
         "output_zoning": params.zone_systems.upper,
         "base_year": params.base_year,
-        "scenario": params.export_paths.scenario,
-        "notem_iteration_name": params.export_paths.iteration_name,
+        "scenario": params.scenario,
+        "notem_iteration_name": params.trip_end_iteration,
         "time_format": nd.core.TimeFormat.AVG_DAY,
     }
     if params.use_tram:
@@ -357,11 +347,11 @@ def run_models(
 
     # ## RUN THE MODEL ## #
     if model_runs.run_hb:
-        trip_origin = "hb"
+        trip_origin = nd.TripOrigin.HB
 
         # Build the trip end kwargs
         subset_name = run_distribution_model.HB_SUBSET_SEG_BASE_NAME.format(
-            trip_origin=trip_origin,
+            trip_origin=trip_origin.value,
             te_model_name=te_model_name,
         )
         trip_end_kwargs = {
@@ -400,10 +390,10 @@ def run_models(
         )
 
     if model_runs.run_nhb:
-        trip_origin = "nhb"
+        trip_origin = nd.TripOrigin.NHB
 
         # Build the trip end kwargs
-        kwargs = {"trip_origin": trip_origin, "te_model_name": te_model_name}
+        kwargs = {"trip_origin": trip_origin.value, "te_model_name": te_model_name}
         subset_name = run_distribution_model.NHB_SUBSET_SEG_BASE_NAME.format(**kwargs)
         reduce_name = run_distribution_model.REDUCE_SEG_BASE_NAME.format(**kwargs)
         trip_end_kwargs = {
@@ -449,7 +439,7 @@ def run_models(
         elif "nhb_distributor" in locals():
             nhb_distributor.compile_to_assignment_format()
         else:
-            trip_origin = "hb"
+            trip_origin = nd.TripOrigin.HB
             arg_builder = DistributionModelArgumentBuilder(
                 trip_origin=trip_origin,
                 trip_end_getter=trip_end_getter,
