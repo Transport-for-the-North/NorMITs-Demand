@@ -30,30 +30,25 @@ from normits_demand.utils import math_utils
 
 @enum.unique
 class BuiltInCostFunction(enum.Enum):
-    TANNER = 'tanner'
-    LOG_NORMAL = 'log_normal'
+    TANNER = "tanner"
+    LOG_NORMAL = "log_normal"
 
     def get_cost_function(self):
 
         if self == BuiltInCostFunction.TANNER:
-            params = {'alpha': [-5, 5], 'beta': [-5, 5]}
+            params = {"alpha": [-5, 5], "beta": [-5, 5]}
             function = tanner
 
         elif self == BuiltInCostFunction.LOG_NORMAL:
-            params = {'sigma': [0, 5], 'mu': [0, 10]}
+            params = {"sigma": [0, 5], "mu": [0, 10]}
             function = log_normal
 
         else:
             raise nd.NormitsDemandError(
-                "No definition exists for %s built in cost function"
-                % self
+                "No definition exists for %s built in cost function" % self
             )
 
-        return CostFunction(
-            name=self.name,
-            params=params,
-            function=function,
-        )
+        return CostFunction(name=self.name, params=params, function=function,)
 
 
 class CostFunction:
@@ -63,11 +58,9 @@ class CostFunction:
     which inherits this abstract class.
     """
 
-    def __init__(self,
-                 name: str,
-                 params: Dict[str, Tuple[float, float]],
-                 function: Callable,
-                 ):
+    def __init__(
+        self, name: str, params: Dict[str, Tuple[float, float]], function: Callable,
+    ):
         self.name = name
         self.function = function
 
@@ -77,6 +70,7 @@ class CostFunction:
         self.param_max = {k: max(v) for k, v in params.items()}
 
         self.kw_order = list(inspect.signature(self.function).parameters.keys())[1:]
+        self.kw_order.remove('min_return_val')
 
         # Validate the params and cost function
         try:
@@ -123,8 +117,7 @@ class CostFunction:
             if name not in self.param_names:
                 raise ValueError(
                     "Parameter '%s' is not a valid parameter for "
-                    "CostFunction %s"
-                    % (name, self.name)
+                    "CostFunction %s" % (name, self.name)
                 )
 
             # Check values are valid
@@ -173,7 +166,9 @@ class CostFunction:
         return self.function(base_cost, **kwargs)
 
 
-def tanner(base_cost: np.ndarray, alpha: float, beta: float) -> np.ndarray:
+def tanner(
+    base_cost: np.ndarray, alpha: float, beta: float, min_return_val: float = 1e-150,
+) -> np.ndarray:
     r"""Implementation of the tanner cost function.
 
     Parameters
@@ -183,6 +178,10 @@ def tanner(base_cost: np.ndarray, alpha: float, beta: float) -> np.ndarray:
 
     alpha, beta : float
         Parameters of the tanner cost function, see Notes.
+
+    min_return_val: float
+        The minimum value allowed in the return. Avoid return arrays with values
+        such as 1e-300 which lead to overflow errors when divisions are made.
 
     Returns
     -------
@@ -200,7 +199,7 @@ def tanner(base_cost: np.ndarray, alpha: float, beta: float) -> np.ndarray:
     - :math:`C_{ij}`: cost from i to k.
     - :math:`\alpha, \beta`: calibration parameters.
     """
-    math_utils.check_numeric({'alpha': alpha, 'beta': beta})
+    math_utils.check_numeric({"alpha": alpha, "beta": beta})
 
     # Don't do 0 to the power in case alpha is negative
     # 0^x where x is anything (other than 0) is always 0
@@ -211,10 +210,14 @@ def tanner(base_cost: np.ndarray, alpha: float, beta: float) -> np.ndarray:
         where=base_cost != 0,
     )
     exp = np.exp(beta * base_cost)
-    return power * exp
+
+    # Clip the min values to the min_val
+    return math_utils.clip_small_non_zero(power * exp, min_return_val)
 
 
-def log_normal(base_cost: np.ndarray, sigma: float, mu: float) -> np.ndarray:
+def log_normal(
+    base_cost: np.ndarray, sigma: float, mu: float, min_return_val: float = 1e-150,
+) -> np.ndarray:
     r"""Implementation of the log normal cost function.
 
     Parameters
@@ -224,6 +227,11 @@ def log_normal(base_cost: np.ndarray, sigma: float, mu: float) -> np.ndarray:
 
     sigma, mu : float
         Parameters of the log normal cost function, see Notes.
+
+
+    min_return_val: float
+        The minimum value allowed in the return. Avoid return arrays with values
+        such as 1e-300 which lead to overflow errors when divisions are made.
 
     Returns
     -------
@@ -245,13 +253,13 @@ def log_normal(base_cost: np.ndarray, sigma: float, mu: float) -> np.ndarray:
     - :math:`\sigma, \mu`: calibration parameters.
     """
     # Init
-    math_utils.check_numeric({'sigma': sigma, 'mu': mu})
+    math_utils.check_numeric({"sigma": sigma, "mu": mu})
     sigma = float(sigma)
     mu = float(mu)
 
     # We need to be careful to avoid 0 in costs
     # First calculate the fraction
-    frac_denominator = (base_cost * sigma * np.sqrt(2 * np.pi))
+    frac_denominator = base_cost * sigma * np.sqrt(2 * np.pi)
     frac = np.divide(
         1,
         frac_denominator,
@@ -260,13 +268,9 @@ def log_normal(base_cost: np.ndarray, sigma: float, mu: float) -> np.ndarray:
     )
 
     # Now calculate the exponential
-    log = np.log(
-        base_cost,
-        where=base_cost != 0,
-        out=np.zeros_like(base_cost).astype(float),
-    )
+    log = np.log(base_cost, where=base_cost != 0, out=np.zeros_like(base_cost).astype(float),)
     exp_numerator = (log - mu) ** 2
     exp_denominator = 2 * sigma ** 2
     exp = np.exp(-exp_numerator / exp_denominator)
 
-    return frac * exp
+    return np.maximum(frac * exp, min_return_val)
