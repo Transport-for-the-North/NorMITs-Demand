@@ -11,7 +11,6 @@
 # Standard imports
 import os
 import sys
-from typing import Tuple
 
 # Third party imports
 
@@ -21,15 +20,16 @@ sys.path.append("..")
 import run_distribution_model
 import run_mitem
 import normits_demand as nd
+from normits_demand import converters
 from normits_demand import pathing
 from normits_demand import constants as consts
 from normits_demand.distribution import parameters as dist_params
 from normits_demand.models import DistributionModel
 from normits_demand.pathing.distribution_model import DistributionModelArgumentBuilder
+
 # pylint: enable=import-error,wrong-import-position
 
 ##### CONSTANTS #####
-INIT_PARAMS_BASE = run_distribution_model.INIT_PARAMS_BASE
 
 
 ##### FUNCTIONS #####
@@ -37,7 +37,7 @@ def main() -> None:
     """Run MidMITs distribution model."""
     # Distribution running args
     mitem_iteration_name = run_mitem.mitem_iter
-    dm_iteration_name = f'{mitem_iteration_name}.1'
+    dm_iteration_name = f"{mitem_iteration_name}.1"
     base_year = 2018
     mode = nd.Mode.TRAIN
     use_tram = False
@@ -55,7 +55,7 @@ def main() -> None:
         path_years=[base_year],
         scenario=consts.SC01_JAM,
         iteration_name=mitem_iteration_name,
-        export_home=run_mitem.mitem_export_home,
+        export_home=paths.notem_export_home,
     )
 
     params = mode_lookup(
@@ -124,26 +124,26 @@ def mode_lookup(
     """
     # Default values across all modes
     intra_infill = 0.5
-    target_tld_version = 'v1'
-    geo_constraint_type = 'trip_OD'
+    target_tld_version = "v1"
+    geo_constraint_type = "trip_OD"
     gm_cost = nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function()
     dist_kwargs = {
         nd.DistributionMethod.GRAVITY: {
-            'cost_function': gm_cost,
-            'target_convergence': 0.9,
-            'grav_max_iters': 100,
-            'furness_max_iters': 3000,
-            'furness_tol': 0.1,
-            'calibrate_params': True,
-            'estimate_init_params': False
+            "cost_function": gm_cost,
+            "target_convergence": 0.9,
+            "grav_max_iters": 100,
+            "furness_max_iters": 3000,
+            "furness_tol": 0.1,
+            "calibrate_params": True,
+            "estimate_init_params": False,
         },
         nd.DistributionMethod.FURNESS3D: {
-            'target_convergence': 0.9,
-            'outer_max_iters': 50,
-            'furness_max_iters': 3000,
-            'furness_tol': 0.1,
-            'calibrate': True,
-        }
+            "target_convergence": 0.9,
+            "outer_max_iters": 50,
+            "furness_max_iters": 3000,
+            "furness_tol": 0.1,
+            "calibrate": True,
+        },
     }
 
     # Mode specific values
@@ -153,29 +153,29 @@ def mode_lookup(
             nd.get_zoning_system("miham"),
         )
         segmentations = dist_params.DistributionSegmentations(
-            nd.get_segmentation_level('hb_p_m7' if use_tram else 'hb_p_m'),
+            nd.get_segmentation_level("hb_p_m7" if use_tram else "hb_p_m"),
             nd.get_segmentation_level(
-                'tms_nhb_p_m7_tp_wday' if use_tram else 'tms_nhb_p_m_tp_wday'
+                "tms_nhb_p_m7_tp_wday" if use_tram else "tms_nhb_p_m_tp_wday"
             ),
-            nd.get_segmentation_level('hb_p_m_car'),
-            nd.get_segmentation_level('tms_nhb_p_m_tp_wday_car'),
-            'p_m',
-            'p_m_tp',
+            nd.get_segmentation_level("hb_p_m_car"),
+            nd.get_segmentation_level("tms_nhb_p_m_tp_wday_car"),
+            "p_m",
+            "p_m_tp",
         )
-        target_tld_dir = os.path.join(geo_constraint_type, 'dm_highway_bands')
+        target_tld_dir = os.path.join(geo_constraint_type, "dm_highway_bands")
         upper_cal = dist_params.CalibrationParams(
-            'gb',
+            "gb",
             nd.DistributionMethod.GRAVITY,
-            'gb',
-            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m'),
-            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_tp'),
+            "gb",
+            hb_target_tld_dir=os.path.join(target_tld_dir, "hb_p_m"),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, "nhb_p_m_tp"),
         )
         lower_cal = dist_params.CalibrationParams(
-            'north_and_mids',
+            "north_and_mids",
             nd.DistributionMethod.GRAVITY,
-            'north_and_mids',
-            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m'),
-            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_tp'),
+            "north_and_mids",
+            hb_target_tld_dir=os.path.join(target_tld_dir, "hb_p_m"),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, "nhb_p_m_tp"),
         )
     elif mode == nd.Mode.BUS:
         zone_systems = dist_params.DistributionZoneSystems(
@@ -183,79 +183,79 @@ def mode_lookup(
             nd.get_zoning_system("miham"),
         )
         segmentations = dist_params.DistributionSegmentations(
-            nd.get_segmentation_level('hb_p_m7' if use_tram else 'hb_p_m'),
+            nd.get_segmentation_level("hb_p_m7" if use_tram else "hb_p_m"),
             nd.get_segmentation_level(
-                'tms_nhb_p_m7_tp_wday' if use_tram else 'tms_nhb_p_m_tp_wday'
+                "tms_nhb_p_m7_tp_wday" if use_tram else "tms_nhb_p_m_tp_wday"
             ),
-            nd.get_segmentation_level('hb_p_m_bus'),
-            nd.get_segmentation_level('tms_nhb_p_m_tp_wday_bus'),
-            'p_m',
-            'p_m_tp',
+            nd.get_segmentation_level("hb_p_m_bus"),
+            nd.get_segmentation_level("tms_nhb_p_m_tp_wday_bus"),
+            "p_m",
+            "p_m_tp",
         )
-        target_tld_dir = os.path.join(geo_constraint_type, 'dm_highway_bands')
+        target_tld_dir = os.path.join(geo_constraint_type, "dm_highway_bands")
         upper_cal = dist_params.CalibrationParams(
-            'gb',
+            "gb",
             nd.DistributionMethod.GRAVITY,
-            'gb',
-            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m'),
-            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_tp'),
+            "gb",
+            hb_target_tld_dir=os.path.join(target_tld_dir, "hb_p_m"),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, "nhb_p_m_tp"),
         )
         lower_cal = dist_params.CalibrationParams(
-            'north_and_mids',
+            "north_and_mids",
             nd.DistributionMethod.GRAVITY,
-            'north_and_mids',
-            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m'),
-            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_tp'),
+            "north_and_mids",
+            hb_target_tld_dir=os.path.join(target_tld_dir, "hb_p_m"),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, "nhb_p_m_tp"),
         )
     elif mode == nd.Mode.TRAIN:
         zone_systems = dist_params.DistributionZoneSystems(
-            nd.get_zoning_system('msoa'),
-            nd.get_zoning_system('miranda'),
+            nd.get_zoning_system("msoa"),
+            nd.get_zoning_system("miranda"),
         )
         segmentations = dist_params.DistributionSegmentations(
-            nd.get_segmentation_level('hb_p_m7_ca' if use_tram else 'hb_p_m_ca'),
+            nd.get_segmentation_level("hb_p_m7_ca" if use_tram else "hb_p_m_ca"),
             nd.get_segmentation_level(
-                'tms_nhb_p_m7_ca_tp_wday' if use_tram else 'tms_nhb_p_m_ca_tp_wday'
+                "tms_nhb_p_m7_ca_tp_wday" if use_tram else "tms_nhb_p_m_ca_tp_wday"
             ),
-            nd.get_segmentation_level('hb_p_m_ca_rail'),
-            nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday_rail'),
-            'p_m_ca',
-            'p_m_ca_tp',
+            nd.get_segmentation_level("hb_p_m_ca_rail"),
+            nd.get_segmentation_level("tms_nhb_p_m_ca_tp_wday_rail"),
+            "p_m_ca",
+            "p_m_ca_tp",
         )
-        target_tld_dir = os.path.join(geo_constraint_type, 'dm_gb_rail_bands')
+        target_tld_dir = os.path.join(geo_constraint_type, "dm_gb_rail_bands")
         upper_cal = dist_params.CalibrationParams(
-            'gb',
+            "gb",
             nd.DistributionMethod.GRAVITY,
-            'gb',
-            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m_ca'),
-            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_ca_tp'),
+            "gb",
+            hb_target_tld_dir=os.path.join(target_tld_dir, "hb_p_m_ca"),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, "nhb_p_m_ca_tp"),
         )
-        target_tld_dir = os.path.join(geo_constraint_type, 'dm_north_rail_bands')
+        target_tld_dir = os.path.join(geo_constraint_type, "dm_north_rail_bands")
         lower_cal = dist_params.CalibrationParams(
-            'north_and_mids',
+            "north_and_mids",
             nd.DistributionMethod.GRAVITY,
-            'north_and_mids',
-            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m_ca'),
-            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_ca_tp'),
+            "north_and_mids",
+            hb_target_tld_dir=os.path.join(target_tld_dir, "hb_p_m_ca"),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, "nhb_p_m_ca_tp"),
         )
     elif mode == nd.Mode.TRAM:
-        zone_systems = dist_params.DistributionZoneSystems(nd.get_zoning_system('msoa'))
+        zone_systems = dist_params.DistributionZoneSystems(nd.get_zoning_system("msoa"))
         segmentations = dist_params.DistributionSegmentations(
-            nd.get_segmentation_level('hb_p_m7' if use_tram else 'hb_p_m'),
+            nd.get_segmentation_level("hb_p_m7" if use_tram else "hb_p_m"),
             nd.get_segmentation_level(
-                'tms_nhb_p_m7_tp_wday' if use_tram else 'tms_nhb_p_m_tp_wday'
+                "tms_nhb_p_m7_tp_wday" if use_tram else "tms_nhb_p_m_tp_wday"
             ),
-            nd.get_segmentation_level('hb_p_m_tram'),
-            nd.get_segmentation_level('tms_nhb_p_m_tp_wday_tram'),
-            'p_m',
-            'p_m_tp',
+            nd.get_segmentation_level("hb_p_m_tram"),
+            nd.get_segmentation_level("tms_nhb_p_m_tp_wday_tram"),
+            "p_m",
+            "p_m_tp",
         )
-        target_tld_dir = os.path.join(geo_constraint_type, 'dm_highway_bands')
+        target_tld_dir = os.path.join(geo_constraint_type, "dm_highway_bands")
         upper_cal = dist_params.CalibrationParams(
-            'north_and_mids',
+            "north_and_mids",
             nd.DistributionMethod.GRAVITY,
-            hb_target_tld_dir=os.path.join(target_tld_dir, 'hb_p_m'),
-            nhb_target_tld_dir=os.path.join(target_tld_dir, 'nhb_p_m_tp'),
+            hb_target_tld_dir=os.path.join(target_tld_dir, "hb_p_m"),
+            nhb_target_tld_dir=os.path.join(target_tld_dir, "nhb_p_m_tp"),
         )
         lower_cal = dist_params.CalibrationParams()
     else:
@@ -302,26 +302,31 @@ def run_models(
     NotImplementedError
         When attempting to run with tram data.
     """
-    hb_prod, hb_attr, nhb_prod, nhb_attr = build_trip_ends(params)
     dmab_kwargs, dm_kwargs = dist_params.build_dm_kwargs(params)
     # Init params fnames
     upper_kwargs = {
-        'zoning': params.zone_systems.upper.name,
-        'area': params.upper_calibration.area,
+        "zoning": params.zone_systems.upper.name,
+        "area": params.upper_calibration.area,
     }
-    hb_kwargs = {'trip_origin': 'hb', 'seg': params.segmentations.hb_seg_name}
-    nhb_kwargs = {'trip_origin': 'nhb', 'seg': params.segmentations.nhb_seg_name}
+    hb_kwargs = {"trip_origin": "hb", "seg": params.segmentations.hb_seg_name}
+    nhb_kwargs = {"trip_origin": "nhb", "seg": params.segmentations.nhb_seg_name}
 
-    hb_upper_init_params_fname = INIT_PARAMS_BASE.format(**hb_kwargs, **upper_kwargs)
-    nhb_upper_init_params_fname = INIT_PARAMS_BASE.format(**nhb_kwargs, **upper_kwargs)
+    hb_upper_init_params_fname = run_distribution_model.INIT_PARAMS_BASE.format(
+        **hb_kwargs, **upper_kwargs
+    )
+    nhb_upper_init_params_fname = run_distribution_model.INIT_PARAMS_BASE.format(
+        **nhb_kwargs, **upper_kwargs
+    )
 
     if params.zone_systems.lower is not None:
         lower_kwargs = {
-            'zoning': params.zone_systems.lower.name,
-            'area': params.lower_calibration.area,
+            "zoning": params.zone_systems.lower.name,
+            "area": params.lower_calibration.area,
         }
-        hb_lower_init_params_fname = INIT_PARAMS_BASE.format(**hb_kwargs, **lower_kwargs)
-        nhb_lower_init_params_fname = INIT_PARAMS_BASE.format(
+        hb_lower_init_params_fname = run_distribution_model.INIT_PARAMS_BASE.format(
+            **hb_kwargs, **lower_kwargs
+        )
+        nhb_lower_init_params_fname = run_distribution_model.INIT_PARAMS_BASE.format(
             **nhb_kwargs, **lower_kwargs
         )
     else:
@@ -329,14 +334,47 @@ def run_models(
         hb_lower_init_params_fname = None
         nhb_lower_init_params_fname = None
 
+    # ## SETUP TRIP END ARGS ## #
+    kwargs = {
+        "output_zoning": params.zone_systems.upper,
+        "base_year": params.base_year,
+        "scenario": params.export_paths.scenario,
+        "notem_iteration_name": params.export_paths.iteration_name,
+        "time_format": nd.core.TimeFormat.AVG_DAY,
+    }
+    if params.use_tram:
+        trip_end_getter = converters.TramToDistributionModel(
+            export_home=params.paths.tram_export_home,
+            **kwargs,
+        )
+        te_model_name = "tram"
+    else:
+        trip_end_getter = converters.NoTEMToDistributionModel(
+            export_home=params.paths.notem_export_home,
+            **kwargs,
+        )
+        te_model_name = "notem"
+
     # ## RUN THE MODEL ## #
     if model_runs.run_hb:
-        trip_origin = 'hb'
+        trip_origin = "hb"
+
+        # Build the trip end kwargs
+        subset_name = run_distribution_model.HB_SUBSET_SEG_BASE_NAME.format(
+            trip_origin=trip_origin,
+            te_model_name=te_model_name,
+        )
+        trip_end_kwargs = {
+            "reduce_segmentation": None,
+            "subset_segmentation": nd.get_segmentation_level(subset_name),
+            "aggregation_segmentation": params.segmentations.hb_agg_seg,
+            "modal_segmentation": params.segmentations.hb_running_seg,
+        }
 
         arg_builder = DistributionModelArgumentBuilder(
             trip_origin=trip_origin,
-            productions=hb_prod,
-            attractions=hb_attr,
+            trip_end_getter=trip_end_getter,
+            trip_end_kwargs=trip_end_kwargs,
             running_segmentation=params.segmentations.hb_running_seg,
             upper_init_params_fname=hb_upper_init_params_fname,
             lower_init_params_fname=hb_lower_init_params_fname,
@@ -362,12 +400,23 @@ def run_models(
         )
 
     if model_runs.run_nhb:
-        trip_origin = 'nhb'
+        trip_origin = "nhb"
+
+        # Build the trip end kwargs
+        kwargs = {"trip_origin": trip_origin, "te_model_name": te_model_name}
+        subset_name = run_distribution_model.NHB_SUBSET_SEG_BASE_NAME.format(**kwargs)
+        reduce_name = run_distribution_model.REDUCE_SEG_BASE_NAME.format(**kwargs)
+        trip_end_kwargs = {
+            "reduce_segmentation": nd.get_segmentation_level(reduce_name),
+            "subset_segmentation": nd.get_segmentation_level(subset_name),
+            "aggregation_segmentation": params.segmentations.nhb_agg_seg,
+            "modal_segmentation": params.segmentations.nhb_running_seg,
+        }
 
         arg_builder = DistributionModelArgumentBuilder(
             trip_origin=trip_origin,
-            productions=nhb_prod,
-            attractions=nhb_attr,
+            trip_end_getter=trip_end_getter,
+            trip_end_kwargs=trip_end_kwargs,
             running_segmentation=params.segmentations.nhb_running_seg,
             upper_init_params_fname=nhb_upper_init_params_fname,
             lower_init_params_fname=nhb_lower_init_params_fname,
@@ -395,16 +444,16 @@ def run_models(
     # TODO(BT): Move this into Matrix tools!
     #  Fudged to get this to work for now. Handle this better!
     if model_runs.compile_to_assignment:
-        if 'hb_distributor' in locals():
+        if "hb_distributor" in locals():
             hb_distributor.compile_to_assignment_format()
-        elif 'nhb_distributor' in locals():
+        elif "nhb_distributor" in locals():
             nhb_distributor.compile_to_assignment_format()
         else:
-            trip_origin = 'hb'
+            trip_origin = "hb"
             arg_builder = DistributionModelArgumentBuilder(
                 trip_origin=trip_origin,
-                productions=hb_prod,
-                attractions=hb_attr,
+                trip_end_getter=trip_end_getter,
+                trip_end_kwargs=dict(),
                 running_segmentation=params.segmentations.hb_running_seg,
                 upper_init_params_fname=hb_upper_init_params_fname,
                 lower_init_params_fname=hb_lower_init_params_fname,
@@ -423,105 +472,6 @@ def run_models(
             hb_distributor.compile_to_assignment_format()
 
 
-def build_trip_ends(
-    params: dist_params.DistributionModelParameters
-) -> Tuple[nd.DVector, nd.DVector, nd.DVector, nd.DVector]:
-    """Builds the trip end data based on given `params`.
-
-    TODO: This should be moved to `run_distribution_model` once
-    the functionality for tram has been added.
-
-    Parameters
-    ----------
-    params : dist_params.DistributionModelParameters
-        Parameters for running the distribution model.
-
-    Returns
-    -------
-    nd.DVector
-        Home-based productions data.
-    nd.DVector
-        Home-based attractions data.
-    nd.DVector
-        Non-home-based productions data.
-    nd.DVector
-        Non-home-based attractions data.
-
-    Raises
-    ------
-    NotImplementedError
-        When attempting to run with tram data.
-    """
-    zoning_system = params.zone_systems.upper
-    if params.use_tram:
-        # TODO(MB) Implement functionality for tram so it is flexible
-        # and can be used for MidMITs and NorMITs
-        raise NotImplementedError("Not implemented for MidMITs")
-    else:
-        tem = params.export_paths
-        hb_productions_path = (
-            tem.hb_production.export_paths.notem_segmented[params.base_year]
-        )
-        hb_attractions_path = (
-            tem.hb_attraction.export_paths.notem_segmented[params.base_year]
-        )
-        nhb_productions_path = (
-            tem.nhb_production.export_paths.notem_segmented[params.base_year]
-        )
-        nhb_attractions_path = (
-            tem.nhb_attraction.export_paths.notem_segmented[params.base_year]
-        )
-
-        # TODO(BT): Should we make this a NoTEM output tool?
-        base_fname = "%s_%s_%s.pkl"
-        paths = {}
-        for nm in ('hbp', 'hba', 'nhbp', 'nhba'):
-            paths[nm] = os.path.join(
-                params.paths.cache_path,
-                base_fname % (nm, zoning_system.name, params.mode.value),
-            )
-
-    print("Getting the Production/Attraction Vectors...")
-    if not os.path.exists(paths["hbp"]) or not os.path.exists(paths["hba"]):
-        hb_productions, hb_attractions = run_distribution_model.import_pa(
-            production_import_path=hb_productions_path,
-            attraction_import_path=hb_attractions_path,
-            agg_segmentation=params.segmentations.hb_agg_seg,
-            out_segmentation=params.segmentations.hb_running_seg,
-            zoning_system=zoning_system,
-            trip_origin='hb',
-            use_tram=params.use_tram,
-        )
-        hb_productions.save(paths["hbp"])
-        hb_attractions.save(paths["hba"])
-    else:
-        hb_productions = nd.DVector.load(paths["hbp"])
-        hb_attractions = nd.DVector.load(paths["hba"])
-
-    if not os.path.exists(paths["nhbp"]) or not os.path.exists(paths["nhba"]):
-        nhb_productions, nhb_attractions = run_distribution_model.import_pa(
-            production_import_path=nhb_productions_path,
-            attraction_import_path=nhb_attractions_path,
-            agg_segmentation=params.segmentations.nhb_agg_seg,
-            out_segmentation=params.segmentations.nhb_running_seg,
-            zoning_system=zoning_system,
-            trip_origin='nhb',
-            use_tram=params.use_tram,
-        )
-        nhb_productions.save(paths["nhbp"])
-        nhb_attractions.save(paths["nhba"])
-    else:
-        nhb_productions = nd.DVector.load(paths["nhbp"])
-        nhb_attractions = nd.DVector.load(paths["nhba"])
-
-    return (
-        hb_productions,
-        hb_attractions,
-        nhb_productions,
-        nhb_attractions,
-    )
-
-
 ##### MAIN #####
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

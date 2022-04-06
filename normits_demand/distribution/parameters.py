@@ -49,8 +49,6 @@ class DistributionModelPaths(NamedTuple):
     export_home: Union[Path, str]
     notem_export_home: Union[Path, str]
     tram_export_home: Union[Path, str]
-    cache_path: Union[Path, str]
-    overwrite_cache: bool
 
 
 class DistributionModelParameters(NamedTuple):
@@ -138,8 +136,6 @@ def build_dm_kwargs(params: DistributionModelParameters) -> DistributionModelKwa
         'tour_props_zoning_name': tour_props_zoning_name,
         'init_params_cols': params.gm_cost_function.parameter_names,
         'intrazonal_cost_infill': params.intrazonal_infill,
-        'cache_path': params.paths.cache_path,
-        'overwrite_cache': params.paths.overwrite_cache,
     }
 
     # Distribution model
