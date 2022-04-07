@@ -120,12 +120,13 @@ class CUBEMatConverter:
             "/Hide",
             "/HideScript",
         ]
-        comp_proc = subprocess.run([str(a) for a in args], capture_output=True, check=True)
+        comp_proc = subprocess.run([str(a) for a in args], capture_output=True, check=False)
         LOG.debug(
             "CSV to CUBE .mat Voyager output:%s%s",
             _stdout_decode(comp_proc.stdout),
             _stdout_decode(comp_proc.stderr),
         )
+        comp_proc.check_returncode()
 
         if not mat_path.is_file():
             raise CUBEMatConverterError("error converting CSV to CUBE .mat")
