@@ -4,7 +4,7 @@ Created on: Wednesday October 20th 2021
 Updated on:
 
 Original author: Ben Taylor
-Last update made by: 
+Last update made by:
 Other updates made by: Isaac Scott
 
 File purpose:
@@ -28,15 +28,15 @@ import normits_demand as nd
 from normits_demand.utils import general as du
 
 # ## GLOBALS ## #
-MODES = [nd.Mode.TRAIN]
+MODES = [nd.Mode.BUS]
 YEARS = [2018]
 TPS = [1, 2, 3, 4]
-ZONING_SYSTEM = "miranda"
-NOTEM_ITER = '9.6'
-out_folder = r"C:\WSP_Projects\MidMITs\01 Pre-processing\Tour Proportions"
+ZONING_SYSTEM = "tfgm_pt"
+NOTEM_ITER = '9.8'
+out_folder = r"E:\temp\tour props"
 
-phi_import_folder = r"I:\NorMITs Demand\import\phi_factors"
-notem_import_folder = r"T:\MidMITs Demand\MiTEM\iter%s\SC01_JAM\hb_productions" % NOTEM_ITER
+phi_import_folder = r"I:\NorMITs Demand\import\phi_factors\v9.8"
+notem_import_folder = r"I:\NorMITs Demand\NoTEM\iter%s\SC01_JAM\hb_productions" % NOTEM_ITER
 phi_fname = "mode_%d_fhp_tp_pa_to_od.csv"
 prod_vec_fname = "hb_msoa_notem_segmented_%d_dvec.pkl"
 zone_translate_dir = r"I:\NorMITs Demand\import\zone_translation\one_to_one"
@@ -45,7 +45,6 @@ MODEL_DESC = "tour_proportions"
 LAD_DESC = "lad_tour_proportions"
 TFN_DESC = "tfn_tour_proportions"
 TRIP_ORIGIN = "hb"
-# out_folder = r"I:\NorMITs Demand\import\noham\pre_me_tour_proportions\example_new"
 
 
 def tms_tour_prop():
@@ -96,6 +95,10 @@ def tms_tour_prop():
                 week_seg = nd.get_segmentation_level("hb_p_tp_week")
                 wday_seg = nd.get_segmentation_level("hb_p_tp_wday")
                 out_seg = nd.get_segmentation_level("hb_p_m_car")
+            elif mode in [nd.Mode.WALK, nd.Mode.CYCLE, nd.Mode.BUS]:
+                week_seg = nd.get_segmentation_level("hb_p_tp_week")
+                wday_seg = nd.get_segmentation_level("hb_p_tp_wday")
+                out_seg = nd.get_segmentation_level(f"hb_p_m_{mode.value}")
             else:
                 raise NotImplementedError(f"segmentation not implemented for mode = {mode}")
 

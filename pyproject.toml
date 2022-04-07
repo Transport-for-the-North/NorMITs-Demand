@@ -11,5 +11,8 @@ disable = [
     "use-list-literal",
 ]
 
+[tool.pylint.design]
+max-attributes = 15
+
 [tool.mypy]
 ignore_missing_imports = true
