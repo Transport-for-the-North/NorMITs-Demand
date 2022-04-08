@@ -189,6 +189,42 @@ def curve_convergence(
     return max(1 - convergence, 0)
 
 
+def pandas_nan_report(
+    df: pd.DataFrame,
+    row_name: str = 'index',
+    col_name: str = 'column',
+) -> pd.DataFrame:
+    """Create a report of where np.nan values are in df
+
+    Parameters
+    ----------
+    df:
+        The pandas DataFrame to generate the report for.
+        Columns and Index should be zoning system numbers
+
+    row_name:
+        The name to give to the column displaying the row zone numbers of df
+        where np.NaN values were found.
+
+    col_name:
+        The name to give to the column displaying the column zone numbers of df
+        where np.NaN values were found
+
+    Returns
+    -------
+    report:
+        A pandas DataFrame reporting where the np.nan values are.
+        Will have columns named [row_name', col_name'].
+    """
+    # Find the np.nan values
+    row_idx, col_idx = np.isnan(df.values).nonzero()
+
+    # Convert into a report
+    row_zone = [df.index.to_list()[x] for x in row_idx]
+    col_zone = [df.columns.to_list()[x] for x in col_idx]
+    return pd.DataFrame({row_name: row_zone, col_name: col_zone})
+
+
 def nan_report(mat: np.ndarray) -> pd.DataFrame:
     """Create a report of where np.nan values are in mat
 

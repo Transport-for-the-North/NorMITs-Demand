@@ -945,7 +945,11 @@ class GravityDistributor(AbstractDistributor):
             )
 
         if np.isnan(cost_matrix.values).any():
-            nan_report = math_utils.nan_report(cost_matrix.values)
+            nan_report = math_utils.pandas_nan_report(
+                df=cost_matrix,
+                row_name='production',
+                col_name='attraction',
+            )
             raise ValueError(
                 f"In segment {segment_params}.\n"
                 "Found np.nan values in generated cost matrix. The gravity "
