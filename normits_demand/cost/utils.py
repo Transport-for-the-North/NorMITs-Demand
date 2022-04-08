@@ -249,6 +249,7 @@ def plot_cost_distribution(target_x: List[float],
         label += ' %s=%.2f' % (name, value)
 
     axis = sns.lineplot(x=achieved_x, y=achieved_y, label=label)
+    plt.legend(loc='upper right')
 
     # Figure out where we need to plot up until
     if band_share_cutoff <= 0:
