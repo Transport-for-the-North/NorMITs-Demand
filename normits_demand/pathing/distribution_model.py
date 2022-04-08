@@ -490,8 +490,8 @@ class DMArgumentBuilderBase(abc.ABC):
         )
 
         # Save into cache
-        file_ops.write_df(productions, productions_cache)
-        file_ops.write_df(attractions, attractions_cache)
+        file_ops.write_df(productions, productions_cache, index_col=0)
+        file_ops.write_df(attractions, attractions_cache, index_col=0)
 
         return productions, attractions
 

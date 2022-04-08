@@ -110,7 +110,7 @@ def main():
 
     else:
         raise ValueError(
-            "Don't know what mode %s is!" % mode.value
+            f"Don't know what mode {mode.value} is!"
         )
 
     # ## DEFINE HOW TO RUN DISTRIBUTIONS ## #
