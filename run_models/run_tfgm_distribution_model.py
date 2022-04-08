@@ -56,8 +56,8 @@ def main():
     mode = nd.Mode.BUS
 
     # Running params
-    run_hb = False
-    run_nhb = True
+    run_hb = True
+    run_nhb = False
 
     run_all = False
     run_upper_model = False
@@ -203,13 +203,16 @@ def main():
         'intrazonal_cost_infill': intrazonal_cost_infill,
     }
 
+    upper_distributor_kwargs = {'cost_name': 'Distance', 'cost_units': 'KM'}
+    lower_distributor_kwargs = {'cost_name': 'Generalised Cost', 'cost_units': 'unit'}
+
     # Distribution model
     dm_kwargs = {
         'iteration_name': dm_iteration_name,
         'upper_model_method': upper_model_method,
-        'upper_distributor_kwargs': None,
+        'upper_distributor_kwargs': upper_distributor_kwargs,
         'lower_model_method': lower_model_method,
-        'lower_distributor_kwargs': None,
+        'lower_distributor_kwargs': lower_distributor_kwargs,
         'export_home': dm_export_home,
         'report_lower_vectors': False,
         'process_count': -2,

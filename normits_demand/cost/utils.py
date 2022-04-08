@@ -232,6 +232,8 @@ def plot_cost_distribution(target_x: List[float],
                            band_share_cutoff: float = 0.005,
                            path: nd.PathLike = None,
                            close_plot: bool = True,
+                           x_label: str = None,
+                           y_label: str = None,
                            **save_kwargs,
                            ):
     # Init
@@ -265,8 +267,10 @@ def plot_cost_distribution(target_x: List[float],
             upper_x_lim = None
 
     # Label the plot
-    axis.set_xlabel('Distance (km)')
-    axis.set_ylabel('Band Share (%)')
+    if x_label is not None:
+        axis.set_xlabel(x_label)
+    if y_label is not None:
+        axis.set_ylabel(y_label)
     axis.set_title(plot_title)
 
     # Format the plot

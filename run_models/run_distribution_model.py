@@ -457,13 +457,15 @@ def main():
         'target_tld_min_max_multiplier': TARGET_TLD_MULTIPLIER,
     }
 
+    distributor_kwargs = {'cost_name': 'Distance', 'cost_units': 'KM'}
+
     # Distribution model
     dm_kwargs = {
         'iteration_name': dm_iteration_name,
         'upper_model_method': upper_model_method,
-        'upper_distributor_kwargs': None,
+        'upper_distributor_kwargs': distributor_kwargs,
         'lower_model_method': lower_model_method,
-        'lower_distributor_kwargs': None,
+        'lower_distributor_kwargs': distributor_kwargs,
         'export_home': dm_export_home,
         'process_count': -2,
     }

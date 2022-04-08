@@ -66,6 +66,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
                  process_count: Optional[int] = constants.PROCESS_COUNT,
                  zone_col: str = None,
                  name: str = None,
+                 cost_name: str = None,
                  cost_units: str = None,
                  ):
         # Validate inputs
@@ -90,9 +91,17 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         self.zoning_system = zoning_system
         self.running_zones = running_zones
         self.zone_col = zone_col
+        self.cost_name = cost_name if cost_name is not None else 'Cost'
         self.cost_units = cost_units
         self.export_home = export_home
         self.process_count = process_count
+
+        # Generate the graph label names
+        self.y_label = "Band Share (%)"
+        if cost_units is not None:
+            self.x_label = f"{self.cost_name} ({self.cost_units})"
+        else:
+            self.x_label = self.cost_name
 
         # Build the output paths
         DistributorExportPaths.__init__(
@@ -413,6 +422,8 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         achieved_cost_params: Dict[str, float],
         plot_title: str,
         graph_path: nd.PathLike,
+        x_label: str = 'Cost',
+        y_label: str = 'Band Share (%)',
         **graph_kwargs,
     ) -> None:
         """Generates and writes out a graph of cost distributions
@@ -446,6 +457,12 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         plot_title:
             The title to give to the generated plot
 
+        x_label:
+            The name to label the generated plot x axis with
+
+        y_label:
+            The name to label the generated plot y axis with
+
         graph_path:
             The path to write the generated plot out to. This will be passed
             to matplotlib.pyplot.savefig
@@ -477,6 +494,8 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
             cost_params=achieved_cost_params,
             plot_title=plot_title,
             path=graph_path,
+            x_label=x_label,
+            y_label=y_label,
             **graph_kwargs,
         )
 
@@ -518,6 +537,7 @@ class GravityDistributor(AbstractDistributor):
                  export_home: nd.PathLike,
                  zone_col: str = None,
                  cost_units: str = None,
+                 cost_name: str = None,
                  process_count: Optional[int] = constants.PROCESS_COUNT,
                  ):
         # Validate inputs
@@ -539,6 +559,7 @@ class GravityDistributor(AbstractDistributor):
             export_home=export_home,
             process_count=process_count,
             cost_units=cost_units,
+            cost_name=cost_name,
         )
 
         # Create a logger
@@ -692,6 +713,8 @@ class GravityDistributor(AbstractDistributor):
             achieved_cost_params=optimal_cost_params,
             plot_title=fname,
             graph_path=graph_path,
+            x_label=self.x_label,
+            y_label=self.y_label,
         )
 
         # ## WRITE DISTRIBUTED DEMAND ## #
@@ -1024,6 +1047,7 @@ class Furness3dDistributor(AbstractDistributor):
                  export_home: nd.PathLike,
                  zone_col: str = None,
                  cost_units: str = None,
+                 cost_name: str = None,
                  process_count: Optional[int] = constants.PROCESS_COUNT,
                  ):
         # Validate inputs
@@ -1045,6 +1069,7 @@ class Furness3dDistributor(AbstractDistributor):
             export_home=export_home,
             process_count=process_count,
             cost_units=cost_units,
+            cost_name=cost_name,
         )
 
         # Create a logger
