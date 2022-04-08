@@ -39,6 +39,7 @@ from normits_demand import core as nd_core
 from normits_demand import constants
 from normits_demand.cost import utils as cost_utils
 from normits_demand.utils import file_ops
+from normits_demand.utils import math_utils
 from normits_demand.utils import translation
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
@@ -759,6 +760,18 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         # Read in the costs and infill
         cost_matrix = nd.read_df(path, find_similar=True, index_col=0)
+
+        # Check for NaN values
+        if np.isnan(cost_matrix.values).any():
+            nan_report = math_utils.nan_report(cost_matrix.values)
+            raise ValueError(
+                f"In segment {segment_params}.\n"
+                "Found np.nan values in read in cost matrix. NaN values "
+                "found in the following places:\n"
+                f"{nan_report}"
+            )
+
+        # Infill if we're told how to
         if self.intrazonal_cost_infill is not None:
             cost_matrix = cost_utils.iz_infill_costs(
                 cost_matrix,
@@ -874,14 +887,10 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         # Generate by segment kwargs
         cost_matrices = dict()
         desc = "Reading in cost"
-        # TODO: NOT KLUDGE
-        count = 1
         for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc):
             # Get the needed kwargs
             segment_name = self.running_segmentation.get_segment_name(segment_params)
-            if count == 1:
-                cost_matrix = self._get_cost(segment_params, zoning_system)
-                count += 1
+            cost_matrix = self._get_cost(segment_params, zoning_system)
 
             # Add to dictionary
             cost_matrices[segment_name] = cost_matrix
