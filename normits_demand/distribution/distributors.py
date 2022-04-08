@@ -35,6 +35,7 @@ from normits_demand.cost import utils as cost_utils
 
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
+from normits_demand.utils import math_utils
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
@@ -216,7 +217,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
                    calibration_matrix: pd.DataFrame,
                    target_cost_distributions: Dict[Any, Dict[str, pd.DataFrame]],
                    calibration_naming: Dict[Any, Any],
-                   pa_val_col: Optional[str] = 'val',
+                   pa_val_col: str = 'val',
                    by_segment_kwargs: Dict[str, Dict[str, Any]] = None,
                    **kwargs,
                    ):
@@ -281,7 +282,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
             )
 
             # Get the cost distributions for this segment
-            segment_target_costs = dict().fromkeys(calib_keys)
+            segment_target_costs = dict.fromkeys(calib_keys)
             for key in calib_keys:
                 segment_target_costs[key] = target_cost_distributions[key][segment_name]
 
@@ -923,7 +924,7 @@ class GravityDistributor(AbstractDistributor):
     ):
         # Init
         seg_name = running_segmentation.generate_file_name(segment_params)
-        self._logger.info("Running for %s" % seg_name)
+        self._logger.info("Running for %s", seg_name)
         use_multi_area = len(target_cost_distributions) > 1
 
         # ## MAKE SURE COST AND P/A ARE IN SAME ORDER ## #
@@ -934,6 +935,24 @@ class GravityDistributor(AbstractDistributor):
             index=self.running_zones,
             fill_value=0,
         )
+
+        # Check the cost is something sensible
+        if cost_matrix.values.sum() == 0:
+            raise ValueError(
+                f"In segment {segment_params}.\n"
+                "The generated cost matrix sums to zero. The gravity model "
+                "cannot calibrate if all costs are 0."
+            )
+
+        if np.isnan(cost_matrix.values).any():
+            nan_report = math_utils.nan_report(cost_matrix.values)
+            raise ValueError(
+                f"In segment {segment_params}.\n"
+                "Found np.nan values in generated cost matrix. The gravity "
+                "model cannot calibrate with NaN costs. NaN values found in "
+                "the following places:\n"
+                f"{nan_report}"
+            )
 
         # # TODO(BT): Fix this problem at the cost source
         # # Fill any zero costs with 0.2
