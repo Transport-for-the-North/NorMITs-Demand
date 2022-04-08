@@ -21,7 +21,6 @@ from typing import Tuple
 # Local Imports
 sys.path.append("..")
 import normits_demand as nd
-from normits_demand import constants as consts
 
 from normits_demand import converters
 from normits_demand.models import DistributionModel
@@ -32,15 +31,17 @@ from normits_demand.pathing.distribution_model import DistributionModelArgumentB
 # Trip end import args
 notem_iteration_name = '9.3'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
-tram_export_home = ""   # Not needed as not using TRAM
-cache_path = "F:/dm_cache"      # Set locally for now for a local cache
+tram_export_home = ""   # Not needed as not using TRAM # Set locally for now for a local cache
+
+# Tour props version
+TOUR_PROPS_VERSION = 'v9.8'
 
 # Distribution running args
 base_year = 2018
 scenario = nd.Scenario.SC01_JAM
 dm_iteration_name = '9.3.3-tfgm'
 dm_import_home = r"G:\NorMITs Demand\import"
-dm_export_home = r"F:\NorMITs Demand\Distribution Model"
+dm_export_home = r"G:\NorMITs Demand\Distribution Model"
 
 # General constants
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
@@ -55,14 +56,11 @@ def main():
     mode = nd.Mode.BUS
 
     # Running params
-    use_tram = False
-    overwrite_cache = False
-
-    run_hb = False
-    run_nhb = True
+    run_hb = True
+    run_nhb = False
 
     run_all = False
-    run_upper_model = True
+    run_upper_model = False
     run_lower_model = True
     run_pa_matrix_reports = False
     run_pa_to_od = False
@@ -112,7 +110,7 @@ def main():
 
     else:
         raise ValueError(
-            "Don't know what mode %s is!" % mode.value
+            f"Don't know what mode {mode.value} is!"
         )
 
     # ## DEFINE HOW TO RUN DISTRIBUTIONS ## #
@@ -172,6 +170,13 @@ def main():
     else:
         lower_running_zones = None
 
+    if compile_zoning_system is not None:
+        tour_props_zoning_name = compile_zoning_system.name
+    elif lower_zoning_system is not None:
+        tour_props_zoning_name = lower_zoning_system.name
+    else:
+        tour_props_zoning_name = upper_zoning_system.name
+
     # arg builder
     dmab_kwargs = {
         'year': base_year,
@@ -192,17 +197,22 @@ def main():
         'lower_calibration_zones_fname': lower_calibration_zones_fname,
         'lower_calibration_areas': lower_calibration_areas,
         'lower_calibration_naming': lower_calibration_naming,
+        'tour_props_version': TOUR_PROPS_VERSION,
+        'tour_props_zoning_name': tour_props_zoning_name,
         'init_params_cols': gm_cost_function.parameter_names,
         'intrazonal_cost_infill': intrazonal_cost_infill,
     }
+
+    upper_distributor_kwargs = {'cost_name': 'Distance', 'cost_units': 'KM'}
+    lower_distributor_kwargs = {'cost_name': 'Generalised Cost', 'cost_units': 'unit'}
 
     # Distribution model
     dm_kwargs = {
         'iteration_name': dm_iteration_name,
         'upper_model_method': upper_model_method,
-        'upper_distributor_kwargs': None,
+        'upper_distributor_kwargs': upper_distributor_kwargs,
         'lower_model_method': lower_model_method,
-        'lower_distributor_kwargs': None,
+        'lower_distributor_kwargs': lower_distributor_kwargs,
         'export_home': dm_export_home,
         'report_lower_vectors': False,
         'process_count': -2,

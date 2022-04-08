@@ -35,6 +35,7 @@ from normits_demand.cost import utils as cost_utils
 
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
+from normits_demand.utils import math_utils
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
@@ -65,6 +66,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
                  process_count: Optional[int] = constants.PROCESS_COUNT,
                  zone_col: str = None,
                  name: str = None,
+                 cost_name: str = None,
                  cost_units: str = None,
                  ):
         # Validate inputs
@@ -89,9 +91,17 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         self.zoning_system = zoning_system
         self.running_zones = running_zones
         self.zone_col = zone_col
+        self.cost_name = cost_name if cost_name is not None else 'Cost'
         self.cost_units = cost_units
         self.export_home = export_home
         self.process_count = process_count
+
+        # Generate the graph label names
+        self.y_label = "Band Share (%)"
+        if cost_units is not None:
+            self.x_label = f"{self.cost_name} ({self.cost_units})"
+        else:
+            self.x_label = self.cost_name
 
         # Build the output paths
         DistributorExportPaths.__init__(
@@ -216,7 +226,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
                    calibration_matrix: pd.DataFrame,
                    target_cost_distributions: Dict[Any, Dict[str, pd.DataFrame]],
                    calibration_naming: Dict[Any, Any],
-                   pa_val_col: Optional[str] = 'val',
+                   pa_val_col: str = 'val',
                    by_segment_kwargs: Dict[str, Dict[str, Any]] = None,
                    **kwargs,
                    ):
@@ -281,7 +291,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
             )
 
             # Get the cost distributions for this segment
-            segment_target_costs = dict().fromkeys(calib_keys)
+            segment_target_costs = dict.fromkeys(calib_keys)
             for key in calib_keys:
                 segment_target_costs[key] = target_cost_distributions[key][segment_name]
 
@@ -412,6 +422,8 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         achieved_cost_params: Dict[str, float],
         plot_title: str,
         graph_path: nd.PathLike,
+        x_label: str = 'Cost',
+        y_label: str = 'Band Share (%)',
         **graph_kwargs,
     ) -> None:
         """Generates and writes out a graph of cost distributions
@@ -445,6 +457,12 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         plot_title:
             The title to give to the generated plot
 
+        x_label:
+            The name to label the generated plot x axis with
+
+        y_label:
+            The name to label the generated plot y axis with
+
         graph_path:
             The path to write the generated plot out to. This will be passed
             to matplotlib.pyplot.savefig
@@ -476,6 +494,8 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
             cost_params=achieved_cost_params,
             plot_title=plot_title,
             path=graph_path,
+            x_label=x_label,
+            y_label=y_label,
             **graph_kwargs,
         )
 
@@ -517,6 +537,7 @@ class GravityDistributor(AbstractDistributor):
                  export_home: nd.PathLike,
                  zone_col: str = None,
                  cost_units: str = None,
+                 cost_name: str = None,
                  process_count: Optional[int] = constants.PROCESS_COUNT,
                  ):
         # Validate inputs
@@ -538,6 +559,7 @@ class GravityDistributor(AbstractDistributor):
             export_home=export_home,
             process_count=process_count,
             cost_units=cost_units,
+            cost_name=cost_name,
         )
 
         # Create a logger
@@ -691,6 +713,8 @@ class GravityDistributor(AbstractDistributor):
             achieved_cost_params=optimal_cost_params,
             plot_title=fname,
             graph_path=graph_path,
+            x_label=self.x_label,
+            y_label=self.y_label,
         )
 
         # ## WRITE DISTRIBUTED DEMAND ## #
@@ -923,7 +947,7 @@ class GravityDistributor(AbstractDistributor):
     ):
         # Init
         seg_name = running_segmentation.generate_file_name(segment_params)
-        self._logger.info("Running for %s" % seg_name)
+        self._logger.info("Running for %s", seg_name)
         use_multi_area = len(target_cost_distributions) > 1
 
         # ## MAKE SURE COST AND P/A ARE IN SAME ORDER ## #
@@ -934,6 +958,28 @@ class GravityDistributor(AbstractDistributor):
             index=self.running_zones,
             fill_value=0,
         )
+
+        # Check the cost is something sensible
+        if cost_matrix.values.sum() == 0:
+            raise ValueError(
+                f"In segment {segment_params}.\n"
+                "The generated cost matrix sums to zero. The gravity model "
+                "cannot calibrate if all costs are 0."
+            )
+
+        if np.isnan(cost_matrix.values).any():
+            nan_report = math_utils.pandas_nan_report(
+                df=cost_matrix,
+                row_name='production',
+                col_name='attraction',
+            )
+            raise ValueError(
+                f"In segment {segment_params}.\n"
+                "Found np.nan values in generated cost matrix. The gravity "
+                "model cannot calibrate with NaN costs. NaN values found in "
+                "the following places:\n"
+                f"{nan_report}"
+            )
 
         # # TODO(BT): Fix this problem at the cost source
         # # Fill any zero costs with 0.2
@@ -1001,6 +1047,7 @@ class Furness3dDistributor(AbstractDistributor):
                  export_home: nd.PathLike,
                  zone_col: str = None,
                  cost_units: str = None,
+                 cost_name: str = None,
                  process_count: Optional[int] = constants.PROCESS_COUNT,
                  ):
         # Validate inputs
@@ -1022,6 +1069,7 @@ class Furness3dDistributor(AbstractDistributor):
             export_home=export_home,
             process_count=process_count,
             cost_units=cost_units,
+            cost_name=cost_name,
         )
 
         # Create a logger
