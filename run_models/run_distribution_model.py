@@ -22,6 +22,7 @@ from typing import Tuple
 sys.path.append("..")
 import normits_demand as nd
 
+from normits_demand import constants
 from normits_demand import converters
 from normits_demand.models import DistributionModel
 from normits_demand.pathing.distribution_model import DistributionModelArgumentBuilder
@@ -47,6 +48,9 @@ dm_export_home = r"E:\NorMITs Demand\Distribution Model"
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
 REDUCE_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
 SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_wday'
+
+# TODO(BT): KLUDGE. INPUTS SHOULDN'T NEED THIS!!
+TARGET_TLD_MULTIPLIER = constants.MILES_TO_KM
 
 
 def main():
@@ -450,6 +454,7 @@ def main():
         'tour_props_zoning_name': tour_props_zoning_name,
         'init_params_cols': gm_cost_function.parameter_names,
         'intrazonal_cost_infill': intrazonal_cost_infill,
+        'target_tld_min_max_multiplier': TARGET_TLD_MULTIPLIER,
     }
 
     # Distribution model

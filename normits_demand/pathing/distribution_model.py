@@ -491,8 +491,8 @@ class DMArgumentBuilderBase(abc.ABC):
         )
 
         # Save into cache
-        file_ops.write_df(productions, productions_cache, index_col=0)
-        file_ops.write_df(attractions, attractions_cache, index_col=0)
+        file_ops.write_df(productions, productions_cache, index=False)
+        file_ops.write_df(attractions, attractions_cache, index=False)
 
         return productions, attractions
 
@@ -668,6 +668,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                  tour_props_version: Optional[str] = None,
                  tour_props_zoning_name: Optional[str] = None,
                  intrazonal_cost_infill: Optional[float] = None,
+                 target_tld_min_max_multiplier: float = 1,
                  ):
         # Check paths exist
         file_ops.check_path_exists(import_home)
@@ -701,6 +702,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         self.upper_target_tld_dir = upper_target_tld_dir
         self.lower_target_tld_dir = lower_target_tld_dir
         self.target_tld_version = target_tld_version
+        self.target_tld_min_max_multiplier = target_tld_min_max_multiplier
 
         self.init_params_cols = init_params_cols
 
@@ -813,8 +815,8 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         rename = {'lower': 'min', 'upper': 'max'}
         target_cost_distribution = target_cost_distribution.rename(columns=rename)
-        target_cost_distribution['min'] *= constants.MILES_TO_KM
-        target_cost_distribution['max'] *= constants.MILES_TO_KM
+        target_cost_distribution['min'] *= self.target_tld_min_max_multiplier
+        target_cost_distribution['max'] *= self.target_tld_min_max_multiplier
 
         return target_cost_distribution
 
@@ -901,7 +903,11 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         return cost_matrices
 
-    def _build_target_cost_distributions(self, area: str, target_tld_dir: str):
+    def _build_target_cost_distributions(
+        self,
+        area: str,
+        target_tld_dir: str,
+    ):
         """Build the dictionary of target_cost_distributions for each segment"""
         # Generate by segment kwargs
         target_cost_distributions = dict()
