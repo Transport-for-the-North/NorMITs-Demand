@@ -121,7 +121,7 @@ def get_file_lookup(folder: Path) -> dict[MatrixDetails, list[Path]]:
     dict[MatrixDetails, list[Path]]
         List of all matrix files for each MiRANDA time period and userclass.
     """
-    uc_lookup = {1: "EB", **dict.fromkeys((2, 12), "Com")}
+    uc_lookup = {1: "Com", **dict.fromkeys((2, 12), "EB")}
     all_purposes = set(sum(list(nd.TripOrigin.get_purpose_dict().values()), []))
     uc_lookup.update(dict.fromkeys(all_purposes - set(uc_lookup), "Oth"))
 
@@ -191,7 +191,7 @@ def combine_full_matrices(
             matrix += pd.read_csv(path, index_col=0)
         matrix.index.name = "origin"
         matrix.columns.name = "destination"  # pylint: disable=no-member
-        matrix = matrix.unstack().to_frame("trips")  # pylint: disable=no-member
+        matrix = matrix.stack().to_frame("trips")  # pylint: disable=no-member
 
         tp = TIME_PERIODS[details.time_period]
         out = output_folder / f"{tp}_{details.user_class}.csv"
@@ -227,6 +227,10 @@ def main(params: ODToCUBEParameters, init_logger: bool = True) -> None:
 
     # Convert full OD matrices to MiRANDA userclasses
     od_files = get_file_lookup(params.full_od_folder)
+    LOG.info(
+        "File lookup:\n%s",
+        pprint.pformat({k: [f.name for f in files] for k, files in od_files.items()}),
+    )
     uc_matrices = combine_full_matrices(od_files, params.output_folder / "CSVs")
     LOG.info(
         "%s user class matrices:\n%s",
@@ -245,8 +249,7 @@ def main(params: ODToCUBEParameters, init_logger: bool = True) -> None:
         converter.csv_to_mat(
             len(zoning.unique_zones),
             csvs,
-            params.output_folder
-            / f"{params.model_name}_{params.distribution_iteration}_{tp}.mat",
+            params.output_folder / f"{tp.upper()}_SupplyGroup_PTAssign.mat",
         )
 
 
