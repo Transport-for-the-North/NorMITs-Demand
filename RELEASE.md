@@ -44,6 +44,7 @@ Below, a brief summary of patches made since the previous version can be found.
       vectors generated when converting the upper model outputs for the
       lower model.
     - Updated the gravity model reports output format. More standardised.
+    - Added optional cost naming to make reports more flexible in names.
   - Multi-Area Gravity Model
     - Initial implementation of a multi-area gravity model. Each area calibrates
       its own cost params, and aims for its own target cost distribution. All
@@ -71,3 +72,7 @@ Below, a brief summary of patches made since the previous version can be found.
     translation files don't exist
   - Fixed an infill 0 bug in `DVector.balance_at_segments()`
   - Fixed a divide by 0 bug in `DVector.split_segment_like()`
+  - Added error checking into cost read in. Will now report if/where np.nan 
+    values have been found
+  - Fixed an issue with PA to OD conversion where not all arguments were being
+    passed in

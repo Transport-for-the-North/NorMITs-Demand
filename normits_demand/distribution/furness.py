@@ -254,9 +254,9 @@ class Furness3D:
                 break
 
 
-def doubly_constrained_furness(seed_vals: np.array,
-                               row_targets: np.array,
-                               col_targets: np.array,
+def doubly_constrained_furness(seed_vals: np.ndarray,
+                               row_targets: np.ndarray,
+                               col_targets: np.ndarray,
                                tol: float = 1e-9,
                                max_iters: int = 5000,
                                warning: bool = True,

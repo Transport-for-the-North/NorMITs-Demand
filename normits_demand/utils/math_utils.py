@@ -44,8 +44,7 @@ def check_numeric(check_dict: Dict[str, Any]) -> None:
     for name, val in check_dict.items():
         if not isinstance(val, (int, float)):
             raise ValueError(
-                "%s should be a scalar number (float or int) not %s"
-                % (name, type(val))
+                "%s should be a scalar number (float or int) not %s" % (name, type(val))
             )
 
 
@@ -69,11 +68,12 @@ def numpy_cast(x: Any, dtype: np.dtype):
     return np.array(x).astype(dtype).item()
 
 
-def is_almost_equal(x1: Union[int, float],
-                    x2: Union[int, float],
-                    rel_tol: float = 0.0001,
-                    abs_tol: float = 0.0,
-                    ) -> bool:
+def is_almost_equal(
+    x1: Union[int, float],
+    x2: Union[int, float],
+    rel_tol: float = 0.0001,
+    abs_tol: float = 0.0,
+) -> bool:
     """Checks if x1 is similar to x2
 
     Whether or not two values are considered close is determined
@@ -112,9 +112,10 @@ def is_almost_equal(x1: Union[int, float],
     )
 
 
-def vector_mean_squared_error(vector1: np.array,
-                              vector2: np.array,
-                              ) -> float:
+def vector_mean_squared_error(
+    vector1: np.array,
+    vector2: np.array,
+) -> float:
     """Calculate the mean squared error between 2 vectors
 
     Parameters
@@ -133,9 +134,10 @@ def vector_mean_squared_error(vector1: np.array,
     return ((vector1 - vector2) ** 2).mean()
 
 
-def curve_convergence(target: np.array,
-                      achieved: np.array,
-                      ) -> float:
+def curve_convergence(
+    target: np.array,
+    achieved: np.array,
+) -> float:
     """Calculate the convergence between two curves.
 
     Similar to r-squared, but weighted by the target values.
@@ -163,8 +165,7 @@ def curve_convergence(target: np.array,
         raise ValueError(
             "Shape of target and achieved do not match.\n"
             "\tTarget: %s\n"
-            "\tAchieved: %s"
-            % (target.shape, achieved.shape)
+            "\tAchieved: %s" % (target.shape, achieved.shape)
         )
 
     # Always return 0 if we achieved NaN
@@ -180,13 +181,67 @@ def curve_convergence(target: np.array,
         return 0
 
     # Calculate convergence
-    convergence = (
-        np.sum((achieved - target) ** 2)
-        / np.sum((target - np.sum(target) / len(target)) ** 2)
+    convergence = np.sum((achieved - target) ** 2) / np.sum(
+        (target - np.sum(target) / len(target)) ** 2
     )
 
     # Limit between 0 and 1
     return max(1 - convergence, 0)
+
+
+def pandas_nan_report(
+    df: pd.DataFrame,
+    row_name: str = 'index',
+    col_name: str = 'column',
+) -> pd.DataFrame:
+    """Create a report of where np.nan values are in df
+
+    Parameters
+    ----------
+    df:
+        The pandas DataFrame to generate the report for.
+        Columns and Index should be zoning system numbers
+
+    row_name:
+        The name to give to the column displaying the row zone numbers of df
+        where np.NaN values were found.
+
+    col_name:
+        The name to give to the column displaying the column zone numbers of df
+        where np.NaN values were found
+
+    Returns
+    -------
+    report:
+        A pandas DataFrame reporting where the np.nan values are.
+        Will have columns named [row_name', col_name'].
+    """
+    # Find the np.nan values
+    row_idx, col_idx = np.isnan(df.values).nonzero()
+
+    # Convert into a report
+    row_zone = [df.index.to_list()[x] for x in row_idx]
+    col_zone = [df.columns.to_list()[x] for x in col_idx]
+    return pd.DataFrame({row_name: row_zone, col_name: col_zone})
+
+
+def nan_report(mat: np.ndarray) -> pd.DataFrame:
+    """Create a report of where np.nan values are in mat
+
+    Parameters
+    ----------
+    mat:
+        The numpy array to generate the report for
+
+    Returns
+    -------
+    report:
+        A pandas DataFrame reporting where the np.nan values are.
+        Will have a column named "axis_{i}" for each axis i in mat.
+    """
+    mat_idxs = np.isnan(mat).nonzero()
+    idx_cols = {f"axis_{i}": x for i, x in enumerate(mat_idxs)}
+    return pd.DataFrame(idx_cols)
 
 
 def overflow_msg(
@@ -221,18 +276,18 @@ def overflow_msg(
         which indexes caused the overflow error.
     """
     # Init
-    x1_name = 'x1' if x1_name is None else x1_name
-    x2_name = 'x2' if x2_name is None else x2_name
+    x1_name = "x1" if x1_name is None else x1_name
+    x2_name = "x2" if x2_name is None else x2_name
 
     # Complete the calculation to find the culprit
-    with np.errstate(over='ignore'):
+    with np.errstate(over="ignore"):
         x3 = np.divide(x1, x2, **kwargs)
 
     # Find all infs
     inf_idxs = np.isinf(x3).nonzero()
 
     # Format error as a table
-    idx_cols = {'axis_%s' % i: x for i, x in enumerate(inf_idxs)}
+    idx_cols = {"axis_%s" % i: x for i, x in enumerate(inf_idxs)}
     other_cols = {x1_name: x1[inf_idxs], x2_name: x2[inf_idxs]}
 
     all_cols = idx_cols.copy()
@@ -270,7 +325,7 @@ def np_divide_with_overflow_error(*args, **kwargs) -> pd.DataFrame:
     `np.divide`
     """
     # Set up numpy overflow errors
-    with np.errstate(over='raise'):
+    with np.errstate(over="raise"):
         return np.divide(*args, **kwargs)
 
 
@@ -296,9 +351,8 @@ def clip_small_non_zero(a: np.ndarray, min_val: float) -> np.ndarray:
     return np.where((min_val > a) & (a > 0), min_val, a)
 
 
-def get_pa_diff(new_p,
-                p_target,
-                new_a,
-                a_target):
-    pa_diff = (((sum((new_p - p_target) ** 2) + sum((new_a - a_target) ** 2))/len(p_target)) ** .5)
+def get_pa_diff(new_p, p_target, new_a, a_target):
+    pa_diff = (
+        (sum((new_p - p_target) ** 2) + sum((new_a - a_target) ** 2)) / len(p_target)
+    ) ** 0.5
     return pa_diff

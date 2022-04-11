@@ -21,6 +21,7 @@ sys.path.append("..")
 # pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
 
+from normits_demand import constants
 from normits_demand import converters
 from normits_demand.models import DistributionModel
 from normits_demand.pathing.distribution_model import DistributionModelArgumentBuilder
@@ -47,6 +48,9 @@ INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
 REDUCE_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
 HB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_wday'
 NHB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced_wday'
+
+# TODO(BT): KLUDGE. INPUTS SHOULDN'T NEED THIS!!
+TARGET_TLD_MULTIPLIER = constants.MILES_TO_KM
 
 
 def main():
@@ -472,15 +476,18 @@ def main():
         'tour_props_zoning_name': tour_props_zoning_name,
         'init_params_cols': gm_cost_function.parameter_names,
         'intrazonal_cost_infill': intrazonal_cost_infill,
+        'target_tld_min_max_multiplier': TARGET_TLD_MULTIPLIER,
     }
+
+    distributor_kwargs = {'cost_name': 'Distance', 'cost_units': 'KM'}
 
     # Distribution model
     dm_kwargs = {
         'iteration_name': DM_ITERATION_NAME,
         'upper_model_method': upper_model_method,
-        'upper_distributor_kwargs': None,
+        'upper_distributor_kwargs': distributor_kwargs,
         'lower_model_method': lower_model_method,
-        'lower_distributor_kwargs': None,
+        'lower_distributor_kwargs': distributor_kwargs,
         'export_home': DM_EXPORT_HOME,
         'upper_model_process_count': upper_model_process_count,
         'lower_model_process_count': lower_model_process_count,

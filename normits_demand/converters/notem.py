@@ -27,7 +27,7 @@ from normits_demand.pathing import NoTEMExportPaths
 
 
 class ToDistributionModel:
-    
+
     def __init__(
         self,
         output_zoning: nd_core.ZoningSystem,
@@ -503,12 +503,13 @@ class ToDistributionModel:
                     ignore_cache = True
 
         # Return the cache only if it's safe to
-        if not ignore_cache and cache_path.is_file():
-            dvec = nd_core.DVector.load(cache_path)
+        if cache_path is not None:
+            if not ignore_cache and cache_path.is_file():
+                dvec = nd_core.DVector.load(cache_path)
 
-            # Do a few checks
-            if dvec.zoning_system == self.output_zoning:
-                return dvec
+                # Do a few checks
+                if dvec.zoning_system == self.output_zoning:
+                    return dvec
 
         # If here, we need to recreate the cache
         converted_dvec = self.read_and_convert_trip_end(
