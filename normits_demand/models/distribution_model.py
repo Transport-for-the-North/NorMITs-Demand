@@ -19,7 +19,6 @@ from typing import Dict
 
 # Third Party
 import tqdm
-import numpy as np
 import pandas as pd
 
 # Local Imports
@@ -31,14 +30,11 @@ from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.utils import translation
 from normits_demand.utils import vehicle_occupancy
-from normits_demand.utils import general as du
 from normits_demand.matrices import matrix_processing
 from normits_demand.matrices import pa_to_od
 
 from normits_demand.pathing.distribution_model import DistributionModelExportPaths
 from normits_demand.pathing.distribution_model import DMArgumentBuilderBase
-
-from normits_demand.distribution.distributors import AbstractDistributor
 
 
 class DistributionModel(DistributionModelExportPaths):
@@ -78,6 +74,8 @@ class DistributionModel(DistributionModelExportPaths):
                  compile_zoning_system: nd.ZoningSystem = None,
                  report_lower_vectors: bool = True,
                  process_count: int = constants.PROCESS_COUNT,
+                 upper_model_process_count: int = None,
+                 lower_model_process_count: int = None,
                  ):
         # Make sure all are set if one is
         lower_args = [lower_model_method, lower_model_zoning, lower_running_zones]
@@ -108,9 +106,15 @@ class DistributionModel(DistributionModelExportPaths):
         if lower_distributor_kwargs is None:
             lower_distributor_kwargs = dict()
 
+        if upper_model_process_count is None:
+            upper_model_process_count = process_count
+        if lower_model_process_count is None:
+            lower_model_process_count = process_count
+
         # Assign attributes
         self.running_segmentation = running_segmentation
-        self.process_count = process_count
+        self.upper_model_process_count = upper_model_process_count
+        self.lower_model_process_count = lower_model_process_count
 
         self.upper_model_zoning = upper_model_zoning
         self.upper_running_zones = upper_running_zones
@@ -169,18 +173,6 @@ class DistributionModel(DistributionModelExportPaths):
         output_path = os.path.join(self.export_home, self._running_report_fname)
         with open(output_path, 'w') as out:
             out.write('\n'.join(out_lines))
-
-    @staticmethod
-    def _check_multi_area(calibration_matrix: np.ndarray):
-        """Returns True if calibration_matrix implies multi-area calibration"""
-        # init
-        calibration_ignore_val = AbstractDistributor.calibration_ignore_val
-
-        # Validate calibration keys
-        unq_keys = np.unique(calibration_matrix)
-        unq_keys = du.list_safe_remove(list(unq_keys), [calibration_ignore_val])
-
-        return len(unq_keys) > 1
 
     def run(self,
             run_all: bool = False,
@@ -297,18 +289,6 @@ class DistributionModel(DistributionModelExportPaths):
         kwargs = self.arg_builder.build_upper_model_arguments(
             cache_dir=self.cache_paths.upper_trip_ends,
         )
-        process_count = self.process_count
-
-        # Have to limit process usage if doing an MSOA gravity model
-        if self.upper_model_zoning.name == 'msoa':
-            # Can only handle 1 process if multi-area
-            if self._check_multi_area(kwargs['calibration_matrix']):
-                process_count = 0
-
-            # Can only handle 9 processes if single area
-            else:
-                if os.cpu_count() > 10 and (self.process_count > 8 or self.process_count < 0):
-                    process_count = 8
 
         self._logger.info("Initialising the Upper Model")
         upper_model = self.upper_model_method.get_distributor(
@@ -318,7 +298,7 @@ class DistributionModel(DistributionModelExportPaths):
                 zoning_system=self.upper_model_zoning,
                 running_zones=self.upper_running_zones,
                 export_home=self.upper_export_home,
-                process_count=process_count,
+                process_count=self.upper_model_process_count,
                 **self.upper_distributor_kwargs,
         )
 
@@ -342,7 +322,7 @@ class DistributionModel(DistributionModelExportPaths):
                 zoning_system=self.lower_model_zoning,
                 running_zones=self.lower_running_zones,
                 export_home=self.lower_export_home,
-                process_count=self.process_count,
+                process_count=self.lower_model_process_count,
                 **self.lower_distributor_kwargs,
         )
 

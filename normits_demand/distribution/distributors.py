@@ -586,6 +586,7 @@ class GravityDistributor(AbstractDistributor):
         achieved_band_share: np.ndarray,
         achieved_distribution: np.ndarray,
         cost_matrix: np.ndarray,
+        overall_log_path: os.PathLike,
         subdir_name: str = None,
     ) -> None:
         """Generates and writes out standard gravity model reports
@@ -667,14 +668,9 @@ class GravityDistributor(AbstractDistributor):
             # Create the paths if they don't already exist
             file_ops.create_folder(report_dir)
             file_ops.create_folder(matrix_dir)
-
-            # Add subdir into final filename
-            stem, ext = os.path.splitext(self.report_paths.overall_log)
-            overall_path = "{stem}_{id}{ext}".format(stem=stem, id=subdir_name, ext=ext)
         else:
             report_dir = self.report_paths.tld_report_dir
             matrix_dir = self.export_paths.matrix_dir
-            overall_path = self.report_paths.overall_log
 
         # ## DISTRIBUTION REPORTS ## #
         # Generate the base filename
@@ -753,9 +749,9 @@ class GravityDistributor(AbstractDistributor):
         # Append this iteration to log file
         file_ops.safe_dataframe_to_csv(
             pd.DataFrame(log_dict, index=[0]),
-            overall_path,
+            overall_log_path,
             mode='a',
-            header=(not os.path.exists(overall_path)),
+            header=(not os.path.exists(overall_log_path)),
             index=False,
         )
 
@@ -819,20 +815,21 @@ class GravityDistributor(AbstractDistributor):
             achieved_convergence=calib.achieved_convergence,
             achieved_band_share=calib.achieved_band_share,
             achieved_distribution=calib.achieved_distribution,
+            overall_log_path=self.report_paths.overall_log,
             cost_matrix=np_cost,
         )
 
     def _multi_area_distribution(
-            self,
-            segment_params: Dict[str, Any],
-            np_productions: np.ndarray,
-            np_attractions: np.ndarray,
-            np_cost: np.ndarray,
-            np_calibration_matrix: np.ndarray,
-            calibration_naming: Dict[Any, str],
-            target_cost_distributions: Dict[Any, pd.DataFrame],
-            running_segmentation: nd.SegmentationLevel,
-            **kwargs,
+        self,
+        segment_params: Dict[str, Any],
+        np_productions: np.ndarray,
+        np_attractions: np.ndarray,
+        np_cost: np.ndarray,
+        np_calibration_matrix: np.ndarray,
+        calibration_naming: Dict[Any, str],
+        target_cost_distributions: Dict[Any, pd.DataFrame],
+        running_segmentation: nd.SegmentationLevel,
+        **kwargs,
     ):
         # ## SET UP SEGMENT LOG ## #
         # Logging set up
@@ -862,6 +859,7 @@ class GravityDistributor(AbstractDistributor):
             furness_max_iters=kwargs.get('furness_max_iters'),
             furness_tol=kwargs.get('furness_tol'),
             use_perceived_factors=kwargs.get('use_perceived_factors'),
+            memory_optimised=kwargs.get('memory_optimised'),
         )
 
         optimal_cost_params = calib.calibrate(
@@ -885,6 +883,15 @@ class GravityDistributor(AbstractDistributor):
         kwarg_list = list()
         for calib_id, calib_name in calibration_naming.items():
             calib_kwargs = unchanging_kwargs.copy()
+
+            # Create the overall log path
+            stem, ext = os.path.splitext(self.report_paths.overall_log)
+            overall_log_path = "{stem}_{id}{ext}".format(stem=stem, id=calib_name, ext=ext)
+
+            # Replace the log if it already exists
+            if os.path.isfile(overall_log_path):
+                os.remove(overall_log_path)
+
             calib_kwargs.update({
                 'optimal_cost_params': optimal_cost_params[calib_id],
                 'min_bounds': target_cost_distributions[calib_id]['min'].values,
@@ -895,13 +902,14 @@ class GravityDistributor(AbstractDistributor):
                 'achieved_convergence': calib.achieved_convergence[calib_id],
                 'achieved_band_share': calib.achieved_band_share[calib_id],
                 'achieved_distribution': calib.achieved_distribution[calib_id],
+                'overall_log_path': overall_log_path,
                 'subdir_name': calib_name,
             })
             kwarg_list.append(calib_kwargs)
 
         # Generate the reports
         # Multiprocess here only if we aren't already
-        process_count = -2 if self.process_count == 0 else self.process_count
+        process_count = -2 if self.process_count == 0 else 0
         multiprocessing.multiprocess(
             fn=self._write_out_reports,
             kwargs=kwarg_list,
