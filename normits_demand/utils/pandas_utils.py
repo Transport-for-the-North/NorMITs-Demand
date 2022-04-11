@@ -19,15 +19,15 @@ import functools
 from typing import Any
 from typing import Dict
 from typing import List
-from typing import Union
 from typing import Callable
-from typing import Optional
 from typing import Generator
 
 # Third Party
 import numpy as np
 import pandas as pd
 import openpyxl
+
+from openpyxl.utils import dataframe as openpyxl_dataframe
 
 # Local
 from normits_demand.utils import general as du
@@ -913,35 +913,169 @@ def internal_external_report(df: pd.DataFrame,
     return report
 
 
-def append_df_to_excel(
+def _openpyxl_df_to_excel(
     df: pd.DataFrame,
-    excel_path: os.PathLike,
-    **to_excel_kwargs,
+    path: os.PathLike,
+    sheet_name: str = "Sheet1",
+    header: bool = True,
+    index: bool = True,
+    start_row: int = 0,
+    start_col: int = 0,
 ) -> None:
-    """Append `df` to existing Excel file at `excel_path`
+    """Append a DataFrame to existing Excel workbook
 
-    Append `df` to existing Excel file `excel_path` into `sheet_name` Sheet.
-    If `excel_path` doesn't exist, then it is created.
+    Append `df` to existing Excel file `path` into `sheet_name` Sheet.
+    `start_row` and `start_col` are used to define the cell that the top left
+    corner of `df` will begin.
+    If `path` doesn't exist, then it is created.
 
     Parameters
     ----------
     df:
         DataFrame to save to workbook
 
-    excel_path:
-        File path or existing ExcelWriter
+    path:
+        Path to the Excel workbook to write to.
 
-    to_excel_kwargs:
-        Any further kwargs to pass to `df.to_excel()`
+    sheet_name:
+        Name of the sheet to save `df`.
+
+    header:
+        Whether to write out the column names.
+
+    index:
+        Whether to write out the index (row) names.
+
+    start_row:
+        Upper left cell row to dump `df`.
+
+    start_col:
+        Upper left cell col to dump `df`.
 
     Returns
     -------
     None
     """
-    with pd.ExcelWriter(
-        excel_path,
+    # Create the workbook if it doesn't exist
+    if os.path.isfile(path):
+        workbook = openpyxl.load_workbook(path)
+    else:
+        workbook = openpyxl.Workbook()
+
+    # Grab the sheet to write to
+    if sheet_name in workbook.sheetnames:
+        sheet = workbook[sheet_name]
+    else:
+        sheet = workbook.create_sheet(sheet_name)
+
+    # Write each cell of df into individual cells
+    df_rows = openpyxl_dataframe.dataframe_to_rows(df, index=index, header=header)
+    for r_idx, row in enumerate(df_rows, 1):
+        for c_idx, value in enumerate(row, 1):
+            sheet.cell(
+                row=start_row + r_idx,
+                column=start_col + c_idx,
+                value=value,
+            )
+
+    workbook.save(filename=path)
+
+
+def append_df_to_excel(
+    df: pd.DataFrame,
+    path: os.PathLike,
+    sheet_name: str = "Sheet1",
+    header: bool = True,
+    index: bool = True,
+    start_row: int = 0,
+    start_col: int = 0,
+    keep_data_validation: bool = False,
+    **to_excel_kwargs,
+) -> None:
+    """Append a DataFrame to existing Excel workbook
+
+    Append `df` to existing Excel file `path` into `sheet_name` Sheet.
+    `start_row` and `start_col` are used to define the cell that the top left
+    corner of `df` will begin.
+    If `path` doesn't exist, then it is created.
+
+    Parameters
+    ----------
+    df:
+        DataFrame to save to workbook
+
+    path:
+        Path to the Excel workbook to write to.
+
+    sheet_name:
+        Name of the sheet to save `df`.
+
+    header:
+        Whether to write out the column names.
+
+    index:
+        Whether to write out the index (row) names.
+
+    start_row:
+        Upper left cell row to dump `df`.
+
+    start_col:
+        Upper left cell col to dump `df`.
+
+    keep_data_validation:
+        If left as False, `df.to_excel()` is used to write out df. However,
+        this can cause compatibility issues with data validation in the Excel
+        workbook. If this is the cases, set to True. If True, uses openpyxl
+        functionality to write out `df` instead, reducing functionality of the
+        write, but keeping the data validation.
+
+    to_excel_kwargs:
+        Any further kwargs to pass to `df.to_excel()`
+        Ignored if `keep_data_validation` is True.
+
+    Returns
+    -------
+    None
+    """
+    if keep_data_validation:
+        return _openpyxl_df_to_excel(
+            df=df,
+            path=path,
+            sheet_name=sheet_name,
+            header=header,
+            index=index,
+            start_row=start_row,
+            start_col=start_col,
+        )
+
+    # Excel file doesn't exist - saving and exiting
+    if not os.path.isfile(path):
+        df.to_excel(
+            path,
+            header=header,
+            index=index,
+            startrow=start_row,
+            startcol=start_col,
+            **to_excel_kwargs,
+        )
+        return
+
+    # ignore engine parameter if it was passed
+    if 'engine' in to_excel_kwargs:
+        to_excel_kwargs.pop('engine')
+
+    with pd.ExcelWriter(    # type: ignore[abstract]
+        path,
         engine='openpyxl',
         mode='a',
         if_sheet_exists='overlay',
     ) as writer:
-        df.to_excel(writer, **to_excel_kwargs)
+        df.to_excel(
+            writer,
+            sheet_name=sheet_name,
+            header=header,
+            index=index,
+            startrow=start_row,
+            startcol=start_col,
+            **to_excel_kwargs,
+        )

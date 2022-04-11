@@ -390,9 +390,8 @@ class DistributionModel(DistributionModelExportPaths):
                 csv=True
             )
 
-            print(segment_params)
+            tqdm.tqdm.write(str(segment_params))
             path = os.path.join(in_dir, fname)
-            print(path)
             # Read demand matrix
             df = nd.read_df(path=path,
                             find_similar=True,
@@ -404,7 +403,6 @@ class DistributionModel(DistributionModelExportPaths):
                 from_zoning_system=report_zoning,
                 to_zoning_system=sector_zoning,
             )
-            print(sector_df)
 
             # Export sector square matrix csv
             purp = segment_params['p']
@@ -457,31 +455,31 @@ class DistributionModel(DistributionModelExportPaths):
             )
 
         # Trip Ends to DVector
-        master_ter = pd.concat(ter_list, ignore_index=True)
-        master_tec = pd.concat(tec_list, ignore_index=True)
-
-        dvec_r = nd.DVector(
-            import_data=master_ter,
-            segmentation=self.running_segmentation,
-            zoning_system=report_zoning
-        )
-        dvec_c = nd.DVector(
-            import_data=master_tec,
-            segmentation=self.running_segmentation,
-            zoning_system=report_zoning
-        )
-
-        # Dvector reports
-        dvec_r.write_sector_reports(
-            segment_totals_path=os.path.join(self.report_paths.pa_reports_dir, 'segment_totals_rows.csv'),
-            ca_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ca_sector_rows.csv'),
-            ie_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ie_sector_rows.csv')
-        )
-        dvec_c.write_sector_reports(
-            segment_totals_path=os.path.join(self.report_paths.pa_reports_dir, 'segment_totals_cols.csv'),
-            ca_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ca_sector_cols.csv'),
-            ie_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ie_sector_cols.csv')
-        )
+        # master_ter = pd.concat(ter_list, ignore_index=True)
+        # master_tec = pd.concat(tec_list, ignore_index=True)
+        #
+        # dvec_r = nd.DVector(
+        #     import_data=master_ter,
+        #     segmentation=self.running_segmentation,
+        #     zoning_system=report_zoning
+        # )
+        # dvec_c = nd.DVector(
+        #     import_data=master_tec,
+        #     segmentation=self.running_segmentation,
+        #     zoning_system=report_zoning
+        # )
+        #
+        # # Dvector reports
+        # dvec_r.write_sector_reports(
+        #     segment_totals_path=os.path.join(self.report_paths.pa_reports_dir, 'segment_totals_rows.csv'),
+        #     ca_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ca_sector_rows.csv'),
+        #     ie_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ie_sector_rows.csv')
+        # )
+        # dvec_c.write_sector_reports(
+        #     segment_totals_path=os.path.join(self.report_paths.pa_reports_dir, 'segment_totals_cols.csv'),
+        #     ca_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ca_sector_cols.csv'),
+        #     ie_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ie_sector_cols.csv')
+        # )
 
         # Export Sectors - openpyxl
         master_sector = pd.concat(sector_list)
@@ -498,10 +496,11 @@ class DistributionModel(DistributionModelExportPaths):
         # Add data to copy
         pd_utils.append_df_to_excel(
             df=master_sector,
-            excel_path=out_path,
+            path=out_path,
             sheet_name='sector_data',
             index=False,
-            header=True
+            header=True,
+            keep_data_validation=True,
         )
 
     def _recombine_pa_matrices(self):
