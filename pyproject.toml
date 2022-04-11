@@ -1,2 +1,18 @@
 [tool.black]
 line-length = 95
+
+[tool.pylint.messages_control]
+disable = [
+    "C0330",            # Compatibility with black
+    "C0326",            # Compatibility with black
+    "line-too-long",    # Compatibility with black
+    "line-many-line",
+    "use-dict-literal",
+    "use-list-literal",
+]
+
+[tool.pylint.design]
+max-attributes = 15
+
+[tool.mypy]
+ignore_missing_imports = true

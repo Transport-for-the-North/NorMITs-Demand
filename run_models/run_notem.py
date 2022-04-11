@@ -24,7 +24,7 @@ from normits_demand.pathing import NoTEMImportPaths
 # years = [2018, 2033, 2040, 2050]
 years = [2018]
 scenario = constants.SC01_JAM
-notem_iter = '9.6'
+notem_iter = '9.7'
 lu_drive = "I:/"
 by_iteration = "iter3e"
 fy_iteration = "iter3e"
@@ -34,7 +34,7 @@ notem_export_home = r"E:\NorMITs Demand\NoTEM"
 
 
 def main():
-    hb_production_import_version = '2.2'
+    hb_production_import_version = '2.7'
     hb_attraction_import_version = '2.3'
     nhb_production_import_version = '2.1'
 
@@ -75,7 +75,7 @@ def main():
         nhb_attraction_balance_zoning=nhb_attraction_balance_zoning,
     )
     n.run(
-        generate_all=False,
+        generate_all=True,
         generate_hb=False,
         generate_nhb=False,
         generate_hb_production=False,
