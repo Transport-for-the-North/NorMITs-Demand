@@ -983,6 +983,9 @@ def translate_matrix_zoning(
 
     # Do the pandas translation
     if isinstance(matrix, pd.DataFrame):
+        # Try convert cols to correct type
+        matrix.columns = matrix.columns.astype(from_zoning_system.unique_zones.dtype)
+
         kwargs = {
             'from_zoning_system': from_zoning_system,
             'to_zoning_system': to_zoning_system,
