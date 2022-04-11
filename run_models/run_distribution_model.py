@@ -31,7 +31,7 @@ from normits_demand.pathing.distribution_model import DistributionModelArgumentB
 # ## CONSTANTS ## #
 # Trip end import args
 NOTEM_ITERATION_NAME = '9.3'
-TOUR_PROPS_VERSION = 'v%s' % NOTEM_ITERATION_NAME
+TOUR_PROPS_VERSION = f"v{NOTEM_ITERATION_NAME}"
 
 NOTEM_EXPORT_HOME = r"I:\NorMITs Demand\NoTEM"
 TRAM_EXPORT_HOME = r"I:\NorMITs Demand\Tram"
@@ -54,10 +54,10 @@ TARGET_TLD_MULTIPLIER = constants.MILES_TO_KM
 
 
 def main():
-    # mode = nd.Mode.CAR
+    mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
     # mode = nd.Mode.TRAIN
-    mode = nd.Mode.TRAM
+    # mode = nd.Mode.TRAM
 
     # Running params
     use_tram = True

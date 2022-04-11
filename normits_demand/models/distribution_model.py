@@ -30,7 +30,6 @@ from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.utils import translation
 from normits_demand.utils import vehicle_occupancy
-from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand.cost import utils as cost_utils
 from normits_demand.matrices import matrix_processing
@@ -487,12 +486,20 @@ class DistributionModel(DistributionModelExportPaths):
         # Export Sectors - openpyxl
         master_sector = pd.concat(sector_list)
 
-        path = os.path.join(out_dir, 'Reporting_Summary.xlsx')
+        # Make a copy of the template
+        template_fname = "Reporting_Summary - template.xlsx"
+        out_path = os.path.join(out_dir, 'Reporting_Summary.xlsx')
+        import shutil
+        shutil.copy(
+            src=os.path.join(out_dir, template_fname),
+            dst=out_path,
+        )
+
+        # Add data to copy
         pd_utils.append_df_to_excel(
-            filename=path,
-            dframe=master_sector,
+            df=master_sector,
+            excel_path=out_path,
             sheet_name='sector_data',
-            startrow=0,
             index=False,
             header=True
         )

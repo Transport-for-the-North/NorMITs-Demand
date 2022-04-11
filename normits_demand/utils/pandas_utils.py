@@ -915,16 +915,13 @@ def internal_external_report(df: pd.DataFrame,
 
 def append_df_to_excel(
     df: pd.DataFrame,
-    excel_path: Union[os.PathLike, pd.ExcelWriter],
-    sheet_name: str = 'Sheet1',
-    start_row: Optional[int] = None,
-    overwrite_sheet: bool = False,
+    excel_path: os.PathLike,
     **to_excel_kwargs,
 ) -> None:
     """Append `df` to existing Excel file at `excel_path`
 
     Append `df` to existing Excel file `excel_path` into `sheet_name` Sheet.
-    If excel_path doesn't exist, then it is created.
+    If `excel_path` doesn't exist, then it is created.
 
     Parameters
     ----------
@@ -934,70 +931,17 @@ def append_df_to_excel(
     excel_path:
         File path or existing ExcelWriter
 
-    sheet_name:
-        Name of sheet in `excel_path` to save DataFrame.
-
-    start_row:
-        upper left cell row to dump data frame. If left as None, calculate
-        the last row in the existing `excel_path` sheet and write to the
-        next row.
-
-    overwrite_sheet:
-        Remove and recreate `sheet_name` sheet before writing df.
-
     to_excel_kwargs:
         Any further kwargs to pass to `df.to_excel()`
 
     Returns
     -------
     None
-
-    See Also
-    --------
-    Pulled from stack overflow here:
-    https://stackoverflow.com/questions/20219254/how-to-write-to-an-existing-excel-file-without-overwriting-data-using-pandas/47740262#47740262
     """
-    # TODO(PW, BT): Can update this code with new pandas functionality if we
-    #  use pandas 1.4.0+. See:
-    #  https://stackoverflow.com/questions/38074678/append-existing-excel-sheet-with-new-dataframe-using-python-pandas/38075046#38075046
-
-    # Excel file doesn't exist - saving and exiting
-    if not os.path.isfile(excel_path):
-        df.to_excel(
-            excel_path,
-            sheet_name=sheet_name,
-            startrow=start_row if start_row is not None else 0,
-            **to_excel_kwargs,
-        )
-        return
-
-    # ignore engine parameter if it was passed
-    if 'engine' in to_excel_kwargs:
-        to_excel_kwargs.pop('engine')
-
-    with pd.ExcelWriter(excel_path, engine='openpyxl', mode='a') as writer:
-
-        # try to open an existing workbook
-        writer.book = openpyxl.load_workbook(excel_path)
-
-        # get the last row in the existing Excel sheet
-        if start_row is None and sheet_name in writer.book.sheetnames:
-            start_row = writer.book[sheet_name].max_row
-
-        # overwrite sheet if needed
-        if overwrite_sheet and sheet_name in writer.book.sheetnames:
-            idx = writer.book.sheetnames.index(sheet_name)
-            writer.book.remove(writer.book.worksheets[idx])
-            writer.book.create_sheet(sheet_name, idx)
-
-        # copy existing sheets
-        writer.sheets = {ws.title: ws for ws in writer.book.worksheets}
-
-        if start_row is None:
-            start_row = 0
-
-        # write out the new sheet
-        df.to_excel(writer, sheet_name, startrow=start_row, **to_excel_kwargs)
-
-        # save the workbook
-        writer.save()
+    with pd.ExcelWriter(
+        excel_path,
+        engine='openpyxl',
+        mode='a',
+        if_sheet_exists='overlay',
+    ) as writer:
+        df.to_excel(writer, **to_excel_kwargs)
