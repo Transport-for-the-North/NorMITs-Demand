@@ -12,6 +12,7 @@ Home of the NorMITs Distribution Model
 """
 # Built-Ins
 import os
+import pathlib
 
 from typing import Any
 from typing import List
@@ -24,6 +25,7 @@ import pandas as pd
 # Local Imports
 import normits_demand as nd
 
+from normits_demand import reports
 from normits_demand import constants
 
 from normits_demand.utils import timing
@@ -42,6 +44,8 @@ from normits_demand.pathing.distribution_model import DMArgumentBuilderBase
 class DistributionModel(DistributionModelExportPaths):
     # ## Class Constants ## #
     __version__ = nd.__version__
+
+    _matrix_report_template = reports.ReportTemplates.DISTRIBUTION_MODEL_MATRIX
 
     _pa_matrix_desc = 'synthetic_pa'
     _od_matrix_desc = 'synthetic_od'
@@ -371,7 +375,7 @@ class DistributionModel(DistributionModelExportPaths):
         print("demand dir:" + self.export_paths.full_pa_dir)
         print("output dir:" + self.report_paths.pa_reports_dir)
         in_dir = self.export_paths.full_pa_dir
-        out_dir = self.report_paths.pa_reports_dir
+        out_dir = pathlib.Path(self.report_paths.pa_reports_dir)
         sector_list = []
         ter_list = []
         tec_list = []
@@ -408,7 +412,7 @@ class DistributionModel(DistributionModelExportPaths):
             purp = segment_params['p']
             mode = segment_params['m']
             sector_name = f'ca_sector_p{purp}_m{mode}.csv'
-            sector_path = os.path.join(out_dir, sector_name)
+            sector_path = out_dir / sector_name
             sector_df.to_csv(sector_path, header=False, index=False)
 
             # Get tripends and assign to dataframe
@@ -485,13 +489,8 @@ class DistributionModel(DistributionModelExportPaths):
         master_sector = pd.concat(sector_list)
 
         # Make a copy of the template
-        template_fname = "Reporting_Summary - template.xlsx"
-        out_path = os.path.join(out_dir, 'Reporting_Summary.xlsx')
-        import shutil
-        shutil.copy(
-            src=os.path.join(out_dir, template_fname),
-            dst=out_path,
-        )
+        out_path = out_dir / 'Reporting_Summary.xlsx'
+        self._matrix_report_template.copy_report_template(out_path)
 
         # Add data to copy
         pd_utils.append_df_to_excel(
