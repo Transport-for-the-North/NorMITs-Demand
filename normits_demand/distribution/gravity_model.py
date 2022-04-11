@@ -244,7 +244,7 @@ class GravityModelBase(abc.ABC):
         self.initial_convergence: float = 0
         self.achieved_convergence: float = 0
         self.achieved_band_share: np.ndarray = np.zeros_like(self.target_band_share)
-        self.achieved_residuals: np.ndarray = np.full_like(np.inf, self.target_band_share)
+        self.achieved_residuals: np.ndarray = np.full_like(self.target_band_share, np.inf)
         self.achieved_distribution: np.ndarray = np.zeros_like(cost_matrix)
 
     @property
@@ -2626,7 +2626,7 @@ class MultiAreaGravityModelCalibrator:
         self.optimal_cost_params = dict.fromkeys(self.calib_areas)
         self.achieved_convergence = dict.fromkeys(self.calib_areas)
         self.achieved_residuals = dict.fromkeys(self.calib_areas)
-        self.achieved_full_distribution: np.ndarray = np.full_like(-1, self.cost_matrix)
+        self.achieved_full_distribution: np.ndarray = np.full_like(self.cost_matrix, -1)
         self.achieved_distribution = dict.fromkeys(self.calib_areas)
 
         # Attributes to store from runs
