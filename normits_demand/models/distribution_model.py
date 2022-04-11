@@ -59,6 +59,8 @@ class DistributionModel(DistributionModelExportPaths):
 
     _dist_overall_log_name = '{trip_origin}_overall_log.csv'
 
+    # Trip End cache constants
+
     def __init__(self,
                  year: int,
                  running_mode: nd.Mode,
@@ -76,6 +78,7 @@ class DistributionModel(DistributionModelExportPaths):
                  lower_running_zones: List[Any] = None,
                  lower_distributor_kwargs: Dict[str, Any] = None,
                  compile_zoning_system: nd.ZoningSystem = None,
+                 report_lower_vectors: bool = True,
                  process_count: int = constants.PROCESS_COUNT,
                  ):
         # Make sure all are set if one is
@@ -117,6 +120,7 @@ class DistributionModel(DistributionModelExportPaths):
         self.lower_model_zoning = lower_model_zoning
         self.lower_running_zones = lower_running_zones
         self.lower_distributor_kwargs = lower_distributor_kwargs
+        self.report_lower_vectors = report_lower_vectors
 
         # Control output zoning systems depending on what we've been given
         if compile_zoning_system is not None:
@@ -292,7 +296,9 @@ class DistributionModel(DistributionModelExportPaths):
 
     def run_upper_model(self):
         self._logger.info("Building arguments for the Upper Model")
-        kwargs = self.arg_builder.build_upper_model_arguments()
+        kwargs = self.arg_builder.build_upper_model_arguments(
+            cache_dir=self.cache_paths.upper_trip_ends,
+        )
         process_count = self.process_count
 
         # Have to limit process usage if doing an MSOA gravity model
@@ -303,8 +309,8 @@ class DistributionModel(DistributionModelExportPaths):
 
             # Can only handle 9 processes if single area
             else:
-                if os.cpu_count() > 10 and (self.process_count > 9 or self.process_count < 0):
-                    process_count = 9
+                if os.cpu_count() > 10 and (self.process_count > 8 or self.process_count < 0):
+                    process_count = 8
 
         self._logger.info("Initialising the Upper Model")
         upper_model = self.upper_model_method.get_distributor(
@@ -344,9 +350,11 @@ class DistributionModel(DistributionModelExportPaths):
 
         self._logger.info("Converting Upper Model Outputs for Lower Model")
         productions, attractions = self.arg_builder.read_lower_pa(
+            cache_dir=self.cache_paths.lower_trip_ends,
             upper_model_matrix_dir=self.upper.export_paths.matrix_dir,
             external_matrix_output_dir=self.export_paths.upper_external_pa,
             lower_model_vector_report_dir=self.report_paths.lower_vector_reports_dir,
+            report_vectors=self.report_lower_vectors,
         )
 
         self._logger.info("Building arguments for the Lower Model")
@@ -762,6 +770,3 @@ class DistributionModel(DistributionModelExportPaths):
                 "format :("
                 % self.running_mode.value
             )
-
-
-

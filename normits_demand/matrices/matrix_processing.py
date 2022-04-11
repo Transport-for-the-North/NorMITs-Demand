@@ -3425,13 +3425,8 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
 
 def _recombine_internal_external_internal(in_paths,
                                           output_path,
-                                          force_csv_out,
-                                          force_compress_out,
+                                          output_suffix,
                                           ) -> None:
-    # Init
-    if force_csv_out and force_compress_out:
-        force_compress_out = False
-
     # Read in the matrices and compile
     partial_mats = [file_ops.read_df(x, index_col=0, find_similar=True) for x in in_paths]
     full_mat = functools.reduce(lambda x, y: x.values + y.values, partial_mats)
@@ -3443,13 +3438,9 @@ def _recombine_internal_external_internal(in_paths,
         columns=partial_mats[0].columns,
     )
 
-    if force_csv_out:
-        output_path = file_ops.cast_to_pathlib_path(output_path)
-        output_path = output_path.parent / (output_path.stem + '.csv')
-
-    if force_compress_out:
-        output_path = file_ops.cast_to_pathlib_path(output_path)
-        output_path = output_path.parent / (output_path.stem + consts.COMPRESSION_SUFFIX)
+    # Sort out the output suffix
+    base_path = file_ops.remove_suffixes(pathlib.Path(output_path))
+    output_path = base_path.with_suffix(output_suffix)
 
     # Write the complete matrix to disk
     file_ops.write_df(full_mat, output_path)
@@ -3537,20 +3528,25 @@ def combine_partial_matrices(import_dirs: List[nd.PathLike],
 
         combine_dict[out_path] = in_paths
 
+    if csv_out:
+        output_suffix = ".csv"
+    else:
+        output_suffix = ".csv.bz2"
+
     # ## COMPILE THE MATRICES ## #
     kwarg_list = list()
     for output_path, in_paths in combine_dict.items():
         kwarg_list.append({
             'output_path': output_path,
             'in_paths': in_paths,
-            'force_csv_out': csv_out,
-            'force_compress_out': True,
+            'output_suffix': output_suffix,
         })
 
     multiprocessing.multiprocess(
         fn=_recombine_internal_external_internal,
         kwargs=kwarg_list,
         process_count=process_count,
+        # process_count=0,
         pbar_kwargs=pbar_kwargs,
     )
 
