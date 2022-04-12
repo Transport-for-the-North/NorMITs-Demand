@@ -356,6 +356,11 @@ class DistributionModel(DistributionModelExportPaths):
         # TODO(BT, PW): Need to make sure we have the full pa matrices
         #  generated before trying to generate these reports
 
+        # make sure we have full PA matrices before running
+        self._maybe_recombine_pa_matrices()
+        print("Done!")
+        exit()
+
         # PA RUN REPORTS
         # Matrix Trip ENd totals
         #   Inter / Intra Report by segment?
@@ -501,6 +506,19 @@ class DistributionModel(DistributionModelExportPaths):
             header=True,
             keep_data_validation=True,
         )
+        
+    def _maybe_recombine_pa_matrices(self):
+        """Combine pa matrices if it hasn't been done yet"""
+        # Build the I/O paths
+        in_paths = [
+            pathlib.Path(self.lower.export_paths.matrix_dir),
+            pathlib.Path(self.export_paths.upper_external_pa),
+        ]
+        out_path = pathlib.Path(self.export_paths.full_pa_dir)
+
+        # Only recombine if cache is older than original files
+        if file_ops.is_cache_older(original=in_paths, cache=out_path):
+            self._recombine_pa_matrices()
 
     def _recombine_pa_matrices(self):
         # ## GET THE FULL PA MATRICES ## #
@@ -616,7 +634,7 @@ class DistributionModel(DistributionModelExportPaths):
         # TODO(BT): Make sure the upper and lower matrices exist!
 
         # ## GET THE FULL PA MATRICES ## #
-        self._recombine_pa_matrices()
+        self._maybe_recombine_pa_matrices()
 
         # ## CONVERT HB PA TO OD ## #
         if self.trip_origin == 'hb':
@@ -730,7 +748,7 @@ class DistributionModel(DistributionModelExportPaths):
             )
 
         elif self.running_mode == nd.Mode.TRAIN:
-            self._recombine_pa_matrices()
+            self._maybe_recombine_pa_matrices()
 
             # Translate matrices if needed
             compile_in_path = self._maybe_translate_matrices_for_compile(
