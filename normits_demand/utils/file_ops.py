@@ -689,22 +689,30 @@ def copy_files(src_dir: nd.PathLike,
                filenames: List[str],
                process_count: int = consts.PROCESS_COUNT,
                ) -> None:
-    """Copy filenames from src_dir to dst_dir
+    """Copy files from src_dir to dst_dir
 
-    # TODO(BT): Write this documentation for copy_files()
+    Copies all files in `filenames` from `src_dir` into `dst_dir`. Internally
+    uses multiprocessing to do the copy to make it really fast.
 
     Parameters
     ----------
-    src_dir
-    dst_dir
-    filenames
-    process_count
+    src_dir:
+        The directory to copy `filenames` from.
+
+    dst_dir:
+        The directory to copy `filenames` to.
+
+    filenames:
+        A list of the filenames to copy.
+
+    process_count:
+        The number of processes to use when copying files. By default, uses
+        the module default process count.
 
     Returns
     -------
-
+    None
     """
-
     # Setup kwargs
     kwarg_list = list()
     for fname in filenames:
@@ -726,7 +734,8 @@ def create_folder(folder_path: nd.PathLike,
                   verbose_exists: bool = False,
                   ) -> None:
     """
-    Creates the folder at folder_path
+    Create a new folder at desired location
+
     Parameters
     ----------
     folder_path:
@@ -746,7 +755,7 @@ def create_folder(folder_path: nd.PathLike,
 
     os.makedirs(folder_path, exist_ok=True)
     du.print_w_toggle(
-        "New project folder created at %s" % folder_path,
+        f"New project folder created at {folder_path}",
         verbose=verbose_create,
     )
 
@@ -776,8 +785,8 @@ def write_pickle(obj: object,
     -------
     None
     """
-    with open(path, 'wb') as f:
-        pickle.dump(obj, f, protocol=protocol, **kwargs)
+    with open(path, 'wb') as file:
+        pickle.dump(obj, file, protocol=protocol, **kwargs)
 
 
 def read_pickle(path: nd.PathLike) -> Any:
@@ -795,14 +804,11 @@ def read_pickle(path: nd.PathLike) -> Any:
     """
     # Validate path
     if not os.path.isfile(path):
-        raise FileNotFoundError(
-            "No file to read in found at %s"
-            % path
-        )
+        raise FileNotFoundError(f"No file to read in found at {path}")
 
     # Read in
-    with open(path, 'rb') as f:
-        obj = pickle.load(f)
+    with open(path, 'rb') as file:
+        obj = pickle.load(file)
 
     # If its a DVector, reset the process count
     if isinstance(obj, nd.core.data_structures.DVector):
@@ -815,22 +821,20 @@ def read_pickle(path: nd.PathLike) -> Any:
     # Check if class definition has a version (should do!)
     if not hasattr(obj.__class__, '__version__'):
         warn_msg = (
-            "The object loaded from '%s' has a version, but the class "
+            f"The object loaded from '{path}' has a version, but the class "
             "definition in the code does not. Aborting version check!\n"
-            "Loaded object is version %s"
-            % (path, obj.__version__)
+            f"Loaded object is version {obj.__version__}"
         )
         warnings.warn(warn_msg, UserWarning, stacklevel=2)
 
     # Throw warning if versions don't match
     if obj.__version__ != obj.__class__.__version__:
         warn_msg = (
-            "The object loaded from '%s' is not the same version as the "
+            f"The object loaded from '{path}' is not the same version as the "
             "class definition in the code. This might cause some unexpected "
             "problems.\n"
-            "Object Version: %s\n"
-            "Class Version: %s"
-            % (path, obj.__version__, obj.__class__.__version__)
+            f"Object Version: {obj.__version__}\n"
+            f"Class Version: {obj.__class__.__version__}"
         )
         warnings.warn(warn_msg, UserWarning, stacklevel=2)
 
@@ -864,15 +868,17 @@ def safe_dataframe_to_csv(df, out_path, **to_csv_kwargs):
             written_to_file = True
         except PermissionError:
             if not waiting:
-                print("Cannot write to file at %s.\n" % out_path +
-                      "Please ensure it is not open anywhere.\n" +
-                      "Waiting for permission to write...\n")
+                print(
+                    f"Cannot write to file at {out_path}.\n"
+                    "Please ensure it is not open anywhere.\n"
+                    "Waiting for permission to write...\n"
+                )
                 waiting = True
             time.sleep(1)
 
 
 def get_latest_modified_time(paths: Iterable[PathLike]) -> float:
-    """Gets the latest modified time of all files in paths
+    """Gets the latest modified time of all files
 
     Parameters
     ----------
