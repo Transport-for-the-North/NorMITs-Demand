@@ -353,13 +353,8 @@ class DistributionModel(DistributionModelExportPaths):
         self._logger.info("Lower Model Done!")
 
     def run_pa_matrix_reports(self):
-        # TODO(BT, PW): Need to make sure we have the full pa matrices
-        #  generated before trying to generate these reports
-
         # make sure we have full PA matrices before running
         self._maybe_recombine_pa_matrices()
-        print("Done!")
-        exit()
 
         # PA RUN REPORTS
         # Matrix Trip ENd totals
@@ -381,9 +376,9 @@ class DistributionModel(DistributionModelExportPaths):
         print("output dir:" + self.report_paths.pa_reports_dir)
         in_dir = self.export_paths.full_pa_dir
         out_dir = pathlib.Path(self.report_paths.pa_reports_dir)
-        sector_list = []
-        ter_list = []
-        tec_list = []
+        sector_list = list()
+        ter_list = list()
+        tec_list = list()
 
         desc = "Generating PA Reports"
         for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc):
@@ -391,20 +386,17 @@ class DistributionModel(DistributionModelExportPaths):
             segment_name = self.running_segmentation.get_segment_name(segment_params)
             cost_matrix = cost_dict[segment_name]
 
-            fname = self.running_segmentation.generate_file_name(
+            # Read in the matrix for this segment
+            segment_fname = self.running_segmentation.generate_file_name(
                 segment_params=segment_params,
                 file_desc="synthetic_pa",
                 trip_origin=self.trip_origin,
                 year=str(self.year),
                 csv=True
             )
+            path = os.path.join(in_dir, segment_fname)
+            df = nd.read_df(path, find_similar=True, index_col=0)
 
-            tqdm.tqdm.write(str(segment_params))
-            path = os.path.join(in_dir, fname)
-            # Read demand matrix
-            df = nd.read_df(path=path,
-                            find_similar=True,
-                            index_col=0)
             # Build sector matrix
             sector_zoning = nd.get_zoning_system("ca_sector_2020")
             sector_df = translation.translate_matrix_zoning(
@@ -413,34 +405,25 @@ class DistributionModel(DistributionModelExportPaths):
                 to_zoning_system=sector_zoning,
             )
 
-            # Export sector square matrix csv
-            purp = segment_params['p']
-            mode = segment_params['m']
-            sector_name = f'ca_sector_p{purp}_m{mode}.csv'
-            sector_path = out_dir / sector_name
-            sector_df.to_csv(sector_path, header=False, index=False)
+            # Export sector matrix csv
+            sector_fname = segment_fname.replace('synthetic_pa', 'ca_sector')
+            sector_df.to_csv(out_dir / sector_fname)
 
             # Get tripends and assign to dataframe
             trow = df.sum(axis=1)
             dfr = trow.to_frame(name='val')
 
+
             tcol = df.sum(axis=0)
             dfc = tcol.to_frame(name='val')
 
-            for key in segment_params:
-                dfr.insert(loc=0,
-                           column=key,
-                           value=segment_params[key],
-                           allow_duplicates=True)
-                dfc.insert(loc=0,
-                           column=key,
-                           value=segment_params[key],
-                           allow_duplicates=True)
-                sector_df.insert(loc=0,
-                                 column=key,
-                                 value=segment_params[key],
-                                 allow_duplicates=True)
+            # Add the segment params to each df
+            col_names, col_vals = zip(*segment_params.items())
+            dfr = pd_utils.prepend_cols(dfr, col_names=col_names, col_vals=col_vals)
+            dfc = pd_utils.prepend_cols(dfc, col_names=col_names, col_vals=col_vals)
+            sector_df = pd_utils.prepend_cols(sector_df, col_names=col_names, col_vals=col_vals)
 
+            # CONTINUE REVIEW FROM HERE
             sector_df.index.name = 'sector_o'
             sector_df = sector_df.reset_index()
             sector_long = pd.melt(sector_df,
@@ -506,7 +489,7 @@ class DistributionModel(DistributionModelExportPaths):
             header=True,
             keep_data_validation=True,
         )
-        
+
     def _maybe_recombine_pa_matrices(self):
         """Combine pa matrices if it hasn't been done yet"""
         # Build the I/O paths

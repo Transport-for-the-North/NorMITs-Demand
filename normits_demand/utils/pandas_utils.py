@@ -20,6 +20,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Callable
+from typing import Iterable
 from typing import Generator
 
 # Third Party
@@ -1079,3 +1080,55 @@ def append_df_to_excel(
             startcol=start_col,
             **to_excel_kwargs,
         )
+
+
+def prepend_cols(
+    df: pd.DataFrame,
+    col_names: Iterable[Any],
+    col_vals: Iterable[Any],
+    allow_duplicates: bool = False,
+) -> pd.DataFrame:
+    """Prepend the given columns to the dataframe
+
+    Adds the given columns to the start of the dataframe, in the order given.
+    That is, if a dataframe has columns ["d", "e", "f"], and the `col_names`
+    given are ["a", "b", "c"], the resultant dataframe would have columns in
+    the following order:["a", "b", "c", "d", "e", "f"].
+
+    Parameters
+    ----------
+    df:
+        The original dataframe to prepend `col_names` to with `col_values`.
+
+    col_names:
+        The names to give to the columns being prepended to `df`.
+
+    col_vals:
+        The values to give to each `col_names` being added to `df`. The index
+        if each value should match that in `col_names`. That is:
+        `df[col_name[idx]] = col_vals[idx]`
+
+    allow_duplicates:
+        Whether to allow this function to add a column to df if one with the
+        same name already exists.
+
+    Returns
+    -------
+    prepended_df:
+        The original `df` with the given columns prepended with their values.
+    """
+    df = df.copy()
+
+    # Validate inputs
+    if len(col_names) != len(col_vals):
+        raise ValueError(
+            "col_names and col_vals need to be the same length. Got lengths:\n"
+            f"col_names: {len(col_names)}\n"
+            f"col_vals: {len(col_vals)}"
+        )
+
+    # Attach all columns in the given order
+    for name, val in zip(col_names, col_vals):
+        df.insert(loc=0, column=name, value=val, allow_duplicates=allow_duplicates)
+
+    return df
