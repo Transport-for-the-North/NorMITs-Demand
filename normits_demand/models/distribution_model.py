@@ -36,6 +36,7 @@ from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand.cost import utils as cost_utils
 from normits_demand.matrices import matrix_processing
 from normits_demand.matrices import pa_to_od
+from normits_demand.reports import matrix_reports
 
 from normits_demand.pathing.distribution_model import DistributionModelExportPaths
 from normits_demand.pathing.distribution_model import DMArgumentBuilderBase
@@ -44,8 +45,6 @@ from normits_demand.pathing.distribution_model import DMArgumentBuilderBase
 class DistributionModel(DistributionModelExportPaths):
     # ## Class Constants ## #
     __version__ = nd.__version__
-
-    _matrix_report_template = reports.ReportTemplates.DISTRIBUTION_MODEL_MATRIX
 
     _pa_matrix_desc = 'synthetic_pa'
     _od_matrix_desc = 'synthetic_od'
@@ -353,8 +352,26 @@ class DistributionModel(DistributionModelExportPaths):
         self._logger.info("Lower Model Done!")
 
     def run_pa_matrix_reports(self):
-        # make sure we have full PA matrices before running
+        # Make sure we have full PA matrices before running
         self._maybe_recombine_pa_matrices()
+
+        input_fname_template = self.running_segmentation.generate_template_file_name(
+                file_desc="synthetic_pa",
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                csv=True
+            )
+
+        matrix_reports.generate_matrix_reports(
+            matrix_dir=pathlib.Path(self.export_paths.full_pa_dir),
+            report_dir=pathlib.Path(self.report_paths.pa_reports_dir),
+            matrix_segmentation=self.running_segmentation,
+            matrix_zoning_system=self.compile_zoning_system,
+            matrix_fname_template=input_fname_template,
+            row_name='productions',
+            col_name='attractions',
+        )
+        exit()
 
         # PA RUN REPORTS
         # Matrix Trip ENd totals
@@ -377,67 +394,13 @@ class DistributionModel(DistributionModelExportPaths):
         in_dir = self.export_paths.full_pa_dir
         out_dir = pathlib.Path(self.report_paths.pa_reports_dir)
         sector_list = list()
-        ter_list = list()
-        tec_list = list()
 
         desc = "Generating PA Reports"
         for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc):
+            # ## SETUP ## #
             # Get the cost for this segment
             segment_name = self.running_segmentation.get_segment_name(segment_params)
             cost_matrix = cost_dict[segment_name]
-
-            # Read in the matrix for this segment
-            segment_fname = self.running_segmentation.generate_file_name(
-                segment_params=segment_params,
-                file_desc="synthetic_pa",
-                trip_origin=self.trip_origin,
-                year=str(self.year),
-                csv=True
-            )
-            path = os.path.join(in_dir, segment_fname)
-            df = nd.read_df(path, find_similar=True, index_col=0)
-
-            # Build sector matrix
-            sector_zoning = nd.get_zoning_system("ca_sector_2020")
-            sector_df = translation.translate_matrix_zoning(
-                matrix=df,
-                from_zoning_system=report_zoning,
-                to_zoning_system=sector_zoning,
-            )
-
-            # Export sector matrix csv
-            sector_fname = segment_fname.replace('synthetic_pa', 'ca_sector')
-            sector_df.to_csv(out_dir / sector_fname)
-
-            # Get tripends and assign to dataframe
-            trow = df.sum(axis=1)
-            dfr = trow.to_frame(name='val')
-
-
-            tcol = df.sum(axis=0)
-            dfc = tcol.to_frame(name='val')
-
-            # Add the segment params to each df
-            col_names, col_vals = zip(*segment_params.items())
-            dfr = pd_utils.prepend_cols(dfr, col_names=col_names, col_vals=col_vals)
-            dfc = pd_utils.prepend_cols(dfc, col_names=col_names, col_vals=col_vals)
-            sector_df = pd_utils.prepend_cols(sector_df, col_names=col_names, col_vals=col_vals)
-
-            # CONTINUE REVIEW FROM HERE
-            sector_df.index.name = 'sector_o'
-            sector_df = sector_df.reset_index()
-            sector_long = pd.melt(sector_df,
-                               id_vars=['sector_o', 'p', 'm'],
-                               var_name='sector_d',
-                               value_name='val')
-            sector_list.append(sector_long)
-
-            dfr.index.name = 'zone'
-            dfc.index.name = 'zone'
-            dfr = dfr.reset_index()
-            dfc = dfc.reset_index()
-            ter_list.append(dfr)
-            tec_list.append(dfc)
 
             # ## GENERATE COST DISTRIBUTION CURVES ## #
             achieved_distribution = cost_utils.calculate_cost_distribution(
@@ -445,50 +408,6 @@ class DistributionModel(DistributionModelExportPaths):
                 cost_matrix=cost_matrix,
                 bin_edges=[0, 1, 10, 100]
             )
-
-        # Trip Ends to DVector
-        # master_ter = pd.concat(ter_list, ignore_index=True)
-        # master_tec = pd.concat(tec_list, ignore_index=True)
-        #
-        # dvec_r = nd.DVector(
-        #     import_data=master_ter,
-        #     segmentation=self.running_segmentation,
-        #     zoning_system=report_zoning
-        # )
-        # dvec_c = nd.DVector(
-        #     import_data=master_tec,
-        #     segmentation=self.running_segmentation,
-        #     zoning_system=report_zoning
-        # )
-        #
-        # # Dvector reports
-        # dvec_r.write_sector_reports(
-        #     segment_totals_path=os.path.join(self.report_paths.pa_reports_dir, 'segment_totals_rows.csv'),
-        #     ca_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ca_sector_rows.csv'),
-        #     ie_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ie_sector_rows.csv')
-        # )
-        # dvec_c.write_sector_reports(
-        #     segment_totals_path=os.path.join(self.report_paths.pa_reports_dir, 'segment_totals_cols.csv'),
-        #     ca_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ca_sector_cols.csv'),
-        #     ie_sector_path=os.path.join(self.report_paths.pa_reports_dir, 'ie_sector_cols.csv')
-        # )
-
-        # Export Sectors - openpyxl
-        master_sector = pd.concat(sector_list)
-
-        # Make a copy of the template
-        out_path = out_dir / 'Reporting_Summary.xlsx'
-        self._matrix_report_template.copy_report_template(out_path)
-
-        # Add data to copy
-        pd_utils.append_df_to_excel(
-            df=master_sector,
-            path=out_path,
-            sheet_name='sector_data',
-            index=False,
-            header=True,
-            keep_data_validation=True,
-        )
 
     def _maybe_recombine_pa_matrices(self):
         """Combine pa matrices if it hasn't been done yet"""

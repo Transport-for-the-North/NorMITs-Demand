@@ -16,7 +16,7 @@ disable = [
 ]
 
 [tool.pylint.design]
-max-arguments = 10
+max-args = 10
 max-attributes = 15
 max-statements = 100
 

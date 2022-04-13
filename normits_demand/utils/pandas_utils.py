@@ -532,7 +532,8 @@ def wide_to_long_infill(df: pd.DataFrame,
                         infill: Any = 0,
                         check_totals: bool = False,
                         ) -> pd.DataFrame:
-    """
+    """Convert a matrix from wide to long format
+
     Converts a DataFrame from wide to long format, infilling missing values.
 
     Parameters
