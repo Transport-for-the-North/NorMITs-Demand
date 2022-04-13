@@ -7,7 +7,7 @@ Will need to be integrated into demand reporting framework
 import os
 
 # local imports
-from normits_demand.reports import sector_report
+from normits_demand.reports import old_sector_report
 
 import pathlib
 
@@ -28,7 +28,7 @@ if __name__ == '__main__':
     # run reporter
     for folder in folder_list:
         print('Running sector reports for %s' % folder)
-        sr = sector_report.SectorReporter(target_folder=folder,
+        sr = old_sector_report.SectorReporter(target_folder=folder,
                                           model_name=model_name,
                                           output_folder=out_folder)
         reports = sr.sector_report()
