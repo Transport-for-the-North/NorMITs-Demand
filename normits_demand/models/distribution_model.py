@@ -25,15 +25,12 @@ import pandas as pd
 # Local Imports
 import normits_demand as nd
 
-from normits_demand import reports
 from normits_demand import constants
 
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.utils import translation
 from normits_demand.utils import vehicle_occupancy
-from normits_demand.utils import pandas_utils as pd_utils
-from normits_demand.cost import utils as cost_utils
 from normits_demand.matrices import matrix_processing
 from normits_demand.matrices import pa_to_od
 from normits_demand.reports import matrix_reports
@@ -362,52 +359,23 @@ class DistributionModel(DistributionModelExportPaths):
                 csv=True
             )
 
+        cost_matrices = self.arg_builder.build_pa_report_arguments(
+            self.compile_zoning_system,
+        )
+
+        # TODO(BT, PW): Moved all code into here - this can then be called by
+        #  the OD matrix reports too to get the same reports. Add all new code
+        #  into this function.
         matrix_reports.generate_matrix_reports(
             matrix_dir=pathlib.Path(self.export_paths.full_pa_dir),
             report_dir=pathlib.Path(self.report_paths.pa_reports_dir),
             matrix_segmentation=self.running_segmentation,
             matrix_zoning_system=self.compile_zoning_system,
             matrix_fname_template=input_fname_template,
+            cost_matrices=cost_matrices,
             row_name='productions',
             col_name='attractions',
         )
-        exit()
-
-        # PA RUN REPORTS
-        # Matrix Trip ENd totals
-        #   Inter / Intra Report by segment?
-        #   Aggregate segments and report again too? (CBO)
-        nd.constants.USER_CLASS_PURPOSES
-        # Sector Reports Dvec style
-        #   Output 24x24 square at 24hr
-        # TLD curve
-        #   single mile bands - p/m (ca ) segments full matrix
-        #   NorMITs Vis
-
-        # Init
-        report_zoning = self.compile_zoning_system
-        cost_dict = self.arg_builder.build_pa_report_arguments(report_zoning)
-
-        print("test")
-        print("demand dir:" + self.export_paths.full_pa_dir)
-        print("output dir:" + self.report_paths.pa_reports_dir)
-        in_dir = self.export_paths.full_pa_dir
-        out_dir = pathlib.Path(self.report_paths.pa_reports_dir)
-        sector_list = list()
-
-        desc = "Generating PA Reports"
-        for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc):
-            # ## SETUP ## #
-            # Get the cost for this segment
-            segment_name = self.running_segmentation.get_segment_name(segment_params)
-            cost_matrix = cost_dict[segment_name]
-
-            # ## GENERATE COST DISTRIBUTION CURVES ## #
-            achieved_distribution = cost_utils.calculate_cost_distribution(
-                matrix=df.values,
-                cost_matrix=cost_matrix,
-                bin_edges=[0, 1, 10, 100]
-            )
 
     def _maybe_recombine_pa_matrices(self):
         """Combine pa matrices if it hasn't been done yet"""

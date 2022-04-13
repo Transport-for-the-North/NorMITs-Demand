@@ -18,17 +18,20 @@ from typing import Dict
 from typing import Tuple
 
 # Third Party
+import numpy as np
 import pandas as pd
 import tqdm
 
 # Local Imports
 # pylint: disable=import-error
+from normits_demand import constants as nd_constants
 from normits_demand import reports
 from normits_demand import core as nd_core
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import translation
 from normits_demand.utils import pandas_utils as pd_utils
+from normits_demand.cost import utils as cost_utils
 from normits_demand.reports import templates
 # pylint: enable=import-error
 
@@ -227,8 +230,6 @@ def generate_excel_sector_report(
     report_template = reports.ReportTemplates.DISTRIBUTION_MODEL_MATRIX
     report_template.copy_report_template(output_path)
 
-    print(sector_report_data.sector_data)
-
     # Add sector data to the report
     pd_utils.append_df_to_excel(
         df=sector_report_data.sector_data,
@@ -246,6 +247,7 @@ def generate_matrix_reports(
     matrix_segmentation: nd_core.SegmentationLevel,
     matrix_zoning_system: nd_core.ZoningSystem,
     matrix_fname_template: str,
+    cost_matrices: Dict[str, np.ndarray],
     row_name: str,
     col_name: str,
 ):
@@ -256,6 +258,10 @@ def generate_matrix_reports(
     # nd.constants.USER_CLASS_PURPOSES
     # TLD curve
     #   single mile bands - p/m (ca ) segments full matrix
+
+    # TODO(PW, BT): Add constants such as this to the report on the fly in
+    #  one of the reference sheets
+    nd_constants.USER_CLASS_PURPOSES
 
     # Init
     val_col_name = "val"
@@ -276,7 +282,7 @@ def generate_matrix_reports(
 
     desc = "Generating PA Reports"
     for segment_params in tqdm.tqdm(matrix_segmentation, desc=desc):
-        # Read in the matrix
+        # ## TRIP END SUMMARY ## #
         segment_fname = matrix_segmentation.generate_file_name_from_template(
             template=matrix_fname_template,
             segment_params=segment_params,
@@ -285,14 +291,14 @@ def generate_matrix_reports(
         matrix = file_ops.read_df(path, find_similar=True, index_col=0)
 
         # Summarise into trip ends
-        # row_summary, col_summary = matrix_to_trip_ends(
-        #     matrix=matrix,
-        #     segment_params=segment_params,
-        # )
-        # trip_end_rows.append(row_summary)
-        # trip_end_cols.append(col_summary)
+        row_summary, col_summary = matrix_to_trip_ends(
+            matrix=matrix,
+            segment_params=segment_params,
+        )
+        trip_end_rows.append(row_summary)
+        trip_end_cols.append(col_summary)
 
-        # Summarise as sectors
+        # ## SECTOR SUMMARY ## #
         sector_matrix, long_sector_matrix = matrix_sector_summary(
             matrix=matrix,
             segment_params=segment_params,
@@ -307,18 +313,29 @@ def generate_matrix_reports(
         sector_fname = segment_fname.replace('synthetic_pa', 'ca_sector')
         sector_matrix.to_csv(sector_matrix_dir / sector_fname)
 
+        # ## GENERATE COST DISTRIBUTION CURVES ## #
+        # TODO(BT, PW): Pass in the right bands here
+        #  Pass this data into generate_excel_sector_report() below, and add
+        #  into the sector report
+        segment_name = matrix_segmentation.get_segment_name(segment_params)
+        achieved_distribution = cost_utils.calculate_cost_distribution(
+            matrix=matrix.values,
+            cost_matrix=cost_matrices[segment_name],
+            bin_edges=[0, 1, 10, 100]
+        )
+
     # ## GENERATE TRIP END REPORTS ## #
-    # kwargs = {
-    #     "segmentation": matrix_segmentation,
-    #     "zoning_system": matrix_zoning_system,
-    #     "output_dir": trip_end_report_dir,
-    # }
-    #
-    # trip_end = pd.concat(trip_end_rows, ignore_index=True)
-    # write_trip_end_sector_reports(trip_end, fname_prefix=row_name, **kwargs)  # type: ignore
-    #
-    # trip_end = pd.concat(trip_end_cols, ignore_index=True)
-    # write_trip_end_sector_reports(trip_end, fname_prefix=col_name, **kwargs)  # type: ignore
+    kwargs = {
+        "segmentation": matrix_segmentation,
+        "zoning_system": matrix_zoning_system,
+        "output_dir": trip_end_report_dir,
+    }
+
+    trip_end = pd.concat(trip_end_rows, ignore_index=True)
+    write_trip_end_sector_reports(trip_end, fname_prefix=row_name, **kwargs)  # type: ignore
+
+    trip_end = pd.concat(trip_end_cols, ignore_index=True)
+    write_trip_end_sector_reports(trip_end, fname_prefix=col_name, **kwargs)  # type: ignore
 
     # ## GENERATE EXCEL SECTOR REPORT ## #
     sector_report_data = templates.DistributionModelMatrixReportSectorData(
