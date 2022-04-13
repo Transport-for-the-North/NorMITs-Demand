@@ -27,8 +27,6 @@ import pandas as pd
 
 # Local Imports
 # pylint: disable=import-error
-from normits_demand import core as nd_core
-from normits_demand import logging as nd_log
 from normits_demand.utils import general as du
 # pylint: enable=import-error
 
