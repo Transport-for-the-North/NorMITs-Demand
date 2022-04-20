@@ -155,7 +155,9 @@ def get_file_lookup(folder: Path) -> dict[MatrixDetails, list[Path]]:
 
 
 def combine_full_matrices(
-    files_lookup: dict[MatrixDetails, list[Path]], output_folder: Path
+    files_lookup: dict[MatrixDetails, list[Path]],
+    output_folder: Path,
+    overwrite: bool = False,
 ) -> dict[str, dict[str, Path]]:
     """Combine purpose matrices into the MiRANDA user classes.
 
@@ -166,6 +168,9 @@ def combine_full_matrices(
         from `get_file_lookup`.
     output_folder : Path
         Folder to save MiRANDA user class matrices in, as CSVs.
+    overwrite : bool, default False
+        Recreate the combined output matrix even if it already exists,
+        otherwise don't bother.
 
     Returns
     -------
@@ -186,16 +191,18 @@ def combine_full_matrices(
         files_lookup.items(), desc="Combining OD matrices", dynamic_ncols=True
     )
     for details, files in pbar:
-        matrix: pd.DataFrame = pd.read_csv(files[0], index_col=0)
-        for path in files[1:]:
-            matrix += pd.read_csv(path, index_col=0)
-        matrix.index.name = "origin"
-        matrix.columns.name = "destination"  # pylint: disable=no-member
-        matrix = matrix.stack().to_frame("trips")  # pylint: disable=no-member
-
         tp = TIME_PERIODS[details.time_period]
         out = output_folder / f"{tp}_{details.user_class}.csv"
-        matrix.reset_index().to_csv(out, index=False, header=False)
+
+        if overwrite or not out.exists():
+            matrix: pd.DataFrame = pd.read_csv(files[0], index_col=0)
+            for path in files[1:]:
+                matrix += pd.read_csv(path, index_col=0)
+            matrix.index.name = "origin"
+            matrix.columns.name = "destination"  # pylint: disable=no-member
+            matrix = matrix.stack().to_frame("trips")  # pylint: disable=no-member
+            matrix.reset_index().to_csv(out, index=False, header=False)
+
         new_matrices[tp][details.user_class] = out
 
     # Sort internal dict
@@ -256,7 +263,7 @@ def main(params: ODToCUBEParameters, init_logger: bool = True) -> None:
 ##### MAIN #####
 if __name__ == "__main__":
     # TODO Replace testing code
-    dm_iteration = "iter9.6.1"
+    dm_iteration = "iter9.6.2"
     parameters = ODToCUBEParameters(
         cube_voyager_path=Path(r"C:\Program Files\Citilabs\CubeVoyager\VOYAGER.EXE"),
         model_name="miranda",

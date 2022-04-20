@@ -126,7 +126,6 @@ class CUBEMatConverter:
             _stdout_decode(comp_proc.stdout),
             _stdout_decode(comp_proc.stderr),
         )
-        comp_proc.check_returncode()
 
         if not mat_path.is_file():
             raise CUBEMatConverterError("error converting CSV to CUBE .mat")
