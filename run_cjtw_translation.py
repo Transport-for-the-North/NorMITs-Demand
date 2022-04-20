@@ -1,38 +1,31 @@
 
 import os
-import itertools
 from normits_demand.utils import cjtw_processing
 
 if __name__ == '__main__':
     
     model_name = 'Nelum'
     model_folder = 'I:/NorMITs Synthesiser/Nelum/Model Zone Lookups'
-    out_drive = 'C:\\'
+    out_drive = 'I:\\'
     out_path = os.path.join(out_drive,
-                            'Users',
-                            os.getlogin(),
-                            'Documents')
+                            r'NorMITs Synthesiser\Nelum\iter5\cjtw working')
 
     co = cjtw_processing.CjtwTranslator(model_name=model_name,
                                         model_folder=model_folder)
 
-    nelum_cjtw = co.cjtw_to_model_zone(target_year=2018)
+    base_cjtw = co.build_base_cjtw()
+    future_cjtw = co.cjtw_to_future_year(base_cjtw,
+                                         target_year=2018)
+    cjtw_to_model_zone = co.cjtw_to_model_zone(future_cjtw)
 
-    # Build export iterator
-    # TODO: Make customisable segments
-    unq_tp = nelum_cjtw['TimePeriod'].unique()
-    unq_m = nelum_cjtw['mode'].unique()
-
-    for tp, m in itertools.product(unq_tp, unq_m):
-
-        out_sub = nelum_cjtw.copy()
-        # Filter
-        out_sub = out_sub[out_sub['TimePeriod'] == tp]
-        out_sub = out_sub[out_sub['mode'] == m]
-
-        # Path
-        path = 'nelum_cjtw_yr2018_p1_m%d_tp%d' % (m, tp)
-
-        # Out
-        out_sub.to_csv(os.path.join(
-            out_path, path + '.csv'), index=False)
+    # Write out
+    msoa_path = os.path.join(out_path, '2018 msoa')
+    co.export_by_segment(future_cjtw,
+                         model_zoning='msoa',
+                         year=2018,
+                         out_path=msoa_path)
+    nelum_path = os.path.join(out_path, '2018 nelum prior method')
+    co.export_by_segment(cjtw_to_model_zone,
+                         model_zoning='nelum',
+                         year=2018,
+                         out_path=nelum_path)
