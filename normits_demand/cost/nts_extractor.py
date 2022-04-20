@@ -118,6 +118,10 @@ class TripLengthDistributionBuilder:
         if len(band_options) == 0:
             raise ValueError('no trip length bands in folder')
 
+        # TODO: self.trip_length_bands as a list
+        # TODO: allow append
+        # TODO: read in as a method
+
         bands_confirmed = False
         while not bands_confirmed:
             for (i, option) in enumerate(band_options, 0):
@@ -491,10 +495,10 @@ class TripLengthDistributionBuilder:
 
         return out_mat, final
 
-    def run_tour_props(self,
+    def build_phi_factors(self,
                        default_to_p: bool = True):
 
-        target_cols = ['SurveyYear', 'TravelWeekDay_B01ID', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc',
+        target_cols = ['SurveyYear', 'IndividualID', 'TravelWeekDay_B01ID', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc',
                        'ns', 'main_mode', 'hb_purpose', 'nhb_purpose', 'nhb_purpose_hb_leg', 'Sex_B01ID',
                        'TripPurpFrom_B01ID', 'TripPurpTo_B01ID',
                        'trip_origin', 'start_time', 'end_time', 'TripDisIncSW', 'TripOrigGOR_B02ID',
@@ -514,8 +518,8 @@ class TripLengthDistributionBuilder:
         purpose_col = 'nhb_purpose_hb_leg'
         time_frh_col = 'frh_tp'
         time_toh_col = 'start_time'
-        toh_col = 'TripPurpTo_B01ID'
-        trip_col = 'W5'
+        toh_col = 'trip_type'
+        trip_col = 'weighted_trip'
         filter_short_distance = False
         short_distance_cutoff = 1
 
@@ -554,7 +558,7 @@ class TripLengthDistributionBuilder:
         phi_trip = phi[trip_col].sum()
         phi_trip = phi_trip.reset_index()
 
-        phi_trip.to_csv('car_phi_test_4.csv', index=False)
+        phi_trip.to_csv('car_phi_test_6.csv', index=False)
 
         return 0
 

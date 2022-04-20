@@ -17,18 +17,18 @@ import sys
 
 # Local Imports
 sys.path.append("..")
-from normits_demand.cost import tld_builder
+from normits_demand.cost import nts_extractor
 
 
 def main():
     # TODO(CS): path and smart search should be in constants
     _TLB_FOLDER = 'I:/NorMITs Demand/import/trip_length_distributions'
-    _NTS_IMPORT = 'I:/NTS/classified builds/cb_tfn.csv'
+    _NTS_IMPORT = 'I:/NTS/classified builds/cb_tfn_v9.csv'
     output_home = r'I:\NorMITs Demand\import\trip_length_distributions\tld_tool_outputs'
 
     run_another = True
     while run_another:
-        extract = tld_builder.TripLengthDistributionBuilder(
+        extract = nts_extractor.TripLengthDistributionBuilder(
             tlb_folder=_TLB_FOLDER,
             nts_import=_NTS_IMPORT,
             output_home=output_home,
@@ -36,7 +36,11 @@ def main():
 
         extract.run_tlb_lookups(weekday=True)
 
-        extract.run_tour_props(default_to_p = True)
+        extract.build_mode_time_splits()
+
+        extract.build_phi_factors(default_to_p = True)
+
+        extract.build_tour_props()
 
         if input('Run another y/n').lower() == 'n':
             run_another = False
