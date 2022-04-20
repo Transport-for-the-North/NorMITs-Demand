@@ -23,7 +23,7 @@ from normits_demand.pathing import MiTEMImportPaths
 ##### CONSTANTS #####
 years = run_notem.years
 scenario = run_notem.scenario
-mitem_iter = run_notem.notem_iter
+mitem_iter = "9.6b"
 lu_drive = run_notem.lu_drive
 by_iteration = run_notem.by_iteration
 fy_iteration = run_notem.fy_iteration
