@@ -263,6 +263,7 @@ def tms_tour_prop():
                     out_path = os.path.join(out_folder, out_file + ".pkl")
                     nd.write_pickle(tfn_tour_props, out_path)
 
+                print(f"Written {mode.value} TMS tour proportions for {year} to: {out_folder}")
 
 if __name__ == '__main__':
     tms_tour_prop()
