@@ -37,7 +37,7 @@ from normits_demand.utils import file_ops
 # ## GLOBALS ## #
 # Running variables
 MODEL_NAME = 'miranda'
-NOTEM_ITER = '9.6'
+NOTEM_ITER = '9.6b'
 MODE = nd.Mode.TRAIN
 
 TOUR_PROP_DIR = (

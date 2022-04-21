@@ -13,6 +13,7 @@ Pre ME tour proportions Generation
 
 # Built-Ins
 import os
+from pathlib import Path
 import sys
 import collections
 
@@ -32,8 +33,8 @@ MODES = [nd.Mode.TRAIN]
 YEARS = [2018]
 TPS = [1, 2, 3, 4]
 ZONING_SYSTEM = "miranda"
-NOTEM_ITER = '9.6'
-out_folder = r"C:\WSP_Projects\MidMITs\01 Pre-processing\Tour Proportions"
+NOTEM_ITER = '9.6b'
+OUT_FOLDER_FMT = r"I:\NorMITs Demand\import\modal\{mode_name}\pre_me_tour_proportions\v{iter}\{zone_name}"
 
 phi_import_folder = r"I:\NorMITs Demand\import\phi_factors"
 notem_import_folder = r"T:\MidMITs Demand\MiTEM\iter%s\SC01_JAM\hb_productions" % NOTEM_ITER
@@ -52,6 +53,11 @@ def tms_tour_prop():
 
     for year in YEARS:
         for mode in MODES:
+
+            out_folder = OUT_FOLDER_FMT.format(
+                mode_name=mode.get_name(), iter=NOTEM_ITER, zone_name=ZONING_SYSTEM
+            )
+            Path(out_folder).mkdir(exist_ok=True, parents=True)
 
             # ## GRAB PHI FACTORS BY MODE ## #
             print("Reading in Phi factors...")
