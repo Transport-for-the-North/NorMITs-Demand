@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-    Script for producing maps and graphs for the NTEM forecasting report.
-"""
+"""Script for producing maps and graphs for the NTEM forecasting report."""
 
 ##### IMPORTS #####
 from __future__ import annotations
@@ -10,6 +8,7 @@ from __future__ import annotations
 import collections
 import dataclasses
 import enum
+import math
 from pathlib import Path
 import re
 import sys
@@ -20,7 +19,7 @@ import warnings
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt, figure, ticker
+from matplotlib import pyplot as plt, figure, ticker, patches
 import matplotlib.backends.backend_pdf as backend_pdf
 from shapely import geometry
 
@@ -51,20 +50,31 @@ TFN_COLOURS = [
 ##### CLASSES #####
 @dataclasses.dataclass
 class MatrixTripEnds:
+    """Dataclass for storing matrix productions and attractions trip ends."""
+
     productions: pd.DataFrame
     attractions: pd.DataFrame
 
     def _check_other(self, other: Any, operation: str) -> None:
-        if not isinstance(other, MatrixTripEnds):
+        if not isinstance(other, type(self)):
             raise TypeError(f"cannot perform {operation} with {type(other)}")
 
     def __add__(self, other: MatrixTripEnds) -> MatrixTripEnds:
+        """Add productions and attractions from `other` to self."""
         self._check_other(other, "addition")
         return MatrixTripEnds(
             self.productions + other.productions, self.attractions + other.attractions
         )
 
+    def __sub__(self, other: MatrixTripEnds) -> MatrixTripEnds:
+        """Subtract productions and attractions from `other` from self."""
+        self._check_other(other, "subtraction")
+        return MatrixTripEnds(
+            self.productions - other.productions, self.attractions - other.attractions
+        )
+
     def __truediv__(self, other: MatrixTripEnds) -> MatrixTripEnds:
+        """Divide productions and attractions from self by `other`."""
         self._check_other(other, "division")
         return MatrixTripEnds(
             self.productions / other.productions, self.attractions / other.attractions
@@ -72,47 +82,83 @@ class MatrixTripEnds:
 
 
 class GeoSpatialFile(NamedTuple):
+    """Path to a geospatial file and the relevant ID column name."""
+
     path: Path
     id_column: str
 
 
 @dataclasses.dataclass
 class PAPlotsParameters:
+    """Parameters for producing the NTEM comparison plots."""
+
     base_matrix_folder: Path
     forecast_matrix_folder: Path
     matrix_zoning: str
     plot_zoning: str
     output_folder: Path
     geospatial_file: GeoSpatialFile
-    analytical_area_shape: Path
+    analytical_area_shape: GeoSpatialFile
+    tempro_comparison_folder: Path
 
 
 class PlotType(nd_enum.AutoName):
+    """Plot type options for use in `matrix_total_plots`."""
+
     BAR = enum.auto()
     LINE = enum.auto()
 
 
 ##### FUNCTIONS #####
 def match_files(folder: Path, pattern: re.Pattern) -> Iterator[tuple[dict[str, str], Path]]:
+    """Iterate through all files in folder which match `pattern`.
+
+    Parameters
+    ----------
+    folder : Path
+        Folder to find files in.
+    pattern : re.Pattern
+        Pattern that the filename should match.
+
+    Yields
+    ------
+    dict[str, str]
+        Dictionary of `pattern` groups and their values.
+    Path
+        Path to the file.
+    """
     for file in folder.iterdir():
         if not file.is_file():
             continue
         match = pattern.match(file.stem)
         if match is None:
             continue
-        # FIXME Remove if statement
-        md = match.groupdict()
-        if md["trip_origin"] == "hb":
-            if ("user_class" in md and md["user_class"] == "commute") or (
-                "purpose" in md and md["purpose"] == "1"
-            ):
-                yield match.groupdict(), file
-                break
+        yield match.groupdict(), file
 
 
-def matrix_totals(
+def get_matrix_totals(
     matrix: pd.DataFrame, zoning_name: str, trip_origin: str, user_class: str, year: str
 ) -> pd.DataFrame:
+    """Calculate the matrix II, IE, EI, EE trip end totals.
+
+    Parameters
+    ----------
+    matrix : pd.DataFrame
+        PA matrix.
+    zoning_name : str
+        Name of matrix zone system
+    trip_origin : str
+        Name of trip origin type 'hb' or 'nhb'.
+    user_class : str
+        Name of the user class.
+    year : str
+        Matrix year.
+
+    Returns
+    -------
+    pd.DataFrame
+        Trip end matrix totals by matrix area type.
+    """
     zoning = nd.get_zoning_system(zoning_name)
     totals = pandas_utils.internal_external_report(
         matrix, zoning.internal_zones, zoning.external_zones
@@ -156,9 +202,29 @@ def matrix_totals(
 def matrix_trip_ends(
     matrix: Path, matrix_zoning: str, to_zoning: str = None, **kwargs
 ) -> tuple[MatrixTripEnds, pd.DataFrame]:
+    """Calculate the matrix trip ends and totals for a given matrix file.
+
+    Matrix trip ends are returned in the `to_zoning` system.
+
+    Parameters
+    ----------
+    matrix : Path
+        Path to PA matrix CSV.
+    matrix_zoning : str
+        Zoning system of the `matrix`.
+    to_zoning : str, optional
+        Zoning system to return the trip ends in.
+
+    Returns
+    -------
+    MatrixTripEnds
+        Productions and attractions trip ends at `to_zoning`.
+    pd.DataFrame
+        Productions and attractions totals.
+    """
     mat = file_ops.read_df(matrix, find_similar=True, index_col=0)
     mat.columns = pd.to_numeric(mat.columns, downcast="integer")
-    totals = matrix_totals(mat, matrix_zoning, **kwargs)
+    totals = get_matrix_totals(mat, matrix_zoning, **kwargs)
     if to_zoning:
         mat = ntem_forecast_checks.translate_matrix(mat, matrix_zoning, to_zoning)
         matrix_zoning = to_zoning
@@ -168,6 +234,25 @@ def matrix_trip_ends(
 def get_base_trip_ends(
     folder: Path, matrix_zoning: str, plot_zoning: str
 ) -> tuple[dict[tuple[str, str], MatrixTripEnds], pd.DataFrame]:
+    """Read matrices from `folder` and return trip ends.
+
+    Parameters
+    ----------
+    folder : Path
+        Folder containing NTEM PA matrices.
+    matrix_zoning : str
+        Zoning system of the matrix files.
+    plot_zoning : str
+        Zoning system to convert the trip ends to.
+
+    Returns
+    -------
+    dict[tuple[str, str], MatrixTripEnds]
+        Dictionary containing all the matrix trip ends at `plot_zoning`
+        with trip origin and user class as the keys.
+    pd.DataFrame
+        Dataframe containing the trip end totals for all matrices.
+    """
     UC_LOOKUP = collections.defaultdict(
         lambda: "other", {**dict.fromkeys((2, 12), "business"), 1: "commute"}
     )
@@ -200,7 +285,7 @@ def get_base_trip_ends(
     return trip_ends, pd.concat(matrix_totals)
 
 
-def plot_bars(
+def _plot_bars(
     ax: plt.Axes,
     x_data: np.ndarray,
     y_data: np.ndarray,
@@ -211,6 +296,7 @@ def plot_bars(
     max_height: float,
     label_fmt: str = ".3g",
 ):
+    """Creates the bar plots used in `matrix_total_plots`."""
     bars = ax.bar(
         x_data,
         y_data,
@@ -237,7 +323,7 @@ def plot_bars(
         )
 
 
-def plot_line(
+def _plot_line(
     ax: plt.Axes,
     x_data: np.ndarray,
     y_data: np.ndarray,
@@ -246,6 +332,7 @@ def plot_line(
     label: str,
     label_fmt: str = ".3g",
 ):
+    """Creates the line plots used in `matrix_total_plots`."""
     ax.plot(x_data, y_data, label=label, color=colour, marker="+")
 
     for x, y in zip(x_data, y_data):
@@ -269,6 +356,29 @@ def plot_line(
 def matrix_total_plots(
     totals: pd.DataFrame, title: str, ylabel: str, plot_type: PlotType = PlotType.BAR
 ) -> figure.Figure:
+    """Create single graph for trip end totals and return figure.
+
+    Parameters
+    ----------
+    totals : pd.DataFrame
+        DataFrame containing trip end totals for HB/NHB productions and attractions.
+    title : str
+        Title for the graphs.
+    ylabel : str
+        Label on the Y axis.
+    plot_type : PlotType, default PlotType.BAR
+        Whether to do a bar or line plot.
+
+    Returns
+    -------
+    figure.Figure
+        Matplotlib figure with 2 axes.
+
+    Raises
+    ------
+    ValueError
+        If `plot_type` isn't valid.
+    """
     fig, axes = plt.subplots(2, 1, figsize=(10, 15), tight_layout=True)
     fig.suptitle(title)
     colours = dict(zip(("business", "commute", "other"), TFN_COLOURS))
@@ -288,12 +398,12 @@ def matrix_total_plots(
                 label_fmt=fmt,
             )
             if plot_type == PlotType.BAR:
-                plot_bars(
+                _plot_bars(
                     ax, x + i * width, row.values, width=width, max_height=max_height, **kwargs
                 )
             elif plot_type == PlotType.LINE:
                 years = pd.to_numeric(row.index, downcast="integer")
-                plot_line(ax, years, row.values, **kwargs)
+                _plot_line(ax, years, row.values, **kwargs)
             else:
                 raise ValueError(f"plot_type should be PlotType not {plot_type}")
 
@@ -314,7 +424,16 @@ def plot_all_matrix_totals(
     totals: pd.DataFrame,
     out_path: Path,
 ):
-    # TODO Plot internal and external separately
+    """Plot the matrix trip end totals and growths.
+
+    Parameters
+    ----------
+    totals : pd.DataFrame
+        DataFrame containing the matrix trip end totals at various
+        spatial aggregations.
+    out_path : Path
+        Path to save the PDF containing all the plots.
+    """
     out_path = out_path.with_suffix(".pdf")
     with backend_pdf.PdfPages(out_path) as pdf:
         for area in totals.index.get_level_values(0).unique():
@@ -338,16 +457,24 @@ def plot_all_matrix_totals(
 
 
 def get_geo_data(file: GeoSpatialFile) -> gpd.GeoSeries:
+    """Read shapefile data, set index to given ID column and convert CRS to EPSG=27700."""
     geo = gpd.read_file(file.path)
     if file.id_column not in geo.columns:
         raise KeyError(f"{file.id_column} missing from {file.path.name}")
     geo = geo.set_index(file.id_column)
+    geo = geo.to_crs(27700)
     return geo["geometry"]
 
 
 def _heatmap_figure(
-    geodata: gpd.GeoDataFrame, column_name: str, title: str, bins: list[int] = None
+    geodata: gpd.GeoDataFrame,
+    column_name: str,
+    title: str,
+    bins: list[Union[int, float]] = None,
+    analytical_area: Union[geometry.Polygon, geometry.MultiPolygon] = None,
 ):
+    LEGEND_KWARGS = dict(title_fontsize="xx-large", fontsize="x-large")
+
     fig, axes = plt.subplots(1, 2, figsize=(20, 15), frameon=False, constrained_layout=True)
     fig.suptitle(title, fontsize="xx-large")
     for ax in axes:
@@ -356,6 +483,10 @@ def _heatmap_figure(
         ax.set_yticklabels([])
         ax.tick_params(length=0)
         ax.set_axis_off()
+        if analytical_area is not None:
+            add_analytical_area(ax, analytical_area)
+    if analytical_area is not None:
+        axes[0].legend(**LEGEND_KWARGS, loc="upper right")
 
     # Drop nan
     geodata = geodata.loc[~geodata[column_name].isna()]
@@ -367,9 +498,8 @@ def _heatmap_figure(
         k=7,
         legend_kwds=dict(
             title=f"{column_name.title()}",
-            title_fontsize="xx-large",
-            fontsize="x-large",
-            fmt="{:.3g}",
+            **LEGEND_KWARGS,
+            loc="upper right",
         ),
         # missing_kwds={
         #     "color": "lightgrey",
@@ -379,9 +509,16 @@ def _heatmap_figure(
         # },
         linewidth=0.001,
     )
+
     if bins:
         kwargs["scheme"] = "UserDefined"
+        bins = sorted(bins)
+        max_ = np.max(geodata[column_name].values)
+        if bins[-1] < max_:
+            bins[-1] = math.ceil(max_)
         kwargs["classification_kwds"] = {"bins": bins}
+        del kwargs["k"]
+
     # If the quatiles scheme throws a warning then use FisherJenksSampled
     warnings.simplefilter("error", category=UserWarning)
     try:
@@ -394,6 +531,25 @@ def _heatmap_figure(
     finally:
         warnings.simplefilter("default", category=UserWarning)
 
+    # Format legend text
+    legend = axes[1].get_legend()
+    for label in legend.get_texts():
+        text = label.get_text()
+        values = [float(s.strip()) for s in text.split(",")]
+        lower = np.floor(values[0] * 100) / 100
+        upper = np.ceil(values[1] * 100) / 100
+        # Set to 0 if 0 or -0
+        lower = 0 if lower == 0 else lower
+        upper = 0 if upper == 0 else upper
+
+        if lower == -np.inf:
+            text = f"< {upper:.0%}"
+        elif upper == np.inf:
+            text = f"> {lower:.0%}"
+        else:
+            text = f"{lower:.0%} - {upper:.0%}"
+        label.set_text(text)
+
     axes[1].set_xlim(290000, 560000)
     axes[1].set_ylim(300000, 680000)
     axes[1].annotate(
@@ -402,7 +558,6 @@ def _heatmap_figure(
         xycoords="figure fraction",
         bbox=dict(boxstyle="square", fc="white"),
     )
-
     return fig
 
 
@@ -412,9 +567,30 @@ def trip_end_growth_heatmap(
     forecast: MatrixTripEnds,
     output_path: Path,
     title: str,
-    bins: list[int] = None,
+    bins: list[Union[int, float]] = None,
+    analytical_area: Union[geometry.Polygon, geometry.MultiPolygon] = None,
 ):
-    growth = forecast / base
+    """Create heatmap of the trip end growth.
+
+    Parameters
+    ----------
+    geospatial : gpd.GeoSeries
+        Polygons for creating the heatmap.
+    base : MatrixTripEnds
+        Trip ends for the base matrix.
+    forecast : MatrixTripEnds
+        Trip ends for the forecast matrix.
+    output_path : Path
+        Path to save the output to.
+    title : str
+        Title to use for the plots.
+    bins : list[Union[int, float]], optional
+        Bands to use for the heat map if not given will
+        calculate appropriate bins.
+    analytical_area : Union[geometry.Polygon, geometry.MultiPolygon], optional
+        Polygon to add to the map showing the analytical area boundary.
+    """
+    growth = (forecast / base) - MatrixTripEnds(1, 1)
 
     with backend_pdf.PdfPages(output_path) as pdf:
         for field in dataclasses.fields(MatrixTripEnds):
@@ -427,8 +603,9 @@ def trip_end_growth_heatmap(
                 geometry="geometry",
             )
 
-            fig = _heatmap_figure(geodata, name, title, bins)
+            fig = _heatmap_figure(geodata, name, title, bins, analytical_area)
             pdf.savefig(fig)
+            plt.close()
 
     LOG.info("Saved: %s", output_path)
 
@@ -440,7 +617,27 @@ def ntem_pa_plots(
     plot_zoning: str,
     out_folder: Path,
     geospatial_file: GeoSpatialFile,
+    analytical_area_file: GeoSpatialFile,
 ):
+    """Create PA trip end growth graphs and maps.
+
+    Parameters
+    ----------
+    base_folder : Path
+        Folder containing the base PA matrices.
+    forecast_folder : Path
+        Folder containing the forecast PA matrices.
+    matrix_zoning : str
+        Zoning system that the matrices are in.
+    plot_zoning : str
+        Zoning system to output the maps in.
+    out_folder : Path
+        Folder to save the output maps and graphs to.
+    geospatial_file : GeoSpatialFile
+        File containing the spatial data for creating the maps.
+    analytical_area_file : GeoSpatialFile
+        File containing the spatial data for the analytical area boundary.
+    """
     warnings.filterwarnings(
         "ignore", message=".*zones in the matrix are missing", category=UserWarning
     )
@@ -449,6 +646,7 @@ def ntem_pa_plots(
     base_totals = base_totals.groupby(index_cols).sum()
 
     geospatial = get_geo_data(geospatial_file)
+    analytical_area = get_geo_data(analytical_area_file).iloc[0]
 
     # Iterate through files which have the correct name pattern
     LOG.info("Extracting forecast trip ends from %s", forecast_folder)
@@ -472,7 +670,6 @@ def ntem_pa_plots(
         )
         forecast_totals.append(total)
 
-        # TODO Create maps of trip end growth
         base_key = (params["trip_origin"], params["user_class"])
         trip_end_growth_heatmap(
             geospatial,
@@ -487,8 +684,9 @@ def ntem_pa_plots(
                 params["trip_origin"].upper(),
                 params["user_class"].title(),
             ),
+            analytical_area=analytical_area,
+            bins=[-0.05, 0, 0.05, 0.1, 0.15, 0.2],
         )
-        print()
 
     forecast_totals: pd.DataFrame = pd.concat(forecast_totals)
     forecast_totals = forecast_totals.groupby(index_cols).agg(np.nansum)
@@ -497,40 +695,34 @@ def ntem_pa_plots(
         out_folder / "NTEM_PA_matrix_totals.pdf",
     )
 
-def remove_poly_holes(polygon: Union[geometry.Polygon, geometry.MultiPolygon]) -> Union[geometry.Polygon, geometry.MultiPolygon]:
-    if isinstance(polygon, geometry.Polygon):
-        return geometry.Polygon(polygon.exterior.coords)
-    elif not isinstance(polygon, geometry.MultiPolygon):
-        raise TypeError(f"expected Polygon or MultiPolygon not {type(polygon)}")
-    
-    multi = []
-    for poly in polygon.geoms:
-        multi.append(geometry.Polygon(poly))
-    return geometry.MultiPolygon(multi)
-
 
 def ntem_tempro_comparison_plots(
-    comparison_folder: Path, geospatial_file: GeoSpatialFile, plot_zoning: str, analytical_area_shape: Path
+    comparison_folder: Path,
+    geospatial_file: GeoSpatialFile,
+    plot_zoning: str,
+    analytical_area_shape: GeoSpatialFile,
+    output_folder: Path,
 ):
+    """Create growth comparison maps and CSVs for NTEM vs TEMPro.
+
+    Parameters
+    ----------
+    comparison_folder : Path
+        Folder containing growth comparison data CSVs.
+    geospatial_file : GeoSpatialFile
+        Polygon shapefile containing data for mapping.
+    plot_zoning : str
+        Level of zoning to do the plot at.
+    analytical_area_shape : GeoSpatialFile
+        Shapefile showing the analytical area, used as a boundary
+        on the map.
+    output_folder : Path
+        Folder to save output CSVs and PDF graphs to.
+    """
+    LOG.info("Producing NTEM vs TEMPro comparison plots")
     comp_zone_lookup = {"lad_2020": "LAD"}
     geospatial = get_geo_data(geospatial_file)
-    analytical_area = gpd.read_file(analytical_area_shape)
-    analytical_area = analytical_area.to_crs(epsg=27700)
-    buff = analytical_area.copy()
-    buff.loc[:, "geometry"] = analytical_area.buffer(100)
-    buff.plot(ec="red", linewidth=2)
-    plt.show()
-    dissolve = analytical_area.dissolve()
-    dissolve.loc[:, "geometry"] = dissolve.geometry.apply(remove_poly_holes)
-    geom = dissolve.loc[:, "geometry"]
-    # TODO Add TfN area overlay to maps
-    geoms = gpd.GeoDataFrame(geom,)
-    dissolve.plot(ec="red", linewidth=2)
-    plt.show()
-
-
-    for geo in dissolve.iloc[0, 0]:
-        print(geo.area / 1e6)
+    analytical_area = get_geo_data(analytical_area_shape).iloc[0]
 
     comparison_filename = "PA_TEMPro_comparisons-{year}-{zone}"
     zone = comp_zone_lookup.get(plot_zoning, plot_zoning)
@@ -554,63 +746,159 @@ def ntem_tempro_comparison_plots(
             "growth_difference": "growth_difference",
         }
         comparison = pd.read_csv(file, usecols=columns.keys()).rename(columns=columns)
-        comparison = comparison.merge(geospatial, left_on="zone", right_index=True, how="left", validate="m:1")
-        
-        # Group into HB/NHB productions and attractions, then recalculate growth
-        trip_end_groups = comparison.groupby(["zone", "trip_origin", "pa"], as_index=False).agg({"matrix_base": "sum", "matrix_forecast": "sum"
-        , "tempro_base": "sum", "tempro_forecast": "sum", "geometry": "first"})
-        for nm in ("matrix", "tempro"):
-            trip_end_groups.loc[:, f"{nm}_growth"] = trip_end_groups[f"{nm}_forecast"] / trip_end_groups[f"{nm}_base"]
-        trip_end_groups.loc[:, "growth_difference"] = trip_end_groups["matrix_growth"] - trip_end_groups["tempro_growth"]
+        comparison = comparison.merge(
+            geospatial, left_on="zone", right_index=True, how="left", validate="m:1"
+        )
 
-        for to, pa in trip_end_groups[["trip_origin", "pa"]].drop_duplicates().itertuples(index=False):
-            print(to, pa)
+        # Group into HB/NHB productions and attractions, then recalculate growth
+        trip_end_groups = comparison.groupby(
+            ["zone", "trip_origin", "pa"], as_index=False
+        ).agg(
+            {
+                "matrix_base": "sum",
+                "matrix_forecast": "sum",
+                "tempro_base": "sum",
+                "tempro_forecast": "sum",
+                "geometry": "first",
+            }
+        )
+        for nm in ("matrix", "tempro"):
+            trip_end_groups.loc[:, f"{nm}_growth"] = (
+                trip_end_groups[f"{nm}_forecast"] / trip_end_groups[f"{nm}_base"]
+            )
+        trip_end_groups.loc[:, "growth_difference"] = (
+            trip_end_groups["matrix_growth"] - trip_end_groups["tempro_growth"]
+        )
+        plot_iterator = (
+            trip_end_groups[["trip_origin", "pa"]].drop_duplicates().itertuples(index=False)
+        )
+        trip_end_groups.set_index(["zone", "trip_origin", "pa"], inplace=True)
+        out = output_folder / f"PA_TEMPro_growth_comparison_{year}_{zone}.csv"
+        trip_end_groups.drop(columns=["geometry"]).to_csv(out)
+        LOG.info("Written: %s", out)
+
+        plot_column = "Growth Difference"
+        trip_end_groups = gpd.GeoDataFrame(
+            trip_end_groups, crs=geospatial.crs, geometry="geometry"
+        )
+        trip_end_groups.rename(columns={"growth_difference": plot_column}, inplace=True)
+        out = out.with_suffix(".pdf")
+        with backend_pdf.PdfPages(out) as pdf:
+            for to, pa in plot_iterator:
+                fig = _heatmap_figure(
+                    trip_end_groups.loc[:, to, pa],
+                    plot_column,
+                    f"{to.upper()} {pa.title()} NTEM & TEMPro Growth Comparison",
+                    bins=[-0.2, -0.1, -0.05, -0.01, 0, 0.01, 0.05, 0.1, 0.2],
+                    analytical_area=analytical_area,
+                )
+                pdf.savefig(fig)
+                plt.close()
+        LOG.info("Written: %s", out)
+
+
+def add_analytical_area(
+    ax: plt.Axes, area: Union[geometry.MultiPolygon, geometry.Polygon]
+) -> patches.Polygon:
+    """Add analytical area boundary to a map.
+
+    Parameters
+    ----------
+    ax : plt.Axes
+        Matplotlib axes to add boundary to.
+    area : Union[geometry.MultiPolygon, geometry.Polygon]
+        Analytical area polygon of boundary to add.
+
+    Returns
+    -------
+    patches.Polygon
+        The patch added to the axes.
+
+    Raises
+    ------
+    TypeError
+        If `area` isn't a Polygon or MultiPolygon.
+    """
+    if isinstance(area, geometry.Polygon):
+        polygons = geometry.MultiPolygon([area])
+    elif isinstance(area, geometry.MultiPolygon):
+        polygons = area
+    else:
+        raise TypeError(f"unexpected type ({type(area)}) for area")
+
+    legend_patch = None
+    for i, poly in enumerate(polygons.geoms):
+        patch = patches.Polygon(
+            poly.exterior.coords,
+            ec="red",
+            fill=False,
+            linewidth=2,
+            label="North Analytical\nArea Boundary" if i == 0 else None,
+            zorder=2,
+        )
+        if i == 0:
+            legend_patch = patch
+        ax.add_patch(patch)
+    return legend_patch
 
 
 def main(params: PAPlotsParameters) -> None:
+    """Produce the PA growth and TEMPro comparison maps and graphs.
+
+    Parameters
+    ----------
+    params : PAPlotsParameters
+        Parameters and input files for creating the graphs.
+    """
     params.output_folder.mkdir(exist_ok=True)
-    # ntem_pa_plots(
-    #     params.base_matrix_folder,
-    #     params.forecast_matrix_folder,
-    #     params.matrix_zoning,
-    #     params.plot_zoning,
-    #     params.output_folder,
-    #     params.geospatial_file,
-    # )
-    ntem_tempro_comparison_plots()
-    print()
+    ntem_pa_plots(
+        params.base_matrix_folder,
+        params.forecast_matrix_folder,
+        params.matrix_zoning,
+        params.plot_zoning,
+        params.output_folder,
+        params.geospatial_file,
+        params.analytical_area_shape,
+    )
+    ntem_tempro_comparison_plots(
+        params.tempro_comparison_folder,
+        params.geospatial_file,
+        params.plot_zoning,
+        params.analytical_area_shape,
+        params.output_folder,
+    )
 
 
 ##### MAIN #####
 if __name__ == "__main__":
-    # forecast_matrix_folder=Path(
-    #     r"I:\NorMITs Demand\noham\NTEM\iter1c\Matrices\24hr VDM PA Matrices"
-    # )
     forecast_matrix_folder = Path(
-        r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Outputs\NTEM\iter1c\Matrices\24hr VDM PA Matrices"
+        r"I:\NorMITs Demand\noham\NTEM\iter1c\Matrices\24hr VDM PA Matrices"
     )
 
     pa_parameters = PAPlotsParameters(
-        # base_matrix_folder=Path(r"I:\NorMITs Demand\import\noham\post_me\tms_seg_pa"),
-        base_matrix_folder=Path(
-            r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Inputs\noham\post_me\tms_seg_pa"
-        ),
+        base_matrix_folder=Path(r"I:\NorMITs Demand\import\noham\post_me\tms_seg_pa"),
         forecast_matrix_folder=forecast_matrix_folder,
         matrix_zoning="noham",
         plot_zoning="lad_2020",
         output_folder=forecast_matrix_folder / "Plots",
         geospatial_file=GeoSpatialFile(
             Path(
-                r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand\GIS"
+                r"Y:\Data Strategy\GIS Shapefiles"
                 r"\Local_Authority_Districts_(December_2020)_UK_BFC"
                 r"\Local_Authority_Districts_(December_2020)_UK_BGC.shp"
             ),
             "LAD20CD",
         ),
+        analytical_area_shape=GeoSpatialFile(
+            Path(
+                r"Y:\Data Strategy\GIS Shapefiles\North Analytical Area"
+                r"\Boundary\north_analytical_area_simple_boundary.shp"
+            ),
+            "Name",
+        ),
         tempro_comparison_folder=Path(
             r"I:\NorMITs Demand\noham\NTEM\iter1c\Matrices\PA\TEMPro Comparisons"
         ),
-        analytical_area_shape=Path(r"Y:\Data Strategy\GIS Shapefiles\North Analytical Area\north_analytical_area.shp"),
     )
 
     main(pa_parameters)
