@@ -13,6 +13,7 @@ disable = [
 
 [tool.pylint.design]
 max-attributes = 15
+max-args = 10
 
 [tool.mypy]
 ignore_missing_imports = true

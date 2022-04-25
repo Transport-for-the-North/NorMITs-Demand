@@ -77,7 +77,7 @@ def main():
     # Instantiate and run the tram model
     n = TramModel(
         years=YEARS,
-        scenario=SCENARIO.value,
+        scenario=SCENARIO,
         iteration_name=NOTEM_ITER,
         import_builder=import_builder,
         export_home=TRAM_EXPORT_HOME,

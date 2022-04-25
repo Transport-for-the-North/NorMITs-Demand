@@ -24,6 +24,7 @@ import numpy as np
 
 # local imports
 import normits_demand as nd
+from normits_demand import core as nd_core
 
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
@@ -97,7 +98,7 @@ class TramModel(TramExportPaths):
 
     def __init__(self,
                  years: List[int],
-                 scenario: str,
+                 scenario: nd_core.Scenario,
                  iteration_name: str,
                  import_builder: nd.pathing.TramImportPathsBase,
                  export_home: nd.PathLike,
@@ -115,7 +116,7 @@ class TramModel(TramExportPaths):
             year is the base year.
 
         scenario:
-            The name of the scenario to run for.
+            The scenario to run for.
 
         iteration_name:
             The name of this iteration of the NoTEM models. Will have 'iter'
@@ -158,7 +159,6 @@ class TramModel(TramExportPaths):
         # Assign
         self.years = years
         self.base_year = min(self.years)
-        self.scenario = scenario
         self.import_builder = import_builder
         self.base_train = pd.DataFrame()
         self.tram_competitors = tram_competitors
@@ -205,7 +205,7 @@ class TramModel(TramExportPaths):
         out_lines = [
             'Code Version: %s' % str(nd.__version__),
             'NoTEM/Tram Iteration: %s' % str(self.iteration_name),
-            'Scenario: %s' % str(self.scenario),
+            'Scenario: %s' % str(self.scenario.value),
             '',
             '### HB Productions ###',
             'import_files: %s' % self.import_builder.generate_hb_production_imports(),
