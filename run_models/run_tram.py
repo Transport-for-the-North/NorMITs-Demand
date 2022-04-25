@@ -24,11 +24,11 @@ from normits_demand.pathing import TramImportPaths
 # years = [2018, 2033, 2040, 2050]
 YEARS = [2018]
 SCENARIO = nd_core.Scenario.SC01_JAM
-NOTEM_ITER = '9.7'
-NOTEM_EXPORT_HOME = r"E:\NorMITs Demand\NoTEM"
+NOTEM_ITER = '9.9'
+NOTEM_EXPORT_HOME = r"F:\NorMITs Demand\NoTEM"
 
 TRAM_IMPORT_HOME = r"I:\NorMITs Demand\import\modal\tram\tram_pa"
-TRAM_EXPORT_HOME = r"E:\NorMITs Demand\Tram"
+TRAM_EXPORT_HOME = r"F:\NorMITs Demand\Tram"
 
 
 def main():

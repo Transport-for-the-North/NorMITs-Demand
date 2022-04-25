@@ -68,7 +68,7 @@ def main():
 
     n = NoTEM(
         years=YEARS,
-        scenario=SCENARIO.value,
+        scenario=SCENARIO,
         iteration_name=NOTEM_ITER,
         import_builder=import_builder,
         export_home=NOTEM_EXPORT_HOME,
