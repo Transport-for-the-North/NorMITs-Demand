@@ -646,7 +646,7 @@ class NoTEMToDistributionModel(ToDistributionModel):
         # Get the path to the NoTEM Exports
         notem_exports = NoTEMExportPaths(
             path_years=[base_year],
-            scenario=scenario.value,
+            scenario=scenario,
             iteration_name=notem_iteration_name,
             export_home=export_home,
         )

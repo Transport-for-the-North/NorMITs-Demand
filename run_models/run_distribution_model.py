@@ -30,7 +30,7 @@ from normits_demand.pathing.distribution_model import DistributionModelArgumentB
 
 # ## CONSTANTS ## #
 # Trip end import args
-NOTEM_ITERATION_NAME = '9.7'
+NOTEM_ITERATION_NAME = '9.9'
 TOUR_PROPS_VERSION = 'v%s' % NOTEM_ITERATION_NAME
 
 NOTEM_EXPORT_HOME = r"I:\NorMITs Demand\NoTEM"

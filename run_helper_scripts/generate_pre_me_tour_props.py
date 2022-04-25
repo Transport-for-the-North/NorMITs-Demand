@@ -65,7 +65,7 @@ class IOPaths:
         self.phi_dir = self.import_dir / self.phi_dir_name / self.phi_version_name
         self.notem_paths = NoTEMExportPaths(
             path_years=[self.year],
-            scenario=self.notem_scenario.value,
+            scenario=self.notem_scenario,
             iteration_name=self.notem_iteration_name,
             export_home=self.normits_dir / self.notem_dir_name
         )
