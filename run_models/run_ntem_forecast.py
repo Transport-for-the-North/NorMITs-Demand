@@ -42,7 +42,8 @@ class NTEMForecastParameters:
     import_path : Path
         Path to the NorMITs demand imports.
     tempro_data_path : Path
-        Path to the CSV containing the TEMPro data.
+        Path to the CSV containing the TEMPro data or to the
+        folder that contains the TEMPro databases.
     model_name : str
         Name of the model.
     iteration : str
@@ -246,7 +247,8 @@ def get_tempro_data(data_path: Path, years: list[int]) -> tempro_trip_ends.TEMPr
     Parameters
     ----------
     data_path : Path
-        Path to TEMPro data CSV.
+        Path to TEMPro data CSV or to the folder containing
+        the TEMPro databases.
     years : list[int]
         List of year columns to read from input file,
         should include base and forecast years.
@@ -397,8 +399,8 @@ def main(params: NTEMForecastParameters, init_logger: bool = True):
 ##### MAIN #####
 if __name__ == "__main__":
     try:
-        args = parse_args()
-        ntem_parameters = NTEMForecastParameters.load(args.config)
+        ntem_args = parse_args()
+        ntem_parameters = NTEMForecastParameters.load(ntem_args.config)
         main(ntem_parameters)
 
     except Exception as err:
