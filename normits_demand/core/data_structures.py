@@ -124,6 +124,16 @@ class TimeFormat(enum.Enum):
         }
 
     @staticmethod
+    def avg_hour_to_total_hour_factors() -> Dict[int, float]:
+        """Get a dictionary of conversion factors"""
+        return TimeFormat._hour_to_day_factors()
+
+    @staticmethod
+    def total_hour_to_avg_hour_factors() -> Dict[int, float]:
+        """Get a dictionary of conversion factors"""
+        return TimeFormat._day_to_hour_factors()
+
+    @staticmethod
     def get(value: str) -> TimeFormat:
         """Get an instance of this with value
 
@@ -197,8 +207,8 @@ class TimeFormat(enum.Enum):
         # Validate inputs
         if not isinstance(to_time_format, TimeFormat):
             raise ValueError(
-                "Expected to_time_format to be a TimeFormat object. Got: %s"
-                % (type(to_time_format))
+                "Expected to_time_format to be a TimeFormat object. "
+                f"Got: {type(to_time_format)}"
             )
 
         if to_time_format == self:
@@ -222,8 +232,7 @@ class TimeFormat(enum.Enum):
         else:
             raise nd.NormitsDemandError(
                 "Cannot figure out the conversion factors to get from "
-                "time_format %s to %s"
-                % (self.value, to_time_format.value)
+                f"time_format {self.value} to {to_time_format.value}"
             )
 
         return factors_fn()

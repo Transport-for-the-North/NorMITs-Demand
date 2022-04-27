@@ -11,6 +11,10 @@ disable = [
     "use-list-literal",
 ]
 
+# Pylint settings
+[tool.pylint.basic]
+good-names = ["df", "tp", "x"]
+
 [tool.pylint.design]
 max-attributes = 15
 max-args = 10
