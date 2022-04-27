@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
-"""
-    Module for running the NTEM forecast.
-"""
+"""Module for running the NTEM forecast."""
 
 ##### IMPORTS #####
 from __future__ import annotations
 
 # Standard imports
+import argparse
 import configparser
 import dataclasses
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 
 # Third party imports
 
@@ -30,6 +29,7 @@ from normits_demand.utils import timing
 ##### CONSTANTS #####
 LOG_FILE = "NTEM_forecast.log"
 LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_models.run_ntem_forecast")
+CONFIG_FILE = Path(__file__).parent.parent / "config/NTEM_forecast_parameters.txt"
 
 
 ##### CLASSES #####
@@ -69,7 +69,7 @@ class NTEMForecastParameters:
     model_name: str
     iteration: str
     base_year: int
-    future_years: list[int]
+    future_years: List[int]
     export_path_fmt: str = "I:/NorMITs Demand/{model_name}/NTEM/iter{iteration}"
     export_path_params: Optional[Dict[str, Any]] = None
     _export_path: Optional[Path] = dataclasses.field(default=None, init=False, repr=False)
@@ -195,13 +195,13 @@ class NTEMForecastParameters:
                 f"config file doesn't contain '{param_sec}' section"
             )
 
-        params = dict(config[param_sec])
+        params: Dict[str, Any] = dict(config[param_sec])
         for p in ("import_path", "tempro_data_path"):
             if p in params:
                 params[p] = Path(params[p])
 
         params["base_year"] = int(params["base_year"])
-        params["future_years"] = [int(i.strip()) for i in params["future_years".split(" ")]]
+        params["future_years"] = [int(i.strip()) for i in params["future_years"].split()]
 
         export_params = "export_path_params"
         if config.has_section(export_params):
@@ -210,7 +210,36 @@ class NTEMForecastParameters:
         return NTEMForecastParameters(**params)
 
 
+class NTEMForecastArgs(NamedTuple):
+    """Command line arguments for `run_ntem_forecast`."""
+
+    config: Path
+
+
 ##### FUNCTIONS #####
+def parse_args() -> NTEMForecastArgs:
+    """Parse and return command line arguments.
+
+    Returns
+    -------
+    NTEMForecastArgs
+        Command line arguments for `run_ntem_forecast`.
+    """
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        "config",
+        nargs="?",
+        type=Path,
+        default=CONFIG_FILE,
+        help="Path to config file containing parameters.",
+    )
+    args = parser.parse_args()
+
+    return NTEMForecastArgs(**vars(args))
+
+
 def get_tempro_data(data_path: Path, years: list[int]) -> tempro_trip_ends.TEMProTripEnds:
     """Read TEMPro data and convert it to DVectors.
 
@@ -368,14 +397,8 @@ def main(params: NTEMForecastParameters, init_logger: bool = True):
 ##### MAIN #####
 if __name__ == "__main__":
     try:
-        ntem_parameters = NTEMForecastParameters(
-            import_path=Path("I:/NorMITs Demand/import"),
-            tempro_data_path=Path(r"I:\Data\TEMPRO\tempro_pa_data_6_mode_exc_mode_4.csv"),
-            model_name="noham",
-            iteration="1d",
-            base_year=2018,
-            future_years=[2033],
-        )
+        args = parse_args()
+        ntem_parameters = NTEMForecastParameters.load(args.config)
         main(ntem_parameters)
 
     except Exception as err:
