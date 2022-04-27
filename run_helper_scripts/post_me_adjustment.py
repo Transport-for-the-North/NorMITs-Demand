@@ -6,10 +6,10 @@
 ##### IMPORTS #####
 # Standard imports
 import dataclasses
-from pathlib import Path
 import shutil
 import sys
-from typing import NamedTuple, Iterator, Tuple
+from pathlib import Path
+from typing import Iterator, NamedTuple, Union
 
 # Third party imports
 import pandas as pd
@@ -19,8 +19,8 @@ sys.path.append("..")
 # pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
 from normits_demand import logging as nd_log
+from normits_demand.matrices import od_to_pa, omx_file, ufm_converter
 from normits_demand.utils import file_ops, general
-from normits_demand.matrices import ufm_converter, omx_file, od_to_pa
 
 # pylint: enable=import-error,wrong-import-position
 
@@ -64,7 +64,7 @@ class MatrixDetails(NamedTuple):
 
     prior_path: Path
     post_path: Path
-    parameters: dict[str, str]
+    parameters: dict[str, Union[str, int]]
 
 
 ##### FUNCTIONS #####
@@ -214,11 +214,13 @@ def combined_production_trip_ends(
     zoning = nd.get_zoning_system(model_name)
     prior_trip_ends = {}
     post_trip_ends = {}
+
     for mat_details in iter_od_matrices(prior_folder, post_folder):
         prior, post = production_trip_ends(mat_details.prior_path, mat_details.post_path)
         seg_name = segmentation.get_segment_name(mat_details.parameters)
         prior_trip_ends[seg_name] = prior.values
         post_trip_ends[seg_name] = post.values
+
     prior_dvec = nd.DVector(segmentation, prior_trip_ends, zoning, "avg_day")
     post_dvec = nd.DVector(segmentation, post_trip_ends, zoning, "avg_day")
 
@@ -227,10 +229,13 @@ def combined_production_trip_ends(
         out = output_folder / f"{nm}_productions_{model_name}_{segmentation.name}_dvec.pkl"
         dvec.save(out)
         LOG.info("Written: %s", out)
+
     return prior_dvec, post_dvec
 
 
 def compare_productions(prior: nd.DVector, post: nd.DVector, output_path: Path) -> None:
+    MODE = nd.Mode.CAR
+
     for seg in COMPARISON_SEGMENTATIONS:
         if seg != prior.segmentation.name:
             segmentation = nd.get_segmentation_level(seg)
@@ -239,9 +244,14 @@ def compare_productions(prior: nd.DVector, post: nd.DVector, output_path: Path) 
         else:
             new_prior = prior
             new_post = post
+
         comp = new_post / new_prior
-        out = output_path.with_name(output_path.stem + "-seg.csv.bz2")
-        file_ops.write_df(comp.to_df(), out, index=False)
+        out = output_path.with_name(output_path.stem + f"-{seg}-{MODE.name}.csv.bz2")
+
+        # Only output single mode
+        comp_df = comp.to_df()
+        comp_df = comp_df.loc[comp_df["m"] == MODE.get_mode_num()]
+        file_ops.write_df(comp_df, out, index=False)
         LOG.info("Written: %s", out)
 
 
