@@ -303,22 +303,24 @@ def _find_matrices(folder: Path) -> pd.DataFrame:
         - `purpose`
     """
     files = []
-    file_types = (".pbz2", ".csv")
+    file_types = (".pbz2", ".csv", ".csv.bz2")
     for p in folder.iterdir():
-        if p.is_dir() or p.suffix.lower() not in file_types:
+        suffixes = "".join(p.suffixes)
+        if p.is_dir() or suffixes.lower() not in file_types:
             continue
         try:
-            file_data = _filename_contents(p.stem)
+            stem = p.name[:-len(suffixes)]
+            file_data = _filename_contents(stem)
         except ntem_forecast.NTEMForecastError as err:
             LOG.warning(err)
             continue
         file_data["path"] = p
         files.append(file_data)
-    files = pd.DataFrame(files)
-    files.to_csv(folder / "Matrices list.csv", index=False)
+    files_df = pd.DataFrame(files)
+    files_df.to_csv(folder / "Matrices list.csv", index=False)
     index_cols = ["matrix_type", "year", "mode", "purpose"]
-    files = files.loc[:, index_cols + ["path"]].set_index(index_cols)
-    return files
+    files_df = files_df.loc[:, index_cols + ["path"]].set_index(index_cols)
+    return files_df
 
 
 def _read_matrices(paths: Dict[int, Path]) -> Dict[int, pd.DataFrame]:
