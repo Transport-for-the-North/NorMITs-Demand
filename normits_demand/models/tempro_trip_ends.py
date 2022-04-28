@@ -339,7 +339,7 @@ class TEMProTripEnds:
         years: Dict[int, nd_core.DVector]
         for name, years in dataclasses.asdict(self).items():
             for yr, dvec in years.items():
-                dvec.save(folder / f"{name}-{yr}")
+                dvec.save(folder / f"{name}-{yr}.pkl")
 
     def translate_zoning(
         self,
