@@ -66,13 +66,13 @@ class NTEMImportMatrices:
             name=self.model_name
         )
         file_ops.check_path_exists(self.matrix_folder)
-        self.mode = efs_consts.MODEL_MODES[self.model_name]
-        if len(self.mode) == 1:
-            self.mode = self.mode[0]
+        mode = efs_consts.MODEL_MODES[self.model_name]
+        if len(mode) == 1:
+            self.mode: int = mode[0]
         else:
             raise NotImplementedError(
                 "cannot handle models with more than one mode, "
-                f"this model ({self.model_name}) has {len(self.mode)} modes"
+                f"this model ({self.model_name}) has {len(mode)} modes"
             )
         self.segmentation = {
             k: nd_core.get_segmentation_level(s)
