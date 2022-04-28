@@ -50,7 +50,7 @@ class TEMProData:
     NTEMForecastError
         If `years` isn't (or cannot be converted to)
         a list of integers.
-    
+
     See Also
     --------
     `tempro_extractor.TemproParser`: extracts TEMPro data from the databases.
@@ -142,6 +142,17 @@ class TEMProData:
 
             data.columns = data.columns.str.strip().str.lower()
             data.rename(columns={"timeperiod": "time_period"}, inplace=True)
+
+            # Drop mode 4 and tp > 4 to match segmentation used for DVectors
+            mask = (data["mode"] != 4) & (data["time_period"] <= 4)
+            data = data.loc[mask]
+            LOG.debug(
+                "Dropping mode 4 and time periods > 4 from "
+                "TEMPro data, %s rows dropped (%s remaining)",
+                mask.sum(),
+                len(data),
+            )
+
             self._data = data
 
         return self._data.copy()
@@ -312,7 +323,7 @@ class TEMProTripEnds:
                 raise NTEMForecastError(f"years (keys) differ for attribute {name!r}")
 
     def save(self, folder: Path):
-        """Saves all DVectors to `folder`.
+        """Save all DVectors to `folder`.
 
         Saved using `DVector.compress_out` method with name
         in the format "{nhb|hb}_{attractions|productions}-{year}".
@@ -325,9 +336,10 @@ class TEMProTripEnds:
         """
         folder.mkdir(exist_ok=True, parents=True)
         LOG.info("Writing TEMProForecasts to %s", folder)
+        years: Dict[int, nd_core.DVector]
         for name, years in dataclasses.asdict(self).items():
             for yr, dvec in years.items():
-                dvec.compress_out(folder / f"{name}-{yr}")
+                dvec.save(folder / f"{name}-{yr}")
 
     def translate_zoning(
         self,

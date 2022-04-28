@@ -215,6 +215,8 @@ class NTEMForecastArgs(NamedTuple):
     """Command line arguments for `run_ntem_forecast`."""
 
     config: Path
+    tempro_data: bool = False
+    tempro_growth: bool = False
 
 
 ##### FUNCTIONS #####
@@ -235,6 +237,18 @@ def parse_args() -> NTEMForecastArgs:
         type=Path,
         default=CONFIG_FILE,
         help="Path to config file containing parameters.",
+    )
+    parser.add_argument(
+        "-t",
+        "--tempro_data",
+        action="store_true",
+        help="Flag to turn on saving TEMPro data DVectors to output folder",
+    )
+    parser.add_argument(
+        "-g",
+        "--tempro_growth",
+        action="store_true",
+        help="Flag to turn on saving TEMPro growth factor DVectors to output folder",
     )
     args = parser.parse_args()
 
@@ -315,8 +329,15 @@ def model_mode_subset(
     return trip_ends.subset(segmentation)
 
 
-def main(params: NTEMForecastParameters, init_logger: bool = True):
+def main(
+    params: NTEMForecastParameters,
+    init_logger: bool = True,
+    output_tempro_data: bool = False,
+    output_tempro_growth: bool = False,
+):
     """Main function for running the NTEM forecasting.
+
+    FIXME update parameters
 
     Parameters
     ----------
@@ -350,9 +371,13 @@ def main(params: NTEMForecastParameters, init_logger: bool = True):
     tempro_data = get_tempro_data(
         params.tempro_data_path, [params.base_year, *params.future_years]
     )
+    if output_tempro_data:
+        tempro_data.save(params.export_path / "TEMPro Data")
+
     tempro_data = model_mode_subset(tempro_data, params.model_name)
     tempro_growth = ntem_forecast.tempro_growth(tempro_data, params.model_name)
-    tempro_growth.save(params.export_path / "TEMPro Growth Factors")
+    if output_tempro_growth:
+        tempro_growth.save(params.export_path / "TEMPro Growth Factors")
 
     ntem_inputs = ntem_forecast.NTEMImportMatrices(
         params.import_path,
@@ -401,7 +426,11 @@ if __name__ == "__main__":
     try:
         ntem_args = parse_args()
         ntem_parameters = NTEMForecastParameters.load(ntem_args.config)
-        main(ntem_parameters)
+        main(
+            ntem_parameters,
+            output_tempro_data=ntem_args.tempro_data,
+            output_tempro_growth=ntem_args.tempro_growth,
+        )
 
     except Exception as err:
         LOG.critical("NTEM forecasting error:", exc_info=True)
