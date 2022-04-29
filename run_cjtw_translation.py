@@ -15,6 +15,7 @@ if __name__ == '__main__':
 
     base_cjtw = co.build_base_cjtw()
     future_cjtw = co.cjtw_to_future_year(base_cjtw,
+                                         take_ntem_totals=False,
                                          target_year=2018)
     cjtw_to_model_zone = co.cjtw_to_model_zone(future_cjtw)
 
@@ -29,3 +30,4 @@ if __name__ == '__main__':
                          model_zoning='nelum',
                          year=2018,
                          out_path=nelum_path)
+

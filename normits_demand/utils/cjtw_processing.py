@@ -345,11 +345,11 @@ class CjtwTranslator:
         return normits_cjtw
 
     def _ntem_adjustments(self,
-                          msoa_cjtw,
-                          target_year,
-                          take_ntem_totals=True,
-                          infill_tp=True,
-                          verbose=True):
+                          msoa_cjtw: pd.DataFrame,
+                          target_year: int,
+                          take_ntem_totals: bool = True,
+                          infill_tp: bool = True,
+                          verbose: bool = True):
         """
         Function to adjust CJtW in line with NTEM.
         Can adjust for future year production wise - P/A Furness on backlog.
@@ -388,17 +388,27 @@ class CjtwTranslator:
         tempro = tempro.groupby(group_cols).sum().reset_index()
 
         # Separate p/a
-        productions = tempro[tempro['trip_end_type'] == 'productions']
-        attractions = tempro[tempro['trip_end_type'] == 'attractions']
+        tempro_productions = tempro[tempro['trip_end_type'] == 'productions']
+        tempro_attractions = tempro[tempro['trip_end_type'] == 'attractions']
         del tempro
-        productions = productions.reset_index(drop=True)
-        attractions = attractions.reset_index(drop=True)
+        tempro_productions = tempro_productions.reset_index(drop=True)
+        tempro_attractions = tempro_attractions.reset_index(drop=True)
 
         # TODO: Should balance P/A & furness
         # Attractions are already here
 
         # Get growth factor from NTEM
-        productions['gf'] = productions[str(target_year)] / productions[str(self.cjtw_year)]
+        # Aggregate out tp for growth factors
+        tempro_p_growth = tempro_productions.copy()
+        tempro_p_growth = tempro_p_growth.drop('TimePeriod', axis=1)
+        growth_group_cols = ['msoa_zone_id', 'trip_end_type',
+                             'Purpose', 'Mode']
+        tempro_p_growth = tempro_p_growth.groupby(growth_group_cols)
+        tempro_p_growth = tempro_p_growth.sum()
+        tempro_p_growth = tempro_p_growth.reset_index()
+
+        tempro_p_growth['gf'] = tempro_p_growth[str(target_year)] /\
+                                tempro_p_growth[str(self.cjtw_year)]
 
         # Grow prod wise
         unq_mode = fy_cjtw['mode'].unique()
@@ -406,6 +416,7 @@ class CjtwTranslator:
         out_list = list()
         for m in unq_mode:
 
+            # Tram handling - NTEM has no tram so growth comes from bus
             if m == 7:
                 tempro_m = 5
             else:
@@ -418,18 +429,19 @@ class CjtwTranslator:
             demand_before = dat['demand'].sum()
 
             # Subset tempro data
-            tempro_sub = productions[productions['Mode'] == tempro_m]
-            tempro_sub = tempro_sub.reindex(
+            tempro_growth_sub = tempro_p_growth[
+                tempro_p_growth['Mode'] == tempro_m]
+            tempro_growth_sub = tempro_growth_sub.reindex(
                 ['msoa_zone_id', str(target_year), 'gf'],
                 axis=1)
-            tempro_sub = tempro_sub.reset_index(drop=True)
+            tempro_growth_sub = tempro_growth_sub.reset_index(drop=True)
 
             if take_ntem_totals and m != 7:
                 # Reduce cjtw to a factor, using a 64 bit float
                 dat['demand'] = dat['demand'].astype('float64')
                 dat['demand'] /= dat['demand'].sum()
                 # Get NTEM total
-                tempro_total = tempro_sub['2018'].sum()
+                tempro_total = tempro_growth_sub[str(target_year)].sum()
                 # Multiply factor by total
                 dat['demand'] *= tempro_total
 
@@ -439,7 +451,7 @@ class CjtwTranslator:
 
             else:
                 dat = dat.merge(
-                    tempro_sub,
+                    tempro_growth_sub,
                     how='left',
                     left_on='p_zone',
                     right_on='msoa_zone_id'
@@ -448,10 +460,9 @@ class CjtwTranslator:
                 dat = dat.drop(
                     ['msoa_zone_id', 'gf', str(target_year)], axis=1)
 
-
             if infill_tp:
                 # Get MSOA time props from productions
-                time_sub = productions[productions['Mode'] == tempro_m]
+                time_sub = tempro_productions[tempro_productions['Mode'] == tempro_m]
                 time_sub = time_sub.reindex(
                     ['msoa_zone_id', 'TimePeriod', str(target_year)],
                     axis=1).reset_index(drop=True)
@@ -459,8 +470,6 @@ class CjtwTranslator:
                     'msoa_zone_id')[str(target_year)].transform('sum')
                 time_sub = time_sub.drop(str(target_year), axis=1)
 
-                print(list(dat))
-                print(list(time_sub))
                 # Merge on time sub & multiply out
                 dat = dat.merge(
                     time_sub,
