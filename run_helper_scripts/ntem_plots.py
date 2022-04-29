@@ -19,9 +19,10 @@ import warnings
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt, figure, ticker, patches
+from matplotlib import cm, pyplot as plt, figure, ticker, patches
 import matplotlib.backends.backend_pdf as backend_pdf
 from shapely import geometry
+import mapclassify
 
 
 # Local imports
@@ -107,6 +108,25 @@ class PlotType(nd_enum.AutoName):
 
     BAR = enum.auto()
     LINE = enum.auto()
+
+
+@dataclasses.dataclass
+class CustomCmap:
+    """Store information about a custom colour map."""
+
+    bin_categories: pd.Series
+    colours: pd.DataFrame
+    legend_elements: list[patches.Patch]
+
+    def __add__(self, other: CustomCmap) -> CustomCmap:
+        """Return new CustomCmap with the attributes from `self` and `other` concatenated."""
+        if not isinstance(other, CustomCmap):
+            raise TypeError(f"other should be a CustomCmap not {type(other)}")
+        return CustomCmap(
+            pd.concat([self.bin_categories, other.bin_categories], verify_integrity=True),
+            pd.concat([self.colours, other.colours], verify_integrity=True),
+            self.legend_elements + other.legend_elements,
+        )
 
 
 ##### FUNCTIONS #####
@@ -446,7 +466,7 @@ def plot_all_matrix_totals(
             pdf.savefig(total_figure)
 
             growth_figure = matrix_total_plots(
-                curr_tot.div(curr_tot["2018"], axis=0).drop(columns="2018"),
+                curr_tot.div(curr_tot["2018"], axis=0),
                 f"NTEM Forecasting PA - {area.title()} Matrix Growth",
                 "Matrix Growth",
                 plot_type=PlotType.LINE,
@@ -472,6 +492,7 @@ def _heatmap_figure(
     title: str,
     bins: list[Union[int, float]] = None,
     analytical_area: Union[geometry.Polygon, geometry.MultiPolygon] = None,
+    postive_negative_colormaps: bool = False,
 ):
     LEGEND_KWARGS = dict(title_fontsize="xx-large", fontsize="x-large")
 
@@ -507,48 +528,70 @@ def _heatmap_figure(
         #     "hatch": "///",
         #     "label": "Missing values",
         # },
-        linewidth=0.001,
+        linewidth=0.0001,
+        edgecolor="black",
     )
 
-    if bins:
-        kwargs["scheme"] = "UserDefined"
-        bins = sorted(bins)
-        max_ = np.max(geodata[column_name].values)
-        if bins[-1] < max_:
-            bins[-1] = math.ceil(max_)
-        kwargs["classification_kwds"] = {"bins": bins}
-        del kwargs["k"]
+    if postive_negative_colormaps:
+        # Calculate, and apply, separate colormaps for positive and negative values
+        label_fmt = "{:.0%}"
+        negative_cmap = _colormap_classify(
+            geodata.loc[geodata[column_name] < 0, column_name], "PuBu_r", label_fmt=label_fmt
+        )
+        positive_cmap = _colormap_classify(
+            geodata.loc[geodata[column_name] >= 0, column_name], "YlGn", label_fmt=label_fmt
+        )
+        cmap = negative_cmap + positive_cmap
 
-    # If the quatiles scheme throws a warning then use FisherJenksSampled
-    warnings.simplefilter("error", category=UserWarning)
-    try:
-        geodata.plot(ax=axes[0], legend=False, **kwargs)
-        geodata.plot(ax=axes[1], legend=True, **kwargs)
-    except UserWarning:
-        kwargs["scheme"] = "FisherJenksSampled"
-        geodata.plot(ax=axes[0], legend=False, **kwargs)
-        geodata.plot(ax=axes[1], legend=True, **kwargs)
-    finally:
-        warnings.simplefilter("default", category=UserWarning)
+        for ax in axes:
+            geodata.plot(
+                ax=ax,
+                color=cmap.colours.values,
+                linewidth=kwargs["linewidth"],
+                edgecolor=kwargs["edgecolor"],
+            )
+        axes[1].legend(handles=cmap.legend_elements, **kwargs.pop("legend_kwds"))
 
-    # Format legend text
-    legend = axes[1].get_legend()
-    for label in legend.get_texts():
-        text = label.get_text()
-        values = [float(s.strip()) for s in text.split(",")]
-        lower = np.floor(values[0] * 100) / 100
-        upper = np.ceil(values[1] * 100) / 100
-        # Set to 0 if 0 or -0
-        lower = 0 if lower == 0 else lower
-        upper = 0 if upper == 0 else upper
+    else:
+        if bins:
+            kwargs["scheme"] = "UserDefined"
+            bins = sorted(bins)
+            max_ = np.max(geodata[column_name].values)
+            if bins[-1] < max_:
+                bins[-1] = math.ceil(max_)
+            kwargs["classification_kwds"] = {"bins": bins}
+            del kwargs["k"]
 
-        if lower == -np.inf:
-            text = f"< {upper:.0%}"
-        elif upper == np.inf:
-            text = f"> {lower:.0%}"
-        else:
-            text = f"{lower:.0%} - {upper:.0%}"
-        label.set_text(text)
+        # If the quatiles scheme throws a warning then use FisherJenksSampled
+        warnings.simplefilter("error", category=UserWarning)
+        try:
+            geodata.plot(ax=axes[0], legend=False, **kwargs)
+            geodata.plot(ax=axes[1], legend=True, **kwargs)
+        except UserWarning:
+            kwargs["scheme"] = "FisherJenksSampled"
+            geodata.plot(ax=axes[0], legend=False, **kwargs)
+            geodata.plot(ax=axes[1], legend=True, **kwargs)
+        finally:
+            warnings.simplefilter("default", category=UserWarning)
+
+        # Format legend text
+        legend = axes[1].get_legend()
+        for label in legend.get_texts():
+            text = label.get_text()
+            values = [float(s.strip()) for s in text.split(",")]
+            lower = np.floor(values[0] * 100) / 100
+            upper = np.ceil(values[1] * 100) / 100
+            # Set to 0 if 0 or -0
+            lower = 0 if lower == 0 else lower
+            upper = 0 if upper == 0 else upper
+
+            if lower == -np.inf:
+                text = f"< {upper:.0%}"
+            elif upper == np.inf:
+                text = f"> {lower:.0%}"
+            else:
+                text = f"{lower:.0%} - {upper:.0%}"
+            label.set_text(text)
 
     axes[1].set_xlim(290000, 560000)
     axes[1].set_ylim(300000, 680000)
@@ -603,7 +646,9 @@ def trip_end_growth_heatmap(
                 geometry="geometry",
             )
 
-            fig = _heatmap_figure(geodata, name, title, bins, analytical_area)
+            fig = _heatmap_figure(
+                geodata, name, title, bins, analytical_area, postive_negative_colormaps=True
+            )
             pdf.savefig(fig)
             plt.close()
 
@@ -791,6 +836,7 @@ def ntem_tempro_comparison_plots(
                     f"{to.upper()} {pa.title()} NTEM & TEMPro Growth Comparison",
                     bins=[-0.2, -0.1, -0.05, -0.01, 0, 0.01, 0.05, 0.1, 0.2],
                     analytical_area=analytical_area,
+                    postive_negative_colormaps=True,
                 )
                 pdf.savefig(fig)
                 plt.close()
@@ -867,6 +913,32 @@ def main(params: PAPlotsParameters) -> None:
         params.analytical_area_shape,
         params.output_folder,
     )
+
+
+def _colormap_classify(
+    data: pd.Series, cmap_name: str, n_bins: int = 5, label_fmt: str = "{:.0f}"
+) -> CustomCmap:
+    """Calculate a NaturalBreaks colour map."""
+
+    def make_label(lower: float, upper: float) -> str:
+        return label_fmt.format(lower) + " - " + label_fmt.format(upper)
+
+    finite = data.dropna()
+    mc_bins = mapclassify.NaturalBreaks(finite, k=n_bins)
+    bin_categories = pd.Series(mc_bins.yb, index=finite.index)
+    bin_categories = bin_categories.reindex_like(data)
+
+    cmap = cm.get_cmap(cmap_name, n_bins)
+    colours = pd.DataFrame(
+        cmap(bin_categories), index=bin_categories.index, columns=iter("RGBA")
+    )
+    colours.loc[bin_categories.isna(), :] = np.nan
+
+    bins = [np.min(finite), *mc_bins.bins]
+    labels = [make_label(l, u) for l, u in zip(bins[:-1], bins[1:])]
+    legend = [patches.Patch(fc=c, label=l, ls="") for c, l in zip(cmap(range(n_bins)), labels)]
+
+    return CustomCmap(bin_categories, colours, legend)
 
 
 ##### MAIN #####
