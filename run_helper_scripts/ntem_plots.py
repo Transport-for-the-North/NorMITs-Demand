@@ -9,32 +9,33 @@ import collections
 import dataclasses
 import enum
 import math
-from pathlib import Path
 import re
 import sys
-from typing import Any, Iterator, NamedTuple, Union
 import warnings
+from pathlib import Path
+from typing import Any, Iterator, NamedTuple, Union
 
 # Third party imports
 import geopandas as gpd
+import mapclassify
+import matplotlib.backends.backend_pdf as backend_pdf
 import numpy as np
 import pandas as pd
-from matplotlib import cm, pyplot as plt, figure, ticker, patches
-import matplotlib.backends.backend_pdf as backend_pdf
+from matplotlib import cm, figure, patches, colors
+from matplotlib import pyplot as plt
+from matplotlib import ticker
+from scipy import stats
 from shapely import geometry
-import mapclassify
-
 
 # Local imports
 sys.path.append("..")
 # pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
-from normits_demand import logging as nd_log
-from normits_demand.utils import file_ops, pandas_utils
-from normits_demand.reports import ntem_forecast_checks
 from normits_demand import colours as tfn_colours
+from normits_demand import logging as nd_log
 from normits_demand.core import enumerations as nd_enum
-
+from normits_demand.reports import ntem_forecast_checks
+from normits_demand.utils import file_ops, pandas_utils
 
 # pylint: enable=import-error,wrong-import-position
 
@@ -741,6 +742,85 @@ def ntem_pa_plots(
     )
 
 
+def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title: str) -> None:
+    """Create NTEM model vs TEMPro trip end growth comparison plot.
+
+    Parameters
+    ----------
+    growth : pd.DataFrame
+        DataFrame with NTEM and TEMPro trip end growth, expects
+        columns: `zone`, `trip_origin`, `pa`, `matrix_growth`,
+        `tempro_growth` and `matrix_forecast`.
+    output_path : Path
+        Path to save the output PDF to.
+    title : str
+        Title of the graphs.
+    """
+    expected_columns = [
+        "zone",
+        "trip_origin",
+        "pa",
+        "matrix_growth",
+        "tempro_growth",
+        "matrix_forecast",
+    ]
+    growth = growth.reset_index().set_index(expected_columns[:3]).loc[:, expected_columns[3:]]
+    growth.rename(columns={"matrix_growth": "matrix", "tempro_growth": "tempro"}, inplace=True)
+    growth.dropna(inplace=True)
+
+    with backend_pdf.PdfPages(output_path) as pdf:
+
+        for to in nd.TripOrigin:
+            for pa in ("productions", "attractions"):
+                fig, ax = plt.subplots(figsize=(15, 10), tight_layout=True)
+
+                filtered = growth.loc[:, to.get_name(), pa, :]
+                scatter = ax.scatter(
+                    filtered["matrix"],
+                    filtered["tempro"],
+                    marker="+",
+                    label="Growth Factors",
+                    c=filtered["matrix_forecast"],
+                    cmap="YlGn",
+                    norm=colors.LogNorm(),
+                )
+
+                fit = stats.linregress(filtered[["matrix", "tempro"]].values)
+                fit_x = (np.min(filtered["matrix"]), np.max(filtered["matrix"]))
+                fit_y = [x * fit.slope + fit.intercept for x in fit_x]
+                line = ax.plot(
+                    fit_x,
+                    fit_y,
+                    "--",
+                    color="black",
+                    alpha=0.7,
+                    label=f"Linear Fit: $y = {fit.slope:.2f}x {fit.intercept:+.1f}$",
+                )[0]
+
+                ax.legend(
+                    handles=[scatter, line, patches.Patch(alpha=0)],
+                    labels=[
+                        scatter.get_label(),
+                        line.get_label(),
+                        f"$R^2={fit.rvalue**2:.2f}$",
+                    ],
+                )
+
+                ax.set_xlabel("Model Growth Factors")
+                ax.set_ylabel("TEMPro Growth Factors")
+                ax.set_title(f"{title}\n{to.get_name().upper()} {pa.title()}")
+
+                cbar = plt.colorbar(scatter, label=f"Model {to.get_name().upper()} {pa.title()}")
+                # cbar.ax.yaxis.set_minor_formatter(
+                #     ticker.LogFormatter(labelOnlyBase=False, minor_thresholds=(5, 1.5))
+                # )
+
+                pdf.savefig(fig)
+                plt.close()
+
+    LOG.info("Written: %s", output_path)
+
+
 def ntem_tempro_comparison_plots(
     comparison_folder: Path,
     geospatial_file: GeoSpatialFile,
@@ -822,6 +902,12 @@ def ntem_tempro_comparison_plots(
         trip_end_groups.drop(columns=["geometry"]).to_csv(out)
         LOG.info("Written: %s", out)
 
+        growth_comparison_regression(
+            trip_end_groups,
+            out.with_name(out.stem + "-scatter.pdf"),
+            "NTEM Model and TEMPro Trip End Growth Comparison",
+        )
+
         plot_column = "Growth Difference"
         trip_end_groups = gpd.GeoDataFrame(
             trip_end_groups, crs=geospatial.crs, geometry="geometry"
@@ -840,6 +926,7 @@ def ntem_tempro_comparison_plots(
                 )
                 pdf.savefig(fig)
                 plt.close()
+
         LOG.info("Written: %s", out)
 
 
@@ -897,15 +984,15 @@ def main(params: PAPlotsParameters) -> None:
         Parameters and input files for creating the graphs.
     """
     params.output_folder.mkdir(exist_ok=True)
-    ntem_pa_plots(
-        params.base_matrix_folder,
-        params.forecast_matrix_folder,
-        params.matrix_zoning,
-        params.plot_zoning,
-        params.output_folder,
-        params.geospatial_file,
-        params.analytical_area_shape,
-    )
+    # ntem_pa_plots(
+    #     params.base_matrix_folder,
+    #     params.forecast_matrix_folder,
+    #     params.matrix_zoning,
+    #     params.plot_zoning,
+    #     params.output_folder,
+    #     params.geospatial_file,
+    #     params.analytical_area_shape,
+    # )
     ntem_tempro_comparison_plots(
         params.tempro_comparison_folder,
         params.geospatial_file,
