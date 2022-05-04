@@ -1914,7 +1914,7 @@ class DVector:
             else:
                 other_segs = np.array([other._data[s] for s in out_seg_names])
                 zonal_sums = np.sum(other_segs, axis=0)
-                with np.errstate(divide='ignore'):
+                with np.errstate(all='ignore'):
                     split_factors = other_segs / zonal_sums
 
                 # If any divide by 0s, split evenly
