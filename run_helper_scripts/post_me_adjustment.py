@@ -4,7 +4,6 @@
 ##### IMPORTS #####
 # Standard imports
 import dataclasses
-import logging
 import os
 import shutil
 import sys
@@ -25,7 +24,7 @@ sys.path.append("..")
 import normits_demand as nd
 from normits_demand import logging as nd_log
 from normits_demand.matrices import od_to_pa, omx_file, ufm_converter
-from normits_demand.utils import file_ops, general
+from normits_demand.utils import file_ops, general, vehicle_occupancy
 
 # pylint: enable=import-error,wrong-import-position
 
@@ -57,6 +56,7 @@ class PostMEAdjustmentParameters:
     saturn_folder: Path
     synthetic_full_od_folder: Path
     synthetic_compiled_od_folder: Path
+    occupancies_file: Path
     compile_factors: Path
     post_me_matrices: SATURNMatrices
     output_folder: Path
@@ -121,14 +121,11 @@ def process_post_me(
             mat = omx.get_matrix_level(lvl_nm)
             mat = pd.DataFrame(mat, index=omx.zones, columns=omx.zones)
 
-            # Convert from average hour to period
-            mat = mat * TIME_PERIOD_HOURS[TIME_PERIODS[time_slice]]
-
             file_ops.write_df(mat, out)
             LOG.info("Written: %s", out)
 
 
-def copy_prior_tp4(prior_folder: Path, out_folder: Path) -> None:
+def copy_prior_tp4(prior_folder: Path, out_folder: Path, overwrite: bool = False) -> None:
     """Copy time period 4 prior matrices into output folder.
 
     ME isn't run on time period 4 but the decompilation process
@@ -140,12 +137,79 @@ def copy_prior_tp4(prior_folder: Path, out_folder: Path) -> None:
         Folder containing the compiled prior synthetic matrices.
     out_folder : Path
         Folder to copy the matrices to.
+    overwrite : bool, default False
+        Whether to copy file if output already exists.
     """
+    if not prior_folder.is_dir():
+        raise NotADirectoryError(f"cannot find: {prior_folder}")
+
     LOG.info("Copying prior matrices from: %s", prior_folder)
     for file in prior_folder.glob("*_tp4.*"):
         out_path = out_folder / file.name.removeprefix("synthetic_")
-        LOG.info("Copying %s to %s", file.name, out_path)
-        shutil.copy(file, out_path)
+        if overwrite or not out_path.is_file():
+            LOG.info("Copying %s to %s", file.name, out_path)
+            shutil.copy(file, out_path)
+
+
+def decompile_matrices(
+    post_me_pcus_folder: Path,
+    mode: nd.Mode,
+    occupancies_file: Path,
+    compile_factors: Path,
+    year: int,
+) -> Path:
+    """Convert Post ME matrices to NTEM purposes and time periods.
+
+    Converts PCU matrices to persons and from average hour to full
+    time period, then converts from the user classes to NTEM purposes
+    and from/to home.
+
+    Parameters
+    ----------
+    post_me_pcus_folder : Path
+        Folder containing the Post ME PCUs matrices as CSVs.
+    mode : nd.Mode
+        Mode of the matrices.
+    occupancies_file : Path
+        CSV with the vehicle occupancy factors.
+    compile_factors : Path
+        CSV with the compile matrix factors.
+    year : int
+        Model year.
+
+    Returns
+    -------
+    Path
+        Folder containing the output decompiled matrices.
+    """
+    # Convert PCU matrices to person trips
+    persons_out = post_me_pcus_folder.with_name("Post ME Persons")
+    persons_out.mkdir(exist_ok=True)
+    LOG.info("Converting PCU matrices to persons")
+    occupancies = pd.read_csv(occupancies_file)
+    vehicle_occupancy.people_vehicle_conversion(
+        mat_import=post_me_pcus_folder,
+        mat_export=persons_out,
+        car_occupancies=occupancies,
+        mode=mode.get_mode_num(),
+        method="to_people",
+        out_format="wide",
+        hourly_average=True,
+    )
+    LOG.info("Written persons matrices to %s", persons_out)
+
+    compiled_out = persons_out / "Full OD"
+    compiled_out.mkdir(exist_ok=True)
+    LOG.info("Decompiling matrices")
+    od_to_pa.decompile_od(
+        str(persons_out),
+        str(compiled_out),
+        year=year,
+        decompile_factors_path=compile_factors,
+    )
+    LOG.info("Decompiled matrices written to %s", compiled_out)
+
+    return compiled_out
 
 
 def iter_od_matrices(prior_folder: Path, post_folder: Path) -> Iterator[MatrixDetails]:
@@ -473,7 +537,7 @@ def main(params: PostMEAdjustmentParameters, init_logger: bool = True) -> None:
         )
 
     # Extract UC matrices from UFMs and convert to HB fh/th and NHB
-    post_me_out = params.output_folder / "Post ME"
+    post_me_out = params.output_folder / "Post ME PCUs"
     post_me_out.mkdir(exist_ok=True)
     converter = ufm_converter.UFMConverter(params.saturn_folder)
     for ts in TIME_PERIODS:
@@ -487,13 +551,8 @@ def main(params: PostMEAdjustmentParameters, init_logger: bool = True) -> None:
         )
     copy_prior_tp4(params.synthetic_compiled_od_folder, post_me_out)
 
-    compiled_out = post_me_out / "Full OD"
-    compiled_out.mkdir(exist_ok=True)
-    od_to_pa.decompile_od(
-        post_me_out,
-        compiled_out,
-        year=params.year,
-        decompile_factors_path=params.compile_factors,
+    compiled_out = decompile_matrices(
+        post_me_out, params.mode, params.occupancies_file, params.compile_factors, params.year
     )
 
     # Calculate productions trip ends and compare between the two
@@ -514,7 +573,7 @@ def main(params: PostMEAdjustmentParameters, init_logger: bool = True) -> None:
         post_dvec.translate_zoning(comp_zoning),
         out_path,
     )
-    comparison_plots(comparisons, out_path)
+    comparison_plots(comparisons, out_path.with_suffix(".xlsx"))
     join_geodata(
         comparisons["hb_p_m"],
         out_path.with_name(out_path.stem + "-hb_p_m-geospatial.csv"),
@@ -548,7 +607,10 @@ if __name__ == "__main__":
             r"T:\MidMITs Demand\Distribution Model\iter9.3.3"
             r"\car_and_passenger\Final Outputs\Full OD Matrices"
         ),
-        synthetic_compiled_od_folder=compiled_od_folder,
+        synthetic_compiled_od_folder=compiled_od_folder / "PCU",
+        occupancies_file=Path(
+            r"I:\NorMITs Demand\import\vehicle_occupancies\car_vehicle_occupancies.csv"
+        ),
         compile_factors=compiled_od_folder / "od_compilation_factors.pkl",
         post_me_matrices=SATURNMatrices(*post_me_files),
         output_folder=Path(
