@@ -4,6 +4,7 @@
 ##### IMPORTS #####
 # Standard imports
 import dataclasses
+import logging
 import os
 import shutil
 import sys
@@ -454,9 +455,8 @@ def join_geodata(
         how="left",
         validate="m:1",
     )
-    out = output_path.with_name(output_path)
-    comp.to_csv(out, index=False)
-    LOG.info("Written: %s", out)
+    comp.to_csv(output_path, index=False)
+    LOG.info("Written: %s", output_path)
 
 
 def main(params: PostMEAdjustmentParameters, init_logger: bool = True) -> None:
@@ -467,6 +467,9 @@ def main(params: PostMEAdjustmentParameters, init_logger: bool = True) -> None:
             nd_log.get_package_logger_name(),
             params.output_folder / LOG_FILE,
             "Running Post ME Adjustment",
+        )
+        nd_log.capture_warnings(
+            file_handler_args=dict(log_file=params.output_folder / LOG_FILE)
         )
 
     # Extract UC matrices from UFMs and convert to HB fh/th and NHB
