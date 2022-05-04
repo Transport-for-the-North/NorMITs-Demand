@@ -51,9 +51,6 @@ def main():
         final = pd.DataFrame(columns = ['date', 'msoa', 'hour_part', 'journey_purpose', 'origin', 'destination', 'day'])
         for date in c.dates[month]:
             df = pd.read_csv(os.path.join(c.path,f"Daily Journeys MSOA with Purpose and TOD on {date}.csv"))
-            #removing entries stochastically rounded up to 10 for privacy reasons. Currently commented out as it had a minimal effect on data
-            #df.loc[df['origin']==10,'origin'] = 0
-            #df.loc[df['destination']==10,'destination'] = 0
             df.replace({'hour_part':c.time_update},inplace=True)
             df.drop('msoa_name',axis=1,inplace=True)
             df = df.groupby(['date','msoa','hour_part','journey_purpose']).sum().reset_index()
