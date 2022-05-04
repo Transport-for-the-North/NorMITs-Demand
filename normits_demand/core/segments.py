@@ -17,6 +17,7 @@ from __future__ import annotations
 import io
 import os
 import math
+import pathlib
 import itertools
 import collections
 
@@ -48,6 +49,7 @@ from normits_demand import logging as nd_log
 
 
 LOG = nd_log.get_logger(__name__)
+
 
 # ## CLASSES ## #
 class SegmentationLevel:
@@ -95,48 +97,32 @@ class SegmentationLevel:
     _weekend_time_periods = [5, 6]
 
     _segmentation_import_fname = "segmentations"
-    _unique_segments_csv_fname = "unique_segments.csv"
-    _unique_segments_compress_fname = "unique_segments.pbz2"
-    _unique_segments_compress_fname2 = "unique_segments.csv.bz2"
-    _naming_order_fname = "naming_order.csv"
-    _segment_type_fname = "types.csv"
+    unique_segments_csv_fname = "unique_segments.csv"
+    unique_segments_compress_fname = "unique_segments.pbz2"
+    unique_segments_compress_fname2 = "unique_segments.csv.bz2"
+    naming_order_fname = "naming_order.csv"
+    segment_type_fname = "types.csv"
 
-    _segment_definitions_path = os.path.join(
+    # Paths to segment definitions
+    segment_definitions_path = pathlib.Path(os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
         "definitions",
         "segmentations",
-    )
-    _multiply_definitions_path = os.path.join(
-        _segment_definitions_path,
-        "multiply.csv",
-    )
-    _expand_definitions_path = os.path.join(
-        _segment_definitions_path,
-        "expand.csv",
-    )
-    _aggregation_definitions_path = os.path.join(
-        _segment_definitions_path,
-        "aggregate.csv",
-    )
-    _reduce_definitions_path = os.path.join(
-        _segment_definitions_path,
-        "reduce.csv",
-    )
-    _subset_definitions_path = os.path.join(
-        _segment_definitions_path,
-        "subset.csv",
-    )
+    ))
+    segment_group_dir = segment_definitions_path / "_segment_groups"
+    valid_segment_subdirs = ["notem", "tram", "dimo", "custom"]
 
-    _segment_translation_dir = os.path.join(
-        _segment_definitions_path,
-        '_translations',
-    )
+    # Paths to specific files
+    _multiply_definitions_path = segment_definitions_path / "multiply.csv"
+    _expand_definitions_path = segment_definitions_path / "expand.csv"
+    _aggregation_definitions_path = segment_definitions_path / "aggregate.csv"
+    _reduce_definitions_path = segment_definitions_path / "reduce.csv"
 
-    _tfn_tt_expansion_path = os.path.join(
-        _segment_translation_dir,
-        'tfn_tt_splits.pbz2',
-    )
+    _subset_definitions_path = segment_definitions_path / "subset.csv"
+    _segment_translation_dir = segment_definitions_path / "_translations"
+    _tfn_tt_expansion_path = segment_definitions_path / "tfn_tt_splits.pbz2"
 
+    # Separators for the files above
     _list_separator = ';'
     _translate_separator = ':'
     _reduce_separator = ':'
@@ -2129,34 +2115,49 @@ def _read_in_and_validate_segment_types(path: nd.PathLike,
     return segment_types
 
 
+def _determine_import_path(name: str) -> pathlib.Path:
+    """Determines the correct path to import segment `name` from"""
+    # Init
+    import_home = SegmentationLevel.segment_definitions_path
+    segment_groups_home = SegmentationLevel.segment_group_dir
+    subdir_names = SegmentationLevel.valid_segment_subdirs
+
+    # Determine all possible import directories
+    import_dirs = [segment_groups_home / subdir for subdir in subdir_names]
+    import_dirs = [import_home] + import_dirs
+
+    # Check if the wanted name appears in any of the import directories
+    for directory in import_dirs:
+        try_path = directory / name
+        if try_path.exists():
+            return try_path
+
+    # If here, the name couldn't be found
+    raise nd.NormitsDemandError(
+        f"We don't seem to have any data for the segmentation {name}.\n"
+        f"Tried looking for the data in the following places: {import_dirs}"
+    )
+
+
 def _get_valid_segments(name: str) -> pd.DataFrame:
     """
     Finds and reads in the valid segments data for segmentation with name
     """
-    # ## DETERMINE THE IMPORT LOCATION ## #
-    import_home = os.path.join(SegmentationLevel._segment_definitions_path, name)
-
-    # Make sure the import location exists
-    if not os.path.exists(import_home):
-        raise nd.NormitsDemandError(
-            "We don't seem to have any data for the segmentation %s.\n"
-            "Tried looking for the data here: %s"
-            % (name, import_home)
-        )
+    import_home = _determine_import_path(name)
 
     # ## READ IN THE NAMING ORDER ## #
-    file_path = os.path.join(import_home, SegmentationLevel._naming_order_fname)
+    file_path = os.path.join(import_home, SegmentationLevel.naming_order_fname)
     naming_order = _read_in_and_validate_naming_order(file_path, name)
 
     # ## READ IN THE SEGMENT TYPING ## #
-    file_path = os.path.join(import_home, SegmentationLevel._segment_type_fname)
+    file_path = os.path.join(import_home, SegmentationLevel.segment_type_fname)
     segment_types = _read_in_and_validate_segment_types(file_path, naming_order)
 
     # ## READ IN THE UNIQUE SEGMENTS ## #
     # Build the two possible paths
-    compress_fname = SegmentationLevel._unique_segments_compress_fname
-    compress_fname2 = SegmentationLevel._unique_segments_compress_fname2
-    csv_fname = SegmentationLevel._unique_segments_csv_fname
+    compress_fname = SegmentationLevel.unique_segments_compress_fname
+    compress_fname2 = SegmentationLevel.unique_segments_compress_fname2
+    csv_fname = SegmentationLevel.unique_segments_csv_fname
 
     compress_path = os.path.join(import_home, compress_fname)
     compress_path2 = os.path.join(import_home, compress_fname2)
@@ -2171,11 +2172,9 @@ def _get_valid_segments(name: str) -> pd.DataFrame:
             if not os.path.isfile(csv_path):
                 # Can't find either!
                 raise nd.NormitsDemandError(
-                    "We don't seem to have any valid segment data for the segmentation %s.\n"
-                    "Tried looking for the data here:"
-                    "%s\n"
-                    "%s"
-                    % (name, compress_path, csv_path)
+                    f"We don't seem to have any valid segment data for the segmentation {name}.\n"
+                    f"Tried looking for the data here:{compress_path}\n"
+                    f"{csv_path}"
                 )
 
     # Read in the file
