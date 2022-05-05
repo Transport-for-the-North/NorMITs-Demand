@@ -21,7 +21,7 @@ import mapclassify
 import matplotlib.backends.backend_pdf as backend_pdf
 import numpy as np
 import pandas as pd
-from matplotlib import cm, figure, patches, colors
+from matplotlib import cm, figure, patches, colors, lines
 from matplotlib import pyplot as plt
 from matplotlib import ticker
 from scipy import stats
@@ -535,7 +535,7 @@ def _heatmap_figure(
 
     if postive_negative_colormaps:
         # Calculate, and apply, separate colormaps for positive and negative values
-        label_fmt = "{:.0%}"
+        label_fmt = "{:.1%}"
         negative_cmap = _colormap_classify(
             geodata.loc[geodata[column_name] < 0, column_name], "PuBu_r", label_fmt=label_fmt
         )
@@ -742,6 +742,24 @@ def ntem_pa_plots(
     )
 
 
+def _linear_fit(data: pd.DataFrame, ax: plt.Axes, color: str, label: str) -> lines.Line2D:
+    """Plot line of best fit on `ax`."""
+    fit = stats.linregress(data[["matrix", "tempro"]].values)
+    fit_x = (np.min(data["matrix"]), np.max(data["matrix"]))
+    fit_y = [x * fit.slope + fit.intercept for x in fit_x]
+
+    line = ax.plot(
+        fit_x,
+        fit_y,
+        "--",
+        color=color,
+        alpha=0.7,
+        label=f"{label}\n$y = {fit.slope:.2f}x {fit.intercept:+.1f}$"
+        f"\n$R^2={fit.rvalue**2:.2f}$",
+    )[0]
+    return line
+
+
 def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title: str) -> None:
     """Create NTEM model vs TEMPro trip end growth comparison plot.
 
@@ -760,11 +778,12 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
         "zone",
         "trip_origin",
         "pa",
+        "IE",
         "matrix_growth",
         "tempro_growth",
         "matrix_forecast",
     ]
-    growth = growth.reset_index().set_index(expected_columns[:3]).loc[:, expected_columns[3:]]
+    growth = growth.reset_index().set_index(expected_columns[:4]).loc[:, expected_columns[4:]]
     growth.rename(columns={"matrix_growth": "matrix", "tempro_growth": "tempro"}, inplace=True)
     growth.dropna(inplace=True)
 
@@ -775,42 +794,35 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
                 fig, ax = plt.subplots(figsize=(15, 10), tight_layout=True)
 
                 filtered = growth.loc[:, to.get_name(), pa, :]
-                scatter = ax.scatter(
-                    filtered["matrix"],
-                    filtered["tempro"],
-                    marker="+",
-                    label="Growth Factors",
-                    c=filtered["matrix_forecast"],
-                    cmap="YlGn",
-                    norm=colors.LogNorm(),
+
+                # Use different markers for internal/external zones
+                cmap_norm = colors.LogNorm(
+                    filtered["matrix_forecast"].min(), filtered["matrix_forecast"].max()
                 )
+                for m, ie in (("o", "Internal"), ("+", "External")):
+                    mask = filtered.index.get_level_values("IE").str.lower() == ie.lower()
+                    scatter = ax.scatter(
+                        filtered.loc[mask, "matrix"],
+                        filtered.loc[mask, "tempro"],
+                        marker=m,
+                        label=f"Growth Factors\n{ie} Zones",
+                        c=filtered.loc[mask, "matrix_forecast"],
+                        cmap="YlGn",
+                        norm=cmap_norm,
+                    )
 
-                fit = stats.linregress(filtered[["matrix", "tempro"]].values)
-                fit_x = (np.min(filtered["matrix"]), np.max(filtered["matrix"]))
-                fit_y = [x * fit.slope + fit.intercept for x in fit_x]
-                line = ax.plot(
-                    fit_x,
-                    fit_y,
-                    "--",
-                    color="black",
-                    alpha=0.7,
-                    label=f"Linear Fit: $y = {fit.slope:.2f}x {fit.intercept:+.1f}$",
-                )[0]
+                _linear_fit(filtered, ax, "black", "Linear Fit")
+                mask = filtered.index.get_level_values("IE").str.lower() == "internal"
+                _linear_fit(filtered.loc[mask], ax, "orange", "Linear Fit (Internal Only)")
 
-                ax.legend(
-                    handles=[scatter, line, patches.Patch(alpha=0)],
-                    labels=[
-                        scatter.get_label(),
-                        line.get_label(),
-                        f"$R^2={fit.rvalue**2:.2f}$",
-                    ],
-                )
-
+                ax.legend()
                 ax.set_xlabel("Model Growth Factors")
                 ax.set_ylabel("TEMPro Growth Factors")
                 ax.set_title(f"{title}\n{to.get_name().upper()} {pa.title()}")
 
-                cbar = plt.colorbar(scatter, label=f"Model {to.get_name().upper()} {pa.title()}")
+                cbar = plt.colorbar(
+                    scatter, label=f"Model {to.get_name().upper()} {pa.title()}"
+                )
                 # cbar.ax.yaxis.set_minor_formatter(
                 #     ticker.LogFormatter(labelOnlyBase=False, minor_thresholds=(5, 1.5))
                 # )
@@ -846,8 +858,14 @@ def ntem_tempro_comparison_plots(
     """
     LOG.info("Producing NTEM vs TEMPro comparison plots")
     comp_zone_lookup = {"lad_2020": "LAD"}
-    geospatial = get_geo_data(geospatial_file)
+    geospatial = get_geo_data(geospatial_file).to_frame()
     analytical_area = get_geo_data(analytical_area_shape).iloc[0]
+
+    plot_zone_system = nd.get_zoning_system(plot_zoning)
+    geospatial.loc[:, "IE"] = np.nan
+    geospatial.loc[geospatial.index.isin(plot_zone_system.internal_zones), "IE"] = "Internal"
+    geospatial.loc[geospatial.index.isin(plot_zone_system.external_zones), "IE"] = "External"
+    geospatial.dropna(axis=0, inplace=True)
 
     comparison_filename = "PA_TEMPro_comparisons-{year}-{zone}"
     zone = comp_zone_lookup.get(plot_zoning, plot_zoning)
@@ -877,7 +895,7 @@ def ntem_tempro_comparison_plots(
 
         # Group into HB/NHB productions and attractions, then recalculate growth
         trip_end_groups = comparison.groupby(
-            ["zone", "trip_origin", "pa"], as_index=False
+            ["zone", "trip_origin", "pa", "IE"], as_index=False
         ).agg(
             {
                 "matrix_base": "sum",
@@ -897,7 +915,7 @@ def ntem_tempro_comparison_plots(
         plot_iterator = (
             trip_end_groups[["trip_origin", "pa"]].drop_duplicates().itertuples(index=False)
         )
-        trip_end_groups.set_index(["zone", "trip_origin", "pa"], inplace=True)
+        trip_end_groups.set_index(["zone", "trip_origin", "pa", "IE"], inplace=True)
         out = output_folder / f"PA_TEMPro_growth_comparison_{year}_{zone}.csv"
         trip_end_groups.drop(columns=["geometry"]).to_csv(out)
         LOG.info("Written: %s", out)
@@ -905,7 +923,7 @@ def ntem_tempro_comparison_plots(
         growth_comparison_regression(
             trip_end_groups,
             out.with_name(out.stem + "-scatter.pdf"),
-            "NTEM Model and TEMPro Trip End Growth Comparison",
+            f"NTEM Model and TEMPro Trip End Growth Comparison at {zone}",
         )
 
         plot_column = "Growth Difference"
@@ -984,15 +1002,15 @@ def main(params: PAPlotsParameters) -> None:
         Parameters and input files for creating the graphs.
     """
     params.output_folder.mkdir(exist_ok=True)
-    # ntem_pa_plots(
-    #     params.base_matrix_folder,
-    #     params.forecast_matrix_folder,
-    #     params.matrix_zoning,
-    #     params.plot_zoning,
-    #     params.output_folder,
-    #     params.geospatial_file,
-    #     params.analytical_area_shape,
-    # )
+    ntem_pa_plots(
+        params.base_matrix_folder,
+        params.forecast_matrix_folder,
+        params.matrix_zoning,
+        params.plot_zoning,
+        params.output_folder,
+        params.geospatial_file,
+        params.analytical_area_shape,
+    )
     ntem_tempro_comparison_plots(
         params.tempro_comparison_folder,
         params.geospatial_file,
