@@ -21,7 +21,7 @@ import mapclassify
 import matplotlib.backends.backend_pdf as backend_pdf
 import numpy as np
 import pandas as pd
-from matplotlib import cm, figure, patches, colors, lines
+from matplotlib import cm, colors, figure, lines, patches
 from matplotlib import pyplot as plt
 from matplotlib import ticker
 from scipy import stats
@@ -543,6 +543,8 @@ def _heatmap_figure(
             geodata.loc[geodata[column_name] >= 0, column_name], "YlGn", label_fmt=label_fmt
         )
         cmap = negative_cmap + positive_cmap
+        # Update colours index to be the same order as geodata
+        cmap.colours = cmap.colours.reindex(geodata.index)
 
         for ax in axes:
             geodata.plot(
@@ -791,7 +793,8 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
 
         for to in nd.TripOrigin:
             for pa in ("productions", "attractions"):
-                fig, ax = plt.subplots(figsize=(15, 10), tight_layout=True)
+                fig, ax = plt.subplots(figsize=(12, 10), tight_layout=True)
+                ax.set_aspect("equal")
 
                 filtered = growth.loc[:, to.get_name(), pa, :]
 
@@ -818,7 +821,13 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
                 ax.legend()
                 ax.set_xlabel("Model Growth Factors")
                 ax.set_ylabel("TEMPro Growth Factors")
-                ax.set_title(f"{title}\n{to.get_name().upper()} {pa.title()}")
+                fig.suptitle(f"{title}\n{to.get_name().upper()} {pa.title()}")
+
+                # Set consistent axis bounds
+                lower = min(ax.get_xlim()[0], ax.get_ylim()[0])
+                upper = max(ax.get_xlim()[1], ax.get_ylim()[1])
+                ax.set_xlim(lower, upper)
+                ax.set_ylim(lower, upper)
 
                 cbar = plt.colorbar(
                     scatter, label=f"Model {to.get_name().upper()} {pa.title()}"
