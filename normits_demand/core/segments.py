@@ -1631,9 +1631,8 @@ class SegmentationLevel:
             raise SegmentationError(
                 "Some segment names seem to have gone missing during "
                 "expansion.\n"
-                "Expected %s segments.\n"
-                "Found %s segments."
-                % (len(other.segment_names), len(set(keep_segments)))
+                f"Expected {(len(other.segment_names))} segments.\n"
+                f"Found {len(set(keep_segments))} segments."
             )
 
         return keep_segments
@@ -1722,9 +1721,8 @@ class SegmentationLevel:
             raise ValueError(
                 "Not all segments for this segmentation are contained in "
                 "segment_params.\n"
-                "\tAdditional segments: %s\n"
-                "\tMissing segments: %s"
-                % (additional, missing)
+                f"\tAdditional segments: {additional}\n"
+                f"\tMissing segments: {missing}"
             )
 
     def get_grouped_weekday_segments(self) -> List[List[str]]:
@@ -1919,10 +1917,10 @@ class SegmentationLevel:
             name_parts += [file_desc]
 
         if year is not None:
-            name_parts += ["yr%s" % year]
+            name_parts += [f"yr{year}"]
 
         for segment_name in self.naming_order:
-            name_parts += ["%s%s" % (segment_name, segment_params[segment_name])]
+            name_parts += [f"{segment_name}{segment_params[segment_name]}"]
 
         if suffix is not None:
             name_parts += [suffix]
@@ -2000,9 +1998,8 @@ class SegmentationLevel:
         # Validate we have a dictionary
         if not isinstance(instance_dict, dict):
             raise ValueError(
-                "Expected instance_dict to be a dictionary. "
-                "Got %s instead"
-                % type(instance_dict)
+                f"Expected instance_dict to be a dictionary. "
+                f"Got {type(instance_dict)} instead"
             )
 
         # Convert the valid_segments back into a pd.DataFrame
@@ -2031,9 +2028,9 @@ def _read_in_and_validate_naming_order(path: nd.PathLike, name: str) -> List[str
     # Check the file exists
     if not os.path.isfile(path):
         raise FileNotFoundError(
-            "We don't seem to have any naming order data for the segmentation %s.\n"
-            "Tried looking for the data here: %s"
-            % (name, path)
+            f"We don't seem to have any naming order data for the "
+            f"segmentation {name}.\n"
+            f"Tried looking for the data here: {path}"
         )
 
     # Read in and validate each row
@@ -2044,9 +2041,9 @@ def _read_in_and_validate_naming_order(path: nd.PathLike, name: str) -> List[str
             # Make sure there is only one value on this line
             if ',' in line:
                 raise SegmentationError(
-                    "Error while reading in the segmentation naming order at: %s\n"
-                    "There appears to be more than one name on line: %s"
-                    % (path, i)
+                    f"Error while reading in the segmentation naming order "
+                    f"at: {path}\nThere appears to be more than one "
+                    f"name on line: {i}"
                 )
 
             # Clean up value, add to list
@@ -2054,9 +2051,9 @@ def _read_in_and_validate_naming_order(path: nd.PathLike, name: str) -> List[str
 
     if order == list():
         raise SegmentationError(
-            "Error while reading in the segmentation naming order at: %s\n"
-            "There does not appear to be any names in this file!"
-            % path
+            f"Error while reading in the segmentation naming order at: "
+            f"{path}\n"
+            f"There does not appear to be any names in this file!"
         )
 
     return order
@@ -2082,11 +2079,10 @@ def _read_in_and_validate_segment_types(path: nd.PathLike,
             # Make sure there is only two values on this line
             if len(split_line) != 2:
                 raise SegmentationError(
-                    "Error while reading in the segmentation typing at: %s\n"
-                    "Expected to find two values on line %s, found %s values "
-                    "instead.\n"
-                    "The following line was read: %s"
-                    % (path, i, len(split_line), line)
+                    f"Error while reading in the segmentation typing at: {path}\n"
+                    f"Expected to find two values on line {i}, found "
+                    f"{len(split_line)} values instead.\n"
+                    f"The following line was read: {line}"
                 )
 
             col = split_line[0]
@@ -2094,16 +2090,14 @@ def _read_in_and_validate_segment_types(path: nd.PathLike,
 
             if col not in naming_order:
                 raise ValueError(
-                    "On line %s, the segment %s in the typing file does "
-                    "not exist in the naming order."
-                    % (i, col)
+                    f"On line {i}, the segment {col} in the typing file does "
+                    f"not exist in the naming order."
                 )
 
-            if type(col_type) != type:
+            if not isinstance(col_type, type):
                 raise ValueError(
-                    "On line %s, expected to find a type (such as int, or "
-                    "str), but got an object of type %s instead."
-                    % (i, type(col_type))
+                    f"On line {i}, expected to find a type (such as int, or "
+                    f"str), but got an object of type {type(col_type)} instead."
                 )
 
             segment_types[col] = col_type
@@ -2121,6 +2115,14 @@ def _determine_import_path(name: str) -> pathlib.Path:
     import_home = SegmentationLevel.segment_definitions_path
     segment_groups_home = SegmentationLevel.segment_group_dir
     subdir_names = SegmentationLevel.valid_segment_subdirs
+
+    # Check for invalid name
+    if name in subdir_names:
+        raise nd.SegmentationError(
+            f"{name} is not a valid segment name as it is the name of a "
+            f"grouping of segmentations. Other invalid segment names "
+            f"include: {subdir_names}"
+        )
 
     # Determine all possible import directories
     import_dirs = [segment_groups_home / subdir for subdir in subdir_names]
