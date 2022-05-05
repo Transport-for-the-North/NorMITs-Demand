@@ -290,6 +290,10 @@ class DistributionModel(DistributionModelExportPaths):
             cache_dir=self.cache_paths.upper_trip_ends,
         )
 
+        print("Got upper model args")
+        print("Need to update TLDs")
+        exit()
+
         self._logger.info("Initialising the Upper Model")
         upper_model = self.upper_model_method.get_distributor(
                 year=self.year,

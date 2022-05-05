@@ -1691,10 +1691,13 @@ class DVector:
         # Validate inputs
         if not isinstance(out_segmentation, nd.core.segments.SegmentationLevel):
             raise ValueError(
-                "target_segmentation is not the correct type. "
-                "Expected SegmentationLevel, got %s"
-                % type(out_segmentation)
+                f"target_segmentation is not the correct type. "
+                f"Expected SegmentationLevel, got {type(out_segmentation)}"
             )
+
+        # Return a copy of self if in/out segmentation the same
+        if self.segmentation == out_segmentation:
+            return self.copy()
 
         # Get the subset definition
         subset_list = self.segmentation.subset(out_segmentation)

@@ -7,18 +7,18 @@ hb_p_tp_week,hb_p_tp_wday,tp:5;tp:6
 notem_nhb_output_reduced,notem_nhb_output_reduced_wday,tp:5;tp:6
 tram_nhb_output_reduced,tram_nhb_output_reduced_wday,tp:5;tp:6
 ,,
-TMS SUBSETS,,
+DIMO SUBSETS,,
 hb_p_m,hb_p_m_car,m:1;m:2;m:5;m:6
 hb_p_m,hb_p_m_bus,m:1;m:2;m:3;m:6
 hb_p_m,hb_p_m_walk,m:2;m:3;m:5;m:6
 hb_p_m,hb_p_m_cycle,m:1;m:3;m:5;m:6
 hb_p_m_ca,hb_p_m_ca_rail,m:1;m:2;m:3;m:5
 ,,
-tms_nhb_p_m_tp_wday,tms_nhb_p_m_tp_wday_car,m:1;m:2;m:5;m:6
-tms_nhb_p_m_tp_wday,tms_nhb_p_m_tp_wday_bus,m:1;m:2;m:3;m:6
-tms_nhb_p_m_tp_wday,tms_nhb_p_m_tp_wday_walk,m:2;m:3;m:5;m:6
-tms_nhb_p_m_tp_wday,tms_nhb_p_m_tp_wday_cycle,m:1;m:3;m:5;m:6
-tms_nhb_p_m_ca_tp_wday,tms_nhb_p_m_ca_tp_wday_rail,m:1;m:2;m:3;m:5
+dimo_nhb_p_m_tp,dimo_nhb_p_m_tp_car,m:1;m:2;m:5;m:6
+dimo_nhb_p_m_tp,dimo_nhb_p_m_tp_bus,m:1;m:2;m:3;m:6
+dimo_nhb_p_m_tp,dimo_nhb_p_m_tp_walk,m:2;m:3;m:5;m:6
+dimo_nhb_p_m_tp,dimo_nhb_p_m_tp_cycle,m:1;m:3;m:5;m:6
+dimo_nhb_p_m_ca_tp,dimo_nhb_p_m_ca_tp_rail,m:1;m:2;m:3;m:5
 ,,
 hb_p_m7,hb_p_m_car,m:1;m:2;m:5;m:6;m:7
 hb_p_m7,hb_p_m_bus,m:1;m:2;m:3;m:6;m:7
@@ -27,11 +27,11 @@ hb_p_m7,hb_p_m_cycle,m:1;m:3;m:5;m:6;m:7
 hb_p_m7,hb_p_m_tram,m:1;m:2;m:3;m:5;m:6
 hb_p_m7_ca,hb_p_m_ca_rail,m:1;m:2;m:3;m:5;m:7
 ,,
-tms_nhb_p_m7_tp_wday,tms_nhb_p_m_tp_wday_car,m:1;m:2;m:5;m:6;m:7
-tms_nhb_p_m7_tp_wday,tms_nhb_p_m_tp_wday_bus,m:1;m:2;m:3;m:6;m:7
-tms_nhb_p_m7_tp_wday,tms_nhb_p_m_tp_wday_walk,m:2;m:3;m:5;m:6;m:7
-tms_nhb_p_m7_tp_wday,tms_nhb_p_m_tp_wday_cycle,m:1;m:3;m:5;m:6;m:7
-tms_nhb_p_m7_tp_wday,tms_nhb_p_m_tp_wday_tram,m:1;m:2;m:3;m:5;m:6
-tms_nhb_p_m7_ca_tp_wday,tms_nhb_p_m_ca_tp_wday_rail,m:1;m:2;m:3;m:5;m:7
+dimo_nhb_p_m7_tp,dimo_nhb_p_m_tp_car,m:1;m:2;m:5;m:6;m:7
+dimo_nhb_p_m7_tp,dimo_nhb_p_m_tp_bus,m:1;m:2;m:3;m:6;m:7
+dimo_nhb_p_m7_tp,dimo_nhb_p_m_tp_walk,m:2;m:3;m:5;m:6;m:7
+dimo_nhb_p_m7_tp,dimo_nhb_p_m_tp_cycle,m:1;m:3;m:5;m:6;m:7
+dimo_nhb_p_m7_tp,dimo_nhb_p_m_ca_tp_tram,m:1;m:2;m:3;m:5;m:6
+dimo_nhb_p_m7_ca_tp,dimo_nhb_p_m_ca_tp_rail,m:1;m:2;m:3;m:5;m:7
 ,,
 nhb_p_m,nhb_p_m_car,m:1;m:2;m:5;m:6
