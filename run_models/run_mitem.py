@@ -16,13 +16,14 @@ import run_notem
 import normits_demand as nd
 from normits_demand.models import MiTEM
 from normits_demand.pathing import MiTEMImportPaths
+
 # pylint: enable=import-error,wrong-import-position
 
 
 ##### CONSTANTS #####
 years = run_notem.years
 scenario = run_notem.scenario
-mitem_iter = run_notem.notem_iter
+mitem_iter = "9.6b"
 lu_drive = run_notem.lu_drive
 by_iteration = run_notem.by_iteration
 fy_iteration = run_notem.fy_iteration
@@ -38,11 +39,18 @@ def main():
     hb_attraction_import_version = "2.3"
     nhb_production_import_version = "2.1"
 
-    hb_attraction_balance_zoning = nd.BalancingZones(
-        nd.get_segmentation_level("notem_hb_output"), nd.get_zoning_system("gor"), dict()
+    mode_balancing_zones = dict.fromkeys((1, 2, 5), nd.get_zoning_system("county"))
+    hb_attraction_balance_zoning = nd.BalancingZones.build_single_segment_group(
+        nd.get_segmentation_level("notem_hb_output"),
+        nd.get_zoning_system("gor"),
+        "m",
+        mode_balancing_zones,
     )
-    nhb_attraction_balance_zoning = nd.BalancingZones(
-        nd.get_segmentation_level("notem_nhb_output"), nd.get_zoning_system("gor"), dict()
+    nhb_attraction_balance_zoning = nd.BalancingZones.build_single_segment_group(
+        nd.get_segmentation_level("notem_nhb_output"),
+        nd.get_zoning_system("gor"),
+        "m",
+        mode_balancing_zones,
     )
 
     import_builder = MiTEMImportPaths(

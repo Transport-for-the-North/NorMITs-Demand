@@ -120,7 +120,7 @@ class CUBEMatConverter:
             "/Hide",
             "/HideScript",
         ]
-        comp_proc = subprocess.run([str(a) for a in args], capture_output=True, check=True)
+        comp_proc = subprocess.run([str(a) for a in args], capture_output=True, check=False)
         LOG.debug(
             "CSV to CUBE .mat Voyager output:%s%s",
             _stdout_decode(comp_proc.stdout),

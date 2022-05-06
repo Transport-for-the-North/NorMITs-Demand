@@ -1,15 +1,16 @@
 import os
+import pathlib
+from typing import List
+from functools import reduce
 
 import numpy as np
 import pandas as pd
 
-from typing import List
-from functools import reduce
 
 # Self imports
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
-from normits_demand.utils import general as du
+from normits_demand.utils import compress, file_ops, general as du
 from normits_demand.utils import vehicle_occupancy as vo
 from normits_demand import AuditError
 
@@ -41,7 +42,15 @@ def _decompile_od_internal(od_import,
         tp=str(comp_calib_params['tp']),
         csv=True
     )
-    comp_mat = pd.read_csv(os.path.join(od_import, in_mat_name), index_col=0)
+    comp_mat = file_ops.read_df(
+        os.path.join(od_import, in_mat_name),
+        index_col=0,
+        find_similar=True,
+    )
+    # Attempt to convert columns to integer to match decompile factors
+    comp_mat.columns = pd.to_numeric(
+        comp_mat.columns, downcast="integer", errors="ignore"
+    )
     print("Decompiling matrix: %s" % in_mat_name)
 
     # Loop through the factors and decompile the matrix
@@ -49,6 +58,9 @@ def _decompile_od_internal(od_import,
     for part_mat_name in decompile_factors.keys():
         # Decompile the matrix using the factors
         factors = decompile_factors[part_mat_name]
+        factors.columns = pd.to_numeric(
+            factors.columns, downcast="integer", errors="ignore"
+        )
         part_mat = comp_mat * factors
 
         # Generate filename and save the decompiled matrix
@@ -131,8 +143,12 @@ def decompile_od(od_import: str,
     -------
     None
     """
-    # Load the factors
-    decompile_factors = pd.read_pickle(decompile_factors_path)
+    # Check if file is compressed before loading the factors
+    suffix = "".join(pathlib.Path(decompile_factors_path).suffixes)
+    if suffix.lower() in (file_ops.PD_COMPRESSION | {consts.COMPRESSION_SUFFIX}):
+        decompile_factors = compress.read_in(decompile_factors_path)
+    else:
+        decompile_factors = file_ops.read_pickle(decompile_factors_path)
 
     # ## MULTIPROCESS ## #
     unchanging_kwargs = {

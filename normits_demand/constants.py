@@ -44,7 +44,7 @@ BASE_YEAR_EMP_FNAME = 'land_use_2018_emp.csv'
 POSTME_TP_SPLIT_FACTORS_FNAME = "post_me_nhb_tp_splitting_factors.pkl"
 POSTME_FROM_TO_FACTORS_FNAME = "post_me_from_to_factors.pkl"
 
-COMPRESSION_SUFFIX = '.pbz2'
+COMPRESSION_SUFFIX = '.csv.bz2'
 VALID_MAT_FTYPES = ['.csv', COMPRESSION_SUFFIX]
 
 

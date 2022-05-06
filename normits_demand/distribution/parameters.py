@@ -11,7 +11,7 @@ from typing import NamedTuple, Optional, Union, Dict, Any
 
 # Local imports
 import normits_demand as nd
-from normits_demand import cost, pathing
+from normits_demand import cost
 
 
 ##### CLASSES #####
@@ -49,15 +49,13 @@ class DistributionModelPaths(NamedTuple):
     export_home: Union[Path, str]
     notem_export_home: Union[Path, str]
     tram_export_home: Union[Path, str]
-    cache_path: Union[Path, str]
-    overwrite_cache: bool
-
 
 class DistributionModelParameters(NamedTuple):
     """Stores all parameters required for running the distribution model."""
     paths: DistributionModelPaths
-    export_paths: pathing.NoTEMExportPaths
     iteration: str
+    trip_end_iteration: str
+    scenario: nd.Scenario
     base_year: int
     mode: nd.Mode
     use_tram: bool
@@ -138,8 +136,6 @@ def build_dm_kwargs(params: DistributionModelParameters) -> DistributionModelKwa
         'tour_props_zoning_name': tour_props_zoning_name,
         'init_params_cols': params.gm_cost_function.parameter_names,
         'intrazonal_cost_infill': params.intrazonal_infill,
-        'cache_path': params.paths.cache_path,
-        'overwrite_cache': params.paths.overwrite_cache,
     }
 
     # Distribution model

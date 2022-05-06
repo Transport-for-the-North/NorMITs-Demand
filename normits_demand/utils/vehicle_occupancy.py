@@ -67,7 +67,7 @@ def _people_vehicle_conversion_internal(mat_import,
 
 def people_vehicle_conversion(mat_import: str,
                               mat_export: str,
-                              car_occupancies: str,
+                              car_occupancies: pd.DataFrame,
                               mode: int,
                               method: str = 'to_vehicles',
                               round_dp: int = consts.DEFAULT_ROUNDING,
