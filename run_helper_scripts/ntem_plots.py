@@ -793,8 +793,15 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
 
         for to in nd.TripOrigin:
             for pa in ("productions", "attractions"):
-                fig, ax = plt.subplots(figsize=(12, 10), tight_layout=True)
-                ax.set_aspect("equal")
+                fig, axd = plt.subplot_mosaic(
+                    [
+                        ["internal", "colorbar"],
+                        ["external", "colorbar"],
+                    ],
+                    gridspec_kw=dict(width_ratios=[1, 0.05]),
+                    figsize=(9, 15),
+                    tight_layout=True,
+                )
 
                 filtered = growth.loc[:, to.get_name(), pa, :]
 
@@ -802,7 +809,10 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
                 cmap_norm = colors.LogNorm(
                     filtered["matrix_forecast"].min(), filtered["matrix_forecast"].max()
                 )
+                lower, upper = np.inf, -np.inf
                 for m, ie in (("o", "Internal"), ("+", "External")):
+                    ax = axd[ie.lower()]
+
                     mask = filtered.index.get_level_values("IE").str.lower() == ie.lower()
                     scatter = ax.scatter(
                         filtered.loc[mask, "matrix"],
@@ -813,24 +823,32 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
                         cmap="YlGn",
                         norm=cmap_norm,
                     )
+                    _linear_fit(filtered.loc[mask], ax, "black", "Linear Fit")
 
-                _linear_fit(filtered, ax, "black", "Linear Fit")
-                mask = filtered.index.get_level_values("IE").str.lower() == "internal"
-                _linear_fit(filtered.loc[mask], ax, "orange", "Linear Fit (Internal Only)")
+                    ax.set_aspect("equal")
+                    ax.legend()
+                    ax.set_xlabel("Model Growth Factors")
+                    ax.set_ylabel("TEMPro Growth Factors")
+                    ax.set_title(f"{ie} Zones")
 
-                ax.legend()
-                ax.set_xlabel("Model Growth Factors")
-                ax.set_ylabel("TEMPro Growth Factors")
-                fig.suptitle(f"{title}\n{to.get_name().upper()} {pa.title()}")
+                    # Keep track of min/max axis bounds
+                    for i in ("x", "y"):
+                        bounds = getattr(ax, f"get_{i}lim")()
+                        if bounds[0] < lower:
+                            lower = bounds[0]
+                        if bounds[1] > upper:
+                            upper = bounds[1]
 
                 # Set consistent axis bounds
-                lower = min(ax.get_xlim()[0], ax.get_ylim()[0])
-                upper = max(ax.get_xlim()[1], ax.get_ylim()[1])
-                ax.set_xlim(lower, upper)
-                ax.set_ylim(lower, upper)
+                for ie in ("internal", "external"):
+                    axd[ie].set_xlim(lower, upper)
+                    axd[ie].set_ylim(lower, upper)
 
-                cbar = plt.colorbar(
-                    scatter, label=f"Model {to.get_name().upper()} {pa.title()}"
+                fig.suptitle(f"{title}\n{to.get_name().upper()} {pa.title()}")
+                cbar = fig.colorbar(
+                    scatter,
+                    label=f"Model {to.get_name().upper()} {pa.title()}",
+                    cax=axd["colorbar"],
                 )
                 # cbar.ax.yaxis.set_minor_formatter(
                 #     ticker.LogFormatter(labelOnlyBase=False, minor_thresholds=(5, 1.5))
