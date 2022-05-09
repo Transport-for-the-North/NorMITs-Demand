@@ -4,11 +4,12 @@
 ##### IMPORTS #####
 # Standard imports
 import dataclasses
+import operator
 import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Iterator, NamedTuple, Union
+from typing import Iterator, NamedTuple, Optional, Union
 
 # Third party imports
 import geopandas as gpd
@@ -37,8 +38,9 @@ LOG_FILE = "SATURN_ME_comparison.log"
 TIME_PERIODS = {1: "AM", 2: "IP", 3: "PM"}
 TIME_PERIOD_HOURS = {"AM": 3, "IP": 6, "PM": 3}
 USERCLASSES = {1: "business", 2: "commute", 3: "other"}
-COMPARISON_ZONING = "lad_2020"
 COMPARISON_SEGMENTATIONS = {"hb_p_m", "hb_p_m_tp_wday"}
+ADJUSTMENT_SEGMENTATION = "hb_p_m_tp_wday"
+ADJUSTMENT_ZONING = "lad_2020"
 
 ##### CLASSES #####
 class SATURNMatrices(NamedTuple):
@@ -66,6 +68,7 @@ class PostMEAdjustmentParameters:
     geospatial_columns: tuple[str, str] = ("lad_2020_zone_id", "LAD20CD")
     mode: nd.Mode = nd.Mode.CAR
     simplify_geometry: int = 100
+    adjustment_cutoff: Optional[float] = None
 
 
 class MatrixDetails(NamedTuple):
@@ -352,12 +355,15 @@ def combined_production_trip_ends(
 
 
 def compare_productions(
-    prior: nd.DVector, post: nd.DVector, output_path: Path
-) -> dict[str, pd.DataFrame]:
-    """Calculate the post ME factor for each of `COMPARISON_SEGMENTATIONS`.
+    prior: nd.DVector,
+    post: nd.DVector,
+    output_path: Path,
+    segmentation_name: str,
+    cutoff: float = None,
+) -> tuple[dict[str, pd.DataFrame], Path]:
+    """Calculate the post ME factor.
 
-    Outputs post ME / prior ME production trip ends at various
-    segmentation levels.
+    Outputs post ME / prior ME production trip ends.
 
     Parameters
     ----------
@@ -368,37 +374,53 @@ def compare_productions(
     output_path : Path
         Path to save the output files to, segmentation and
         mode name are appended to output different files.
+    segmentation_name : str
+        Name of `SegmentationLevel` to convert data to for comparison.
+    cutoff : float, optional
+        Limits any factors to 1 +/- `cutoff`.
 
     Returns
     -------
-    dict[str, pd.DataFrame]
-        Post ME factors DataFrames at various segmentation levels.
+    pd.DataFrame
+        Post ME factors DataFrame at given segmentation level.
     """
     MODE = nd.Mode.CAR
-    LOG.info("Comparing productions")
+    LOG.info("Comparing productions at %s", segmentation_name)
+    out_stem = output_path.stem + f"-{segmentation_name}-{MODE.name}"
 
-    comparisons = {}
-    for seg in COMPARISON_SEGMENTATIONS:
-        if seg != prior.segmentation.name:
-            segmentation = nd.get_segmentation_level(seg)
-            new_prior = prior.aggregate(segmentation)
-            new_post = post.aggregate(segmentation)
-        else:
-            new_prior = prior
-            new_post = post
+    if segmentation_name != prior.segmentation.name:
+        segmentation = nd.get_segmentation_level(segmentation_name)
+        new_prior = prior.aggregate(segmentation)
+        new_post = post.aggregate(segmentation)
+    else:
+        new_prior = prior
+        new_post = post
 
-        comp = new_post / new_prior
-        out = output_path.with_name(output_path.stem + f"-{seg}-{MODE.name}.csv.bz2")
+    comp = new_post / new_prior
 
-        # Only output single mode
-        comp_df = comp.to_df()
-        comp_df = comp_df.loc[comp_df["m"] == MODE.get_mode_num()]
-        file_ops.write_df(comp_df, out, index=False)
-        LOG.info("Written: %s", out)
+    # Only output single mode
+    comp_df = comp.to_df()
+    comp_df = comp_df.loc[comp_df["m"] == MODE.get_mode_num()]
 
-        comparisons[seg] = comp_df
+    if cutoff is not None:
+        out_stem += "-cutoff{}".format(str(cutoff).replace(".", "_"))
+        cutoffs = (
+            ("less than", operator.lt, 1 - cutoff),
+            ("greater than", operator.gt, 1 + cutoff),
+        )
+        for s, op, val in cutoffs:
+            mask = op(comp_df["val"], val)
+            comp_df.loc[mask, "val"] = val
+            LOG.info(
+                f"Setting {mask.sum()} ({mask.sum() / len(mask):.1%})"
+                f" factors to {val} which are {s} {val}"
+            )
 
-    return comparisons
+    out = output_path.with_name(f"{out_stem}.csv.bz2")
+    file_ops.write_df(comp_df, out, index=False)
+    LOG.info("Written: %s", out)
+
+    return comp_df, out
 
 
 def comparison_plots(comparisons: dict[str, pd.DataFrame], excel_output: Path) -> None:
@@ -418,8 +440,8 @@ def comparison_plots(comparisons: dict[str, pd.DataFrame], excel_output: Path) -
 
     with pd.ExcelWriter(excel_output) as excel:
         with backend_pdf.PdfPages(excel_output.with_suffix(".pdf")) as pdf:
-            for seg_name in COMPARISON_SEGMENTATIONS:
-                df = comparisons[seg_name].drop(columns="m")
+            for seg_name, df in comparisons.items():
+                df = df.drop(columns="m")
                 comp_column = "Time Period" if "tp" in df.columns else "NTEM Purpose"
 
                 df.rename(
@@ -563,16 +585,20 @@ def main(params: PostMEAdjustmentParameters, init_logger: bool = True) -> None:
 
     out_nm = "prior_post_comparison_productions_{}"
     out_path = compare_out / out_nm.format(params.model_name)
-    comparisons = compare_productions(prior_dvec, post_dvec, out_path)
+    comparisons = {
+        seg: compare_productions(prior_dvec, post_dvec, out_path, seg)[0]
+        for seg in COMPARISON_SEGMENTATIONS
+    }
     comparison_plots(comparisons, out_path.with_suffix(".xlsx"))
 
-    comp_zoning = nd.get_zoning_system(COMPARISON_ZONING)
+    comp_zoning = nd.get_zoning_system(ADJUSTMENT_ZONING)
+    prior_dvec = prior_dvec.translate_zoning(comp_zoning)
+    post_dvec = post_dvec.translate_zoning(comp_zoning)
     out_path = out_path.with_name(out_nm.format(comp_zoning.name))
-    comparisons = compare_productions(
-        prior_dvec.translate_zoning(comp_zoning),
-        post_dvec.translate_zoning(comp_zoning),
-        out_path,
-    )
+    comparisons = {
+        seg: compare_productions(prior_dvec, post_dvec, out_path, seg)[0]
+        for seg in COMPARISON_SEGMENTATIONS
+    }
     comparison_plots(comparisons, out_path.with_suffix(".xlsx"))
     join_geodata(
         comparisons["hb_p_m"],
@@ -580,6 +606,17 @@ def main(params: PostMEAdjustmentParameters, init_logger: bool = True) -> None:
         params.geospatial_file,
         params.geospatial_columns,
         params.simplify_geometry,
+    )
+
+    adjust_folder = params.output_folder / "Adjustment Factors"
+    adjust_folder.mkdir(exist_ok=True)
+    out_path = adjust_folder / out_path.name
+    output_factors, out_path = compare_productions(
+        prior_dvec, post_dvec, out_path, ADJUSTMENT_SEGMENTATION, params.adjustment_cutoff
+    )
+    comparison_plots(
+        {ADJUSTMENT_SEGMENTATION: output_factors},
+        out_path.with_name(out_path.name.removesuffix("".join(out_path.suffixes)) + ".xlsx"),
     )
 
 
@@ -624,5 +661,6 @@ if __name__ == "__main__":
             r"\Local_Authority_Districts_(December_2020)_UK_BFC"
             r"\Local_Authority_Districts_(December_2020)_UK_BGC.shp"
         ),
+        adjustment_cutoff=0.2,
     )
     main(parameters)
