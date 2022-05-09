@@ -13,7 +13,7 @@ NoTEM Class Frontend for calling all production and attraction models
 # Builtins
 import os
 
-from typing import List
+from typing import List, Optional
 
 # Third Party
 
@@ -24,6 +24,7 @@ from normits_demand.models.notem import HBProductionModel
 from normits_demand.models.notem import NHBProductionModel
 from normits_demand.models.notem import HBAttractionModel
 from normits_demand.models.notem import NHBAttractionModel
+from normits_demand.models.notem.production_models import TripEndAdjustmentFactors
 
 from normits_demand.pathing import NoTEMExportPaths
 from normits_demand.utils import timing
@@ -42,6 +43,7 @@ class NoTEM:
                  export_home: nd.PathLike,
                  hb_attraction_balance_zoning: nd.BalancingZones = None,
                  nhb_attraction_balance_zoning: nd.BalancingZones = None,
+                 trip_end_adjustments: Optional[List[TripEndAdjustmentFactors]] = None,
                  ):
         """
         Assigns the attributes needed for NoTEM model.
@@ -83,6 +85,10 @@ class NoTEM:
             at, for each segment of the attractions segmentation. A translation must exist
             between this and the running zoning system, which is MSOA by default.
             If left as None, then no spatial balance is done, only a segmental balance.
+
+        trip_end_adjustments: List[TripEndAdjustmentFactors], optional
+            List of all adjustment factors to apply to the HB productions trip ends.
+            Adjustments are applied one after another at to the HB productions.
         """
         # Validate inputs
         if not isinstance(import_builder, nd.pathing.NoTEMImportPathsBase):
@@ -98,6 +104,7 @@ class NoTEM:
         self.import_builder = import_builder
         self.hb_attraction_balance_zoning = hb_attraction_balance_zoning
         self.nhb_attraction_balance_zoning = nhb_attraction_balance_zoning
+        self.adjustment_factors = trip_end_adjustments
 
         # Generate the export paths
         self.exports = self.EXPORT_PATHS_CLASS(
@@ -252,6 +259,7 @@ class NoTEM:
             **import_files,
             constraint_paths=None,
             export_home=self.exports.hb_production.export_paths.home,
+            trip_end_adjustments=self.adjustment_factors,
         )
 
         self._logger.info("Running the Home-Based Production Model")

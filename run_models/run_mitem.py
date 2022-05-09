@@ -5,6 +5,7 @@
 
 ##### IMPORTS #####
 # Standard imports
+import pathlib
 import sys
 
 # Third party imports
@@ -13,8 +14,10 @@ import sys
 sys.path.append("..")
 # pylint: disable=import-error,wrong-import-position
 import run_notem
+
 import normits_demand as nd
 from normits_demand.models import MiTEM
+from normits_demand.models.notem.production_models import TripEndAdjustmentFactors
 from normits_demand.pathing import MiTEMImportPaths
 
 # pylint: enable=import-error,wrong-import-position
@@ -23,7 +26,7 @@ from normits_demand.pathing import MiTEMImportPaths
 ##### CONSTANTS #####
 years = run_notem.years
 scenario = run_notem.scenario
-mitem_iter = "9.6b"
+mitem_iter = "9.6b-test_adjustment"
 lu_drive = run_notem.lu_drive
 by_iteration = run_notem.by_iteration
 fy_iteration = run_notem.fy_iteration
@@ -53,6 +56,18 @@ def main():
         mode_balancing_zones,
     )
 
+    post_me_adjustments = TripEndAdjustmentFactors(
+        file=pathlib.Path(
+            r"T:\MidMITs Demand\MiHAM Assignments\Post ME Trip Rate Adjustments"
+            r"\iter9.3.3\Adjustment Factors"
+            r"\prior_post_comparison_productions_lad_2020-hb_p_m_tp_wday-CAR-cutoff0_2.csv.bz2"
+        ),
+        segmentation=nd.get_segmentation_level("hb_p_m_tp_wday"),
+        zoning=nd.get_zoning_system("lad_2020"),
+        time_format=nd.TimeFormat.AVG_DAY,
+    )
+    trip_end_adjustments = [post_me_adjustments]
+
     import_builder = MiTEMImportPaths(
         import_home=mitem_import_home,
         scenario=scenario,
@@ -73,6 +88,7 @@ def main():
         export_home=mitem_export_home,
         hb_attraction_balance_zoning=hb_attraction_balance_zoning,
         nhb_attraction_balance_zoning=nhb_attraction_balance_zoning,
+        trip_end_adjustments=trip_end_adjustments,
     )
     m.run(
         generate_all=True,
