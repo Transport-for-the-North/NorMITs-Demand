@@ -24,15 +24,26 @@ WARNING: Need an instance of CUBE installed in order for this to work.
 """
 # Built-Ins
 import multiprocessing as mp
-import os, sys
+import os
 import pickle as pk
 
 # Third Party
+import tqdm
 import pandas as pd
 import numpy as np
 import subprocess
 
 # Local Imports
+from normits_demand import logging as nd_logging
+
+# BACKLOG: Rewrite all of CUBE to CSV code to be more generic
+#  label: rewrite
+
+LOG = nd_logging.get_logger(f"{nd_logging.get_package_logger_name()}.cube_extractor")
+
+# GLOBAL VARIABLES
+SOURCE_DIRECTORY = r'E:\temp\cube\2f ILF 2018\source - test'
+OUTPUT_PATH = os.path.join(SOURCE_DIRECTORY, "NoRMS_Tour_Prop.pkl")
 
 ### SUBPROCESS - SINGLE ###
 def procSingle(cmdList):
@@ -93,6 +104,7 @@ def cubeMAT2CSV(appCube,appPath,appName,appExtn,matFile,matFact,matTabx,lokPath,
     toWrite.append('ENDRUN')
     if delFile != 0:
         toWrite.append('*if exist "'+matFile+'" del "'+matFile+'"')
+    print(appPath.replace('\\','/')+'/'+appName+'.s')
     with open(appPath.replace('\\','/')+'/'+appName+'.s','w') as script:
         for line in toWrite:
             print(line,file=script)
@@ -107,25 +119,41 @@ def csv2Numpy(csvFile):
     return outTrip
 
 ### Main Application ###
-if __name__ == '__main__':
+def main(source_directory, output_path):
     mp.freeze_support()
     np.seterr(all = 'ignore')
     numCPUs = os.cpu_count()-2
 
-    dirPath = r'D:\IFR_2018\Inputs\Demand'
     intHBPA = 'SplitFactors_DS{}'            #DS1-HBEB, DS2-HBW, DS3-HBO, 1-16 CA, 17-32 NCA
     intNHBx = 'OD_Prop_{}_PT'                #1-NHBEB_CA, 2-NHBEB_NCA, 3-NHBO_CA, 4-NHBO_NCA
     extODhr = 'Time_of_Day_Factors_Zonal_{}' #1-EB_NCA, 2-EB_CA_FH, 3-EB_CA_TH, 4-HBW_NCA, 5-HBW_CA_FH, 6-HBW_CA_TH, 7-Oth_NCA, 8-Oth_CA_FH, 9-Oth_CA_TH
 
+    # Temporary file to store all intermediate outputs
+    temp_file_path = os.path.join(source_directory, "temp")
+    os.makedirs(temp_file_path, exist_ok=True)
+
     cubEXES = ''
-    for app in [r'C:\Program Files (x86)\Citilabs\cubeVoyager\voyager.exe',r'C:\Program Files\Citilabs\cubeVoyager\voyager.exe']:
+    cube_passed = False
+    cube_locations = [
+        r'C:\Program Files (x86)\Citilabs\cubeVoyager\voyager.exe',
+        r'C:\Program Files\Citilabs\cubeVoyager\voyager.exe',
+    ]
+    for app in cube_locations:
         app = app.strip()
-        if os.path.isfile(app) == True  and cubeTEST(app,dirPath) == True:
+        if os.path.isfile(app) == True  and cubeTEST(app, temp_file_path) == True:
             cubEXES = app
+            cube_passed = True
             break
 
+    if not cube_passed:
+        raise ValueError(
+            "Can't find a .exe for CUBE. Tried looking in the following "
+            f"places: {cube_locations}"
+        )
+
     #convert MAT to CSV
-    print('\nConvert MAT to CSV format ...')
+    LOG.info('Convert MAT to CSV format ...')
+    LOG.info(f"Converting {intHBPA}")
     dctFile = {}
     pool = mp.Pool(numCPUs)
     for ds in [1,2,3]:
@@ -136,23 +164,25 @@ if __name__ == '__main__':
                 ts, tsx = 10*fh+th, (fh-1)*4+th
                 dctFile[dsx]['ca'][ts]  = intHBPA.format(ds)+'_ca_ts{}'.format(ts)
                 dctFile[dsx]['nca'][ts] = intHBPA.format(ds)+'_nca_ts{}'.format(ts)
-                pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile[dsx]['ca'][ts],'.csv',dirPath+'\\'+intHBPA.format(ds)+'.mat',1.0,tsx,'na','na','na','1:2',0])
-                pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile[dsx]['nca'][ts],'.csv',dirPath+'\\'+intHBPA.format(ds)+'.mat',1.0,16+tsx,'na','na','na','1:2',0])
+                pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile[dsx]['ca'][ts],'.csv',source_directory+'\\'+intHBPA.format(ds)+'.mat',1.0,tsx,'na','na','na','1:2',0])
+                pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile[dsx]['nca'][ts],'.csv',source_directory+'\\'+intHBPA.format(ds)+'.mat',1.0,16+tsx,'na','na','na','1:2',0])
 
     dctFile['nhbeb'] = {'ca':{}, 'nca':{}}
     dctFile['nhbo']  = {'ca':{}, 'nca':{}}
+    LOG.info(f"Converting {intNHBx}")
     for ts in [1,2,3,4]:
         tsx = 'am' if ts==1 else 'ip' if ts==2 else 'pm' if ts==3 else 'op'
         dctFile['nhbeb']['ca'][ts]  = intNHBx.format(tsx)+'_nhbeb_ca'
         dctFile['nhbeb']['nca'][ts] = intNHBx.format(tsx)+'_nhbeb_nca'
         dctFile['nhbo']['ca'][ts]   = intNHBx.format(tsx)+'_nhbo_ca'
         dctFile['nhbo']['nca'][ts]  = intNHBx.format(tsx)+'_nhbo_nca'
-        pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile['nhbeb']['ca'][ts],'.csv',dirPath+'\\'+intNHBx.format(tsx)+'.mat',1.0,1,'na','na','na','1:2',0])
-        pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile['nhbeb']['nca'][ts],'.csv',dirPath+'\\'+intNHBx.format(tsx)+'.mat',1.0,2,'na','na','na','1:2',0])
-        pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile['nhbo']['ca'][ts],'.csv',dirPath+'\\'+intNHBx.format(tsx)+'.mat',1.0,3,'na','na','na','1:2',0])
-        pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile['nhbo']['nca'][ts],'.csv',dirPath+'\\'+intNHBx.format(tsx)+'.mat',1.0,4,'na','na','na','1:2',0])
+        pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['nhbeb']['ca'][ts],'.csv',source_directory+'\\'+intNHBx.format(tsx)+'.mat',1.0,1,'na','na','na','1:2',0])
+        pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['nhbeb']['nca'][ts],'.csv',source_directory+'\\'+intNHBx.format(tsx)+'.mat',1.0,2,'na','na','na','1:2',0])
+        pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['nhbo']['ca'][ts],'.csv',source_directory+'\\'+intNHBx.format(tsx)+'.mat',1.0,3,'na','na','na','1:2',0])
+        pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['nhbo']['nca'][ts],'.csv',source_directory+'\\'+intNHBx.format(tsx)+'.mat',1.0,4,'na','na','na','1:2',0])
 
     dctFile['ex_eb'], dctFile['ex_hbw'], dctFile['ex_oth']  = {'ca_fh':{},'ca_th':{},'nca':{}}, {'ca_fh':{},'ca_th':{},'nca':{}}, {'ca_fh':{},'ca_th':{},'nca':{}}
+    LOG.info(f"Converting {extODhr}")
     for ts in [1,2,3,4]:
         tsx = 'am' if ts==1 else 'ip' if ts==2 else 'pm' if ts==3 else 'op'
         dctFile['ex_eb']['nca'][ts]    = extODhr.format(tsx)+'_eb_nca'
@@ -164,25 +194,25 @@ if __name__ == '__main__':
         dctFile['ex_oth']['nca'][ts]   = extODhr.format(tsx)+'_oth_nca'
         dctFile['ex_oth']['ca_fh'][ts] = extODhr.format(tsx)+'_oth_ca_fh'
         dctFile['ex_oth']['ca_th'][ts] = extODhr.format(tsx)+'_oth_ca_th'
-        pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile['ex_eb']['nca'][ts],'.csv',dirPath+'\\'+extODhr.format(tsx)+'.mat',1.0,1,'na','na','na','1:2',0])
-        pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile['ex_eb']['ca_fh'][ts],'.csv',dirPath+'\\'+extODhr.format(tsx)+'.mat',1.0,2,'na','na','na','1:2',0])
-        pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile['ex_eb']['ca_th'][ts],'.csv',dirPath+'\\'+extODhr.format(tsx)+'.mat',1.0,3,'na','na','na','1:2',0])
-        pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile['ex_hbw']['nca'][ts],'.csv',dirPath+'\\'+extODhr.format(tsx)+'.mat',1.0,4,'na','na','na','1:2',0])
-        pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile['ex_hbw']['ca_fh'][ts],'.csv',dirPath+'\\'+extODhr.format(tsx)+'.mat',1.0,5,'na','na','na','1:2',0])
-        pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile['ex_hbw']['ca_th'][ts],'.csv',dirPath+'\\'+extODhr.format(tsx)+'.mat',1.0,6,'na','na','na','1:2',0])
-        pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile['ex_oth']['nca'][ts],'.csv',dirPath+'\\'+extODhr.format(tsx)+'.mat',1.0,7,'na','na','na','1:2',0])
-        pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile['ex_oth']['ca_fh'][ts],'.csv',dirPath+'\\'+extODhr.format(tsx)+'.mat',1.0,8,'na','na','na','1:2',0])
-        pool.apply_async(cubeMAT2CSV,[cubEXES,dirPath,dctFile['ex_oth']['ca_th'][ts],'.csv',dirPath+'\\'+extODhr.format(tsx)+'.mat',1.0,9,'na','na','na','1:2',0])
+        pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['ex_eb']['nca'][ts],'.csv',source_directory+'\\'+extODhr.format(tsx)+'.mat',1.0,1,'na','na','na','1:2',0])
+        pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['ex_eb']['ca_fh'][ts],'.csv',source_directory+'\\'+extODhr.format(tsx)+'.mat',1.0,2,'na','na','na','1:2',0])
+        pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['ex_eb']['ca_th'][ts],'.csv',source_directory+'\\'+extODhr.format(tsx)+'.mat',1.0,3,'na','na','na','1:2',0])
+        pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['ex_hbw']['nca'][ts],'.csv',source_directory+'\\'+extODhr.format(tsx)+'.mat',1.0,4,'na','na','na','1:2',0])
+        pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['ex_hbw']['ca_fh'][ts],'.csv',source_directory+'\\'+extODhr.format(tsx)+'.mat',1.0,5,'na','na','na','1:2',0])
+        pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['ex_hbw']['ca_th'][ts],'.csv',source_directory+'\\'+extODhr.format(tsx)+'.mat',1.0,6,'na','na','na','1:2',0])
+        pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['ex_oth']['nca'][ts],'.csv',source_directory+'\\'+extODhr.format(tsx)+'.mat',1.0,7,'na','na','na','1:2',0])
+        pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['ex_oth']['ca_fh'][ts],'.csv',source_directory+'\\'+extODhr.format(tsx)+'.mat',1.0,8,'na','na','na','1:2',0])
+        pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['ex_oth']['ca_th'][ts],'.csv',source_directory+'\\'+extODhr.format(tsx)+'.mat',1.0,9,'na','na','na','1:2',0])
     pool.close()
     pool.join()
 
     #Import to python
-    print('\nImport CSV to python ...')
+    LOG.info('Import CSV to python')
     pool = mp.Pool(numCPUs)
     for ds in dctFile:
         for ca in dctFile[ds]:
             for ts in dctFile[ds][ca]:
-                dctFile[ds][ca][ts] = pool.apply_async(csv2Numpy,[dirPath+'\\'+dctFile[ds][ca][ts]+'.csv'])
+                dctFile[ds][ca][ts] = pool.apply_async(csv2Numpy,[source_directory+'\\'+dctFile[ds][ca][ts]+'.csv'])
     pool.close()
     pool.join()
     for ds in dctFile:
@@ -191,5 +221,10 @@ if __name__ == '__main__':
                 dctFile[ds][ca][ts] = dctFile[ds][ca][ts].get()
 
     #Export to pickle
-    with open(dirPath+'\\NoRMS_Tour_Prop.pkl','wb') as log:
+    LOG.info("Exporting to pickle file %s", output_path)
+    with open(output_path,'wb') as log:
         pk.dump(dctFile,log,pk.HIGHEST_PROTOCOL)
+
+
+if __name__ == '__main__':
+    main(SOURCE_DIRECTORY, OUTPUT_PATH)
