@@ -261,6 +261,10 @@ class SegmentationLevel:
         """Overrides the default implementation"""
         return not self.__eq__(other)
 
+    def __len__(self) -> int:
+        """Get the length of the segmentation"""
+        return len(self.segments)
+
     def _mul_div_segmentation(self,
                               other: SegmentationLevel,
                               return_seg_name: str,
@@ -966,6 +970,25 @@ class SegmentationLevel:
         SegmentationLevel
         """
         return segment_name in self.segment_names
+
+    def is_valid_segment_params(self, segment_params: Dict[str, Any]) -> bool:
+        """Check if segment params are valid for this segment"""
+        # Check that the segments exist
+        wrong_segments = set(segment_params.keys()) - set(self.naming_order)
+        missing_segments = set(self.naming_order) - set(segment_params.keys())
+        if len(wrong_segments) > 0 or len(missing_segments) > 0:
+            return False
+
+        # Check that the values produce a segment
+        mask = np.ones(len(self.segments)).astype(bool)
+        for seg_name, seg_val in segment_params.items():
+            mask = mask & (self.segments[seg_name] == seg_val)
+        valid_segs = self.segments[mask]
+
+        if len(valid_segs) != 1:
+            return False
+
+        return True
 
     def reduce(self,
                other: SegmentationLevel,
@@ -1862,6 +1885,7 @@ class SegmentationLevel:
                            suffix: Optional[str] = None,
                            csv: Optional[bool] = False,
                            compressed: Optional[bool] = False,
+                           ftype: Optional[str] = None,
                            ) -> str:
         """Generate a file name from segment_params
 
@@ -1933,6 +1957,8 @@ class SegmentationLevel:
             final_name += '.csv'
         elif compressed:
             final_name += '.csv.bz2'
+        elif ftype is not None:
+            final_name += ftype
 
         return final_name
 

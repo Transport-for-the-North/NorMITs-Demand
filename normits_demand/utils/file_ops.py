@@ -752,7 +752,7 @@ def create_folder(folder_path: nd.PathLike,
 
 
 def write_pickle(obj: object,
-                 path: nd.PathLike,
+                 path: os.PathLike,
                  protocol: int = pickle.HIGHEST_PROTOCOL,
                  **kwargs,
                  ) -> None:
