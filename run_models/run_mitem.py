@@ -62,7 +62,7 @@ def main():
             r"\iter9.3.3\Adjustment Factors"
             r"\prior_post_comparison_productions_lad_2020-hb_p_m_tp_wday-CAR-cutoff0_2.csv.bz2"
         ),
-        segmentation=nd.get_segmentation_level("hb_p_m_tp_wday"),
+        segmentation=nd.get_segmentation_level("hb_p_m_tp_week"),
         zoning=nd.get_zoning_system("lad_2020"),
         time_format=nd.TimeFormat.AVG_DAY,
     )
