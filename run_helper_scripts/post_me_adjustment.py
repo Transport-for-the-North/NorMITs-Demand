@@ -9,7 +9,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Iterator, NamedTuple, Optional, Union
+from typing import Any, Iterator, NamedTuple, Optional, Union
 
 # Third party imports
 import geopandas as gpd
@@ -38,8 +38,8 @@ LOG_FILE = "SATURN_ME_comparison.log"
 TIME_PERIODS = {1: "AM", 2: "IP", 3: "PM"}
 TIME_PERIOD_HOURS = {"AM": 3, "IP": 6, "PM": 3}
 USERCLASSES = {1: "business", 2: "commute", 3: "other"}
-COMPARISON_SEGMENTATIONS = {"hb_p_m", "hb_p_m_tp_wday"}
-ADJUSTMENT_SEGMENTATION = "hb_p_m_tp_wday"
+COMPARISON_SEGMENTATIONS = {"hb_p_m", "hb_p_m_tp_week"}
+ADJUSTMENT_SEGMENTATION = "hb_p_m_tp_week"
 ADJUSTMENT_ZONING = "lad_2020"
 
 ##### CLASSES #####
@@ -307,8 +307,44 @@ def production_trip_ends(
     return tuple(productions)
 
 
+def _sum_time_period_segments(
+    seg_params: dict[str, Any],
+    trip_ends: dict[str, np.ndarray],
+    segmentation: nd.SegmentationLevel,
+) -> np.ndarray:
+    """Calculate 12hr totals for the given `seg_params`.
+
+    Parameters
+    ----------
+    seg_params : dict[str, Any]
+        Segmentation parameters, the 'tp' parameter will
+        be ignored to sum the AM, IP and PM values.
+    trip_ends : dict[str, np.ndarray]
+        Dictionary of segment trip ends where the key is the
+        segmentation name.
+    segmentation : nd.SegmentationLevel
+        Segmentation of the `trip_ends`.
+
+    Returns
+    -------
+    np.ndarray
+        12hr total trip ends for given `seg_params`.
+    """
+    tp_trip_ends = []
+
+    for tp in TIME_PERIODS:
+        seg_name = segmentation.get_segment_name(seg_params | {"tp": tp})
+        tp_trip_ends.append(trip_ends[seg_name])
+
+    return sum(tp_trip_ends)
+
+
 def combined_production_trip_ends(
-    prior_folder: Path, post_folder: Path, model_name: str, output_folder: Path
+    prior_folder: Path,
+    post_folder: Path,
+    model_name: str,
+    output_folder: Path,
+    mode: nd.Mode,
 ) -> tuple[nd.DVector, nd.DVector]:
     """Combine the production trip ends from all purposes to two DVectors.
 
@@ -324,6 +360,8 @@ def combined_production_trip_ends(
         Name of the model zoning system.
     output_folder : Path
         Folder to save the DVectors to.
+    mode: nd.Mode
+        Mode of trip ends.
 
     Returns
     -------
@@ -331,7 +369,7 @@ def combined_production_trip_ends(
         Prior and post ME DVectors.
     """
     LOG.info("Creating productions DVectors")
-    segmentation = nd.get_segmentation_level("hb_p_m_tp_wday")
+    segmentation = nd.get_segmentation_level(ADJUSTMENT_SEGMENTATION)
     zoning = nd.get_zoning_system(model_name)
     prior_trip_ends = {}
     post_trip_ends = {}
@@ -341,6 +379,31 @@ def combined_production_trip_ends(
         seg_name = segmentation.get_segment_name(mat_details.parameters)
         prior_trip_ends[seg_name] = prior.values
         post_trip_ends[seg_name] = post.values
+
+    # Infill time period 4 with 12hr flow and time periods 5 & 6 with 1
+    LOG.info(
+        "Infilling prior and post DVectors with 12hr total for time period"
+        " 4 to calculate an average adjustment factor for that time period."
+    )
+    LOG.info(
+        "Infilling prior and post DVectors with 1 for time periods "
+        "5 and 6 for an adjustment factor of 1 on the weekends."
+    )
+    for seg_params in segmentation:
+        if seg_params["m"] != mode.get_mode_num():
+            continue
+
+        seg_name = segmentation.get_segment_name(seg_params)
+        if seg_params["tp"] in (5, 6):
+            prior_trip_ends[seg_name] = np.ones(len(zoning.unique_zones))
+            post_trip_ends[seg_name] = np.ones(len(zoning.unique_zones))
+        elif seg_params["tp"] == 4:
+            prior_trip_ends[seg_name] = _sum_time_period_segments(
+                seg_params, prior_trip_ends, segmentation
+            )
+            post_trip_ends[seg_name] = _sum_time_period_segments(
+                seg_params, post_trip_ends, segmentation
+            )
 
     prior_dvec = nd.DVector(segmentation, prior_trip_ends, zoning, "avg_day")
     post_dvec = nd.DVector(segmentation, post_trip_ends, zoning, "avg_day")
@@ -580,7 +643,11 @@ def main(params: PostMEAdjustmentParameters, init_logger: bool = True) -> None:
     # Calculate productions trip ends and compare between the two
     compare_out = params.output_folder / "Prior Post Comparisons"
     prior_dvec, post_dvec = combined_production_trip_ends(
-        params.synthetic_full_od_folder, compiled_out, params.model_name, compare_out
+        params.synthetic_full_od_folder,
+        compiled_out,
+        params.model_name,
+        compare_out,
+        params.mode,
     )
 
     out_nm = "prior_post_comparison_productions_{}"
@@ -652,7 +719,7 @@ if __name__ == "__main__":
         post_me_matrices=SATURNMatrices(*post_me_files),
         output_folder=Path(
             r"C:\WSP_Projects\MidMITs\02 MidMITs\Outputs"
-            r"\Post ME Trip Rate Adjustments\iter9.3.3"
+            r"\Post ME Trip Rate Adjustments\iter9.3.3b"
         ),
         model_name="miham",
         year=2018,
