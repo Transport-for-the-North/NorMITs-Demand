@@ -519,9 +519,6 @@ def comparison_plots(comparisons: dict[str, pd.DataFrame], excel_output: Path) -
                     excel, sheet_name=f"{seg_name} - {comp_column}"
                 )
 
-                if comp_column == "Time Period":
-                    df = df.drop(4, level="Time Period")
-
                 fig, axes = plt.subplots(
                     2, 1, figsize=(10, 10), sharex=True, tight_layout=True
                 )
