@@ -1903,6 +1903,12 @@ class DVector:
             if zonal_average:
                 other_segs = [np.mean(other._data[s]) for s in out_seg_names]
                 split_factors = other_segs / np.sum(other_segs)
+
+                # If 0 total split evenly
+                if np.sum(other_segs) == 0:
+                    split_factors = np.ones_like(other_segs) / len(other_segs)
+                else:
+                    split_factors = other_segs / np.sum(other_segs)
             else:
                 other_segs = np.array([other._data[s] for s in out_seg_names])
                 zonal_sums = np.sum(other_segs, axis=0)

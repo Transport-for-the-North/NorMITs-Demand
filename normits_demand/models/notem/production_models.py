@@ -1062,5 +1062,6 @@ class TripEndAdjustmentFactors:
                 import_data=data,
                 zoning_system=self.zoning,
                 time_format=self.time_format,
+                infill=1,
             )
         return self._dvector
