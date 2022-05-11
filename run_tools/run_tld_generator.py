@@ -28,6 +28,30 @@ def main():
     _NTS_IMPORT = 'I:/NTS/classified builds/cb_tfn.csv'
     output_home = r'I:\NorMITs Demand\import\trip_length_distributions\tld_tool_outputs'
 
+    # A full DiMo run requires:
+    # ## run at north_and_mids, trip_OD ## #
+    #
+    #   dm_highway_bands
+    #       hb_p_m
+    #       nhb_p_m_tp_car
+    #       nhb_p_m     (These then need copying over across TPs)
+
+    #   dm_north_rail_bands
+    #       hb_p_m_ca
+    #       nhb_p_m_ca  (These then need copying across TPs)
+
+    # ## run at gb, trip_OD ## #
+
+    #   dm_highway_bands
+    #       hb_p_m
+    #       nhb_p_m_tp_car
+    #       nhb_p_m     (These then need copying over across TPs)
+
+    #   dm_gb_rail_bands
+    #       hb_p_m_ca
+    #       nhb_p_m_ca  (These then need copying across TPs)
+
+
     run_another = True
     while run_another:
         extract = tld_builder.TripLengthDistributionBuilder(
@@ -36,7 +60,9 @@ def main():
             output_home=output_home,
         )
 
-        extract.run_tlb_lookups()
+        extract.run_tlb_lookups(
+            weekdays=[1, 2, 3, 4, 5, 6, 7],
+        )
 
         if input('Run another y/n').lower() == 'n':
             run_another = False

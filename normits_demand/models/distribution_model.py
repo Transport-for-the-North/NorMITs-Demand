@@ -30,6 +30,7 @@ from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.utils import translation
 from normits_demand.utils import vehicle_occupancy
+from normits_demand.utils import general as du
 from normits_demand.matrices import matrix_processing
 from normits_demand.matrices import pa_to_od
 
@@ -79,15 +80,13 @@ class DistributionModel(DistributionModelExportPaths):
                  ):
         # Make sure all are set if one is
         lower_args = [lower_model_method, lower_model_zoning, lower_running_zones]
-        if not all([x is not None for x in lower_args]):
-            # Check they're not all None still
-            if not all([x is None for x in lower_args]):
-                raise ValueError(
-                    "Only some of the lower tier model arguments have been set. "
-                    "Either all of these arguments need to be set, or none of them "
-                    "do. This applies to the following arguments: "
-                    "[lower_model_method', 'lower_model_zoning', 'lower_running_zones]"
-                )
+        if not du.all_set_or_not(lower_args):
+            raise ValueError(
+                "Only some of the lower tier model arguments have been set. "
+                "Either all of these arguments need to be set, or none of them "
+                "do. This applies to the following arguments: "
+                "[lower_model_method', 'lower_model_zoning', 'lower_running_zones]"
+            )
 
         # Generate export paths
         super().__init__(
@@ -140,7 +139,7 @@ class DistributionModel(DistributionModelExportPaths):
         self.arg_builder = arg_builder
 
         # Create a logger
-        logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
+        logger_name = f"{nd.get_package_logger_name()}.{self.__class__.__name__}"
         log_file_path = os.path.join(self.export_home, self._log_fname)
         self._logger = nd.get_logger(
             logger_name=logger_name,
@@ -156,16 +155,16 @@ class DistributionModel(DistributionModelExportPaths):
         """
         # Define the lines to output
         out_lines = [
-            'Code Version: %s' % str(nd.__version__),
-            'Distribution Model Iteration: %s' % str(self.iteration_name),
+            f'Code Version: {str(nd.__version__)}',
+            f'Distribution Model Iteration: {str(self.iteration_name)}',
             '',
             '### Upper Model ###',
-            'vector_export: %s' % self.upper.export_paths.home,
-            'report_export: %s' % self.upper.report_paths.home,
+            f'vector_export: {self.upper.export_paths.home}',
+            f'report_export: {self.upper.report_paths.home}',
             '',
             '### Lower Model ###',
-            'vector_export: %s' % self.lower.export_paths.home,
-            'report_export: %s' % self.lower.report_paths.home,
+            f'vector_export: {self.lower.export_paths.home}',
+            f'report_export: {self.lower.report_paths.home}',
             '',
         ]
 
@@ -250,11 +249,11 @@ class DistributionModel(DistributionModelExportPaths):
             run_pa_to_od = True
             run_od_matrix_reports = True
 
-        self._logger.debug("Running upper model: %s" % run_upper_model)
-        self._logger.debug("Running lower model: %s" % run_lower_model)
-        self._logger.debug("Running pa matrix reports: %s" % run_pa_matrix_reports)
-        self._logger.debug("Running pa to od: %s" % run_pa_to_od)
-        self._logger.debug("Running od matrix reports: %s" % run_od_matrix_reports)
+        self._logger.debug("Running upper model: %s", run_upper_model)
+        self._logger.debug("Running lower model: %s", run_lower_model)
+        self._logger.debug("Running pa matrix reports: %s", run_pa_matrix_reports)
+        self._logger.debug("Running pa to od: %s", run_pa_to_od)
+        self._logger.debug("Running od matrix reports: %s", run_od_matrix_reports)
         self._logger.debug("")
 
         # Check that we are actually running something
@@ -282,9 +281,10 @@ class DistributionModel(DistributionModelExportPaths):
         # Log the time taken to run
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        self._logger.info("Distribution Model run complete! Took %s" % time_taken)
+        self._logger.info("Distribution Model run complete! Took %s", time_taken)
 
     def run_upper_model(self):
+        """Run the upper model"""
         self._logger.info("Building arguments for the Upper Model")
         kwargs = self.arg_builder.build_upper_model_arguments(
             cache_dir=self.cache_paths.upper_trip_ends,
@@ -307,6 +307,7 @@ class DistributionModel(DistributionModelExportPaths):
         self._logger.info("Upper Model Done!")
 
     def run_lower_model(self):
+        """Run the lower model"""
         if self.lower_model_method is None:
             self._logger.info(
                 "Cannot run Lower Model as no method has been given to run "
@@ -504,8 +505,8 @@ class DistributionModel(DistributionModelExportPaths):
 
         else:
             raise ValueError(
-                "Don't know how to compile PA matrices to OD for trip origin"
-                "'%s'." % self.trip_origin
+                "Don't know how to compile PA matrices to OD for "
+                f"trip origin '{self.trip_origin}'."
             )
 
     def run_od_matrix_reports(self):
@@ -609,7 +610,6 @@ class DistributionModel(DistributionModelExportPaths):
 
         else:
             raise ValueError(
-                "I don't know how to compile mode %s into an assignment model "
-                "format :("
-                % self.running_mode.value
+                f"I don't know how to compile mode {self.running_mode.value} "
+                "into an assignment model format :("
             )

@@ -3588,3 +3588,40 @@ def compare_sets(x1: set, x2: set) -> Tuple[bool, set, set]:
     equal = len(x1_not_in_x2) == 0 and len(x2_not_in_x1) == 0
 
     return equal, x1_not_in_x2, x2_not_in_x1
+
+
+def all_set_or_not(items: Iterable[Any], default: Iterable[Any] = None) -> bool:
+    """Check if all iterable items are set or none of them are set.
+
+    Return True if all `items` are set to `default` values. Also returns
+    True if all `items` are also not set to `default` values. If there is
+    a mix of default and non-default items then False is returned.
+
+    Parameters
+    ----------
+    items:
+        An iterable of items to check.
+
+    default:
+        An iterable of the default values to use for items
+
+    Returns
+    -------
+    all_set_or_not:
+        Boolean, as described in function description.
+    """
+    # Set default if not set
+    if default is None:
+        n_items = sum(1 for _ in items)
+        default = [None] * n_items
+
+    # Check if all items are default
+    if all(x is y for x, y in zip(items, default)):
+        return True
+
+    # Check if all items are not None
+    if all(x is not y for x, y in zip(items, default)):
+        return True
+
+    # Must be an unacceptable combination
+    return False

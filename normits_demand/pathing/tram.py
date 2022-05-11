@@ -24,7 +24,7 @@ from typing import Tuple
 
 # Local imports
 import normits_demand as nd
-
+from normits_demand import core as nd_core
 from normits_demand.pathing import NoTEMExportPaths
 
 from normits_demand.utils import file_ops
@@ -404,7 +404,7 @@ class TramExportPaths:
 
     def __init__(self,
                  path_years: List[int],
-                 scenario: str,
+                 scenario: nd_core.Scenario,
                  iteration_name: str,
                  export_home: nd.PathLike,
                  ):
@@ -417,7 +417,7 @@ class TramExportPaths:
             A list of the years the models are running for.
 
         scenario:
-            The name of the scenario to run for.
+            The scenario to run for.
 
         iteration_name:
             The name of this iteration of the NoTEM models. Will have 'iter'
@@ -434,7 +434,7 @@ class TramExportPaths:
         self.path_years = path_years
         self.scenario = scenario
         self.iteration_name = du.create_iter_name(iteration_name)
-        self.export_home = os.path.join(export_home, self.iteration_name, self.scenario)
+        self.export_home = os.path.join(export_home, self.iteration_name, self.scenario.value)
         file_ops.create_folder(self.export_home)
 
         # ## BUILD ALL MODEL PATHS ## #
