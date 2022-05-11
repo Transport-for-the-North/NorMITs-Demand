@@ -22,7 +22,7 @@ class constants:
     time_update = {**OP,**AM,**IP,**PM}
     week_update = {
         **{n:"Weekday" for n in range(5)},
-        **{n:"Weekend" for n in range(5,7)}
+        **{5:"Saturday",6:"Sunday"}
     }
     path = pathlib.Path(r"C:\Projects\MidMITS\O2 MPD Trip End Data\O2 Trip End Data")
     output_path = pathlib.Path(r"C:\Projects\MidMITS\Python\outputs")
@@ -40,6 +40,12 @@ class constants:
         index_col="msoa",
     )
 
+def duck(df: pd.DataFrame,day: str):
+    sub = df.loc[f'{day}','AM']*3 + df.loc[f'{day}','PM']*3 + df.loc[f'{day}','IP']*6 + df.loc[f'{day}','OP']*12
+    sub['hour_part'] = day
+    sub.reset_index(inplace=True)
+    sub.set_index(['hour_part','msoa','journey_purpose'],inplace=True)
+    return sub
 
 def main():
     """
@@ -60,23 +66,22 @@ def main():
             final = pd.concat([final,df],axis=0)
         final.drop('date',axis=1,inplace=True)
         export = final.groupby(['day','hour_part','msoa','journey_purpose']).mean()
-        weekend = export.loc['Weekend','AM']*3 + export.loc['Weekend','PM']*3 + export.loc['Weekend','IP']*6 + export.loc['Weekend','OP']*12
-        weekend['hour_part'] = 'Weekend'
-        weekend.reset_index(inplace=True)
-        weekend.set_index(['hour_part','msoa','journey_purpose'],inplace=True)
+        sat = duck(export,'Saturday')
+        sun = duck(export,'Sunday')
+        weekend = pd.concat([sat,sun],axis=0)
         export_2 = pd.concat([weekend/24,export.loc['Weekday']],axis=0).join(c.zone_update,how='inner')
-        export_2.to_csv(os.path.join(c.output_path,f"{month}_2.csv"))
+        export_2.to_csv(os.path.join(c.output_path,f"{month}.csv"))
     total = pd.read_csv(
-        os.path.join(c.output_path, "March_2019_2.csv"),
+        os.path.join(c.output_path, "March_2019.csv"),
         index_col=["msoa", "LAD", "County", "hour_part", "journey_purpose"],
     ).drop(["origin", "destination"], axis=1)
     for month in c.dates.keys():
         df = pd.read_csv(
-            os.path.join(c.output_path, f"{month}_2.csv"),
+            os.path.join(c.output_path, f"{month}.csv"),
             index_col=["msoa", "LAD", "County", "hour_part", "journey_purpose"],
         )
         total = total.join(df, how="inner", rsuffix=f" {month}")
-    total.to_csv(os.path.join(c.output_path, "complete_2.csv"))
+    total.to_csv(os.path.join(c.output_path, "complete.csv"))
 
 
 if __name__ == "__main__":
