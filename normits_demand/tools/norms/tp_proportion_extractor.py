@@ -34,12 +34,12 @@ import numpy as np
 import subprocess
 
 # Local Imports
-from normits_demand import logging as nd_logging
+from normits_demand import logging as nd_log
 
 # BACKLOG: Rewrite all of CUBE to CSV code to be more generic
 #  label: rewrite
 
-LOG = nd_logging.get_logger(f"{nd_logging.get_package_logger_name()}.cube_extractor")
+LOG = nd_log.get_logger(f"{nd_log.get_package_logger_name()}.cube_extractor")
 
 # GLOBAL VARIABLES
 SOURCE_DIRECTORY = r'E:\temp\cube\2f ILF 2018\source - test'
@@ -153,7 +153,6 @@ def main(source_directory, output_path):
 
     #convert MAT to CSV
     LOG.info('Convert MAT to CSV format ...')
-    LOG.info(f"Converting {intHBPA}")
     dctFile = {}
     pool = mp.Pool(numCPUs)
     for ds in [1,2,3]:
@@ -169,7 +168,6 @@ def main(source_directory, output_path):
 
     dctFile['nhbeb'] = {'ca':{}, 'nca':{}}
     dctFile['nhbo']  = {'ca':{}, 'nca':{}}
-    LOG.info(f"Converting {intNHBx}")
     for ts in [1,2,3,4]:
         tsx = 'am' if ts==1 else 'ip' if ts==2 else 'pm' if ts==3 else 'op'
         dctFile['nhbeb']['ca'][ts]  = intNHBx.format(tsx)+'_nhbeb_ca'
@@ -182,7 +180,6 @@ def main(source_directory, output_path):
         pool.apply_async(cubeMAT2CSV,[cubEXES,source_directory,dctFile['nhbo']['nca'][ts],'.csv',source_directory+'\\'+intNHBx.format(tsx)+'.mat',1.0,4,'na','na','na','1:2',0])
 
     dctFile['ex_eb'], dctFile['ex_hbw'], dctFile['ex_oth']  = {'ca_fh':{},'ca_th':{},'nca':{}}, {'ca_fh':{},'ca_th':{},'nca':{}}, {'ca_fh':{},'ca_th':{},'nca':{}}
-    LOG.info(f"Converting {extODhr}")
     for ts in [1,2,3,4]:
         tsx = 'am' if ts==1 else 'ip' if ts==2 else 'pm' if ts==3 else 'op'
         dctFile['ex_eb']['nca'][ts]    = extODhr.format(tsx)+'_eb_nca'

@@ -32,6 +32,7 @@ from tqdm import tqdm
 sys.path.append('..')
 import normits_demand as nd
 
+from normits_demand import core as nd_core
 from normits_demand import constants as consts
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
@@ -40,7 +41,7 @@ from normits_demand.utils import pandas_utils as pd_utils
 # ## GLOBALS ## #
 # Special format for NoRMS conversion
 MODEL_NAME = 'norms'
-MODE = consts.MODEL_MODES[MODEL_NAME][0]
+MODE = nd_core.Mode.TRAIN
 
 NORMS_ZONES = list(range(1, 1300 + 1))
 NORMS_INTERNAL_ZONES = list(range(1, 1156 + 1))
@@ -429,8 +430,8 @@ def main():
     input_tour_props = get_input_tour_props(efs.imports)
 
     # HB and NHB need converting differently
-    hb_conversion(input_tour_props, efs.imports, MODE)
-    nhb_conversion(input_tour_props, efs.imports, MODE)
+    hb_conversion(input_tour_props, efs.imports, MODE.get_mode_num())
+    nhb_conversion(input_tour_props, efs.imports, MODE.get_mode_num())
 
 
 if __name__ == '__main__':
