@@ -358,7 +358,7 @@ class DistributionModel(DistributionModelExportPaths):
                 year=str(self.year),
                 csv=True
             )
-
+        print(input_fname_template)
         cost_matrices = self.arg_builder.build_pa_report_arguments(
             self.compile_zoning_system,
         )
