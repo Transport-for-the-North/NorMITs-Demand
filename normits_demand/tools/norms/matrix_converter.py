@@ -216,6 +216,55 @@ class NoRMSPostMeTpProportions:
         return self.external_tp_split_factors[purpose][ca]
 
 
+class NormsOutputToOD:
+    """Converter of NoRMS matrices to standard OD format
+
+    Takes matrices int the format of NoRMS output and converts them into
+    the standard OD format. That is, three user classes and four time periods.
+    All intermediate steps to get there can be output by this class.
+    """
+
+    # Class constants
+    _purposes = ['business', 'commute', 'other']
+    _mode = nd_core.Mode.TRAIN
+    _int_ca = [1, 2]
+    _ext_ca = ['ca_th', 'ca_fh', 'nca']
+
+    # Output folder names
+    _renamed_dirname = 'renamed'
+    _od_dirname = 'OD Matrices'
+
+    def __init__(self,
+                 matrix_dir: pathlib.Path,
+                 matrix_renaming: os.PathLike,
+                 time_period_proportions: NoRMSPostMeTpProportions,
+                 output_dir: pathlib.Path,
+                 ):
+        # Assign attributes
+        self.matrix_dir = matrix_dir
+        self.matrix_renaming = matrix_renaming
+        self.time_period_proportions = time_period_proportions
+        self.output_dir = output_dir
+
+    @property
+    def renamed_path(self):
+        return self.output_dir / self._renamed_dirname
+
+    @property
+    def od_path(self):
+        return self.output_dir / self._od_dirname
+
+    def convert_hb_internal(self):
+        pass
+
+    def convert_nhb_internal(self):
+        pass
+
+    def convert_external(self):
+        pass
+
+
+
 def get_norms_post_me_tp_proportions(
     norms_files: NormsTpProportionFiles,
     overwrite_extracted_pickle: bool = False,
