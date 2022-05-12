@@ -1083,15 +1083,14 @@ if __name__ == "__main__":
         base_matrix_folder=Path(r"I:\NorMITs Demand\import\noham\post_me\tms_seg_pa"),
         forecast_matrix_folder=forecast_matrix_folder,
         matrix_zoning="noham",
-        plot_zoning="lad_2020",
+        plot_zoning="lad_2020_internal_noham",
         output_folder=forecast_matrix_folder / "Plots",
         geospatial_file=GeoSpatialFile(
             Path(
                 r"Y:\Data Strategy\GIS Shapefiles"
-                r"\Local_Authority_Districts_(December_2020)_UK_BFC"
-                r"\Local_Authority_Districts_(December_2020)_UK_BGC.shp"
+                r"\lad_2020_internal_noham\lad_2020_internal_noham_zoning.shp"
             ),
-            "LAD20CD",
+            "zone_name",
         ),
         analytical_area_shape=GeoSpatialFile(
             Path(
