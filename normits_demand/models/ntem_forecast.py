@@ -550,7 +550,9 @@ def grow_matrix(
             "productions": growth["row_targets"]
         },
         internals,
-        output_path.with_name(output_path.stem + "-growth_comparison.xlsx"),
+        output_path.with_name(
+            file_ops.remove_suffixes(output_path).stem + "-growth_comparison.xlsx"
+        ),
     )
     return combined_future
 
