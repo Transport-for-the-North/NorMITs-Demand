@@ -13,7 +13,7 @@ import re
 import sys
 import warnings
 from pathlib import Path
-from typing import Any, Iterator, NamedTuple, Union
+from typing import Any, Iterator, List, NamedTuple, Optional, Union
 
 # Third party imports
 import geopandas as gpd
@@ -491,7 +491,7 @@ def _heatmap_figure(
     geodata: gpd.GeoDataFrame,
     column_name: str,
     title: str,
-    bins: list[Union[int, float]] = None,
+    bins: Optional[List[Union[int, float]]] = None,
     analytical_area: Union[geometry.Polygon, geometry.MultiPolygon] = None,
     postive_negative_colormaps: bool = False,
 ):
@@ -537,10 +537,16 @@ def _heatmap_figure(
         # Calculate, and apply, separate colormaps for positive and negative values
         label_fmt = "{:.1%}"
         negative_cmap = _colormap_classify(
-            geodata.loc[geodata[column_name] < 0, column_name], "PuBu_r", label_fmt=label_fmt
+            geodata.loc[geodata[column_name] < 0, column_name],
+            "PuBu_r",
+            label_fmt=label_fmt,
+            bins=list(filter(lambda x: x <= 0, bins)),
         )
         positive_cmap = _colormap_classify(
-            geodata.loc[geodata[column_name] >= 0, column_name], "YlGn", label_fmt=label_fmt
+            geodata.loc[geodata[column_name] >= 0, column_name],
+            "YlGn",
+            label_fmt=label_fmt,
+            bins=list(filter(lambda x: x >= 0, bins)),
         )
         cmap = negative_cmap + positive_cmap
         # Update colours index to be the same order as geodata
@@ -733,7 +739,7 @@ def ntem_pa_plots(
                 params["user_class"].title(),
             ),
             analytical_area=analytical_area,
-            bins=[-0.05, 0, 0.05, 0.1, 0.15, 0.2],
+            bins=[-1, -0.5, -0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2, 0.5, 1, np.inf],
         )
 
     forecast_totals: pd.DataFrame = pd.concat(forecast_totals)
@@ -884,7 +890,7 @@ def ntem_tempro_comparison_plots(
         Folder to save output CSVs and PDF graphs to.
     """
     LOG.info("Producing NTEM vs TEMPro comparison plots")
-    comp_zone_lookup = {"lad_2020": "LAD"}
+    comp_zone_lookup = {"lad_2020_internal_noham": "LAD NoHAM"}
     geospatial = get_geo_data(geospatial_file).to_frame()
     analytical_area = get_geo_data(analytical_area_shape).iloc[0]
 
@@ -960,12 +966,21 @@ def ntem_tempro_comparison_plots(
         trip_end_groups.rename(columns={"growth_difference": plot_column}, inplace=True)
         out = out.with_suffix(".pdf")
         with backend_pdf.PdfPages(out) as pdf:
+            # Calculate consistent bins for all heatmaps
+            neg_bins = mapclassify.NaturalBreaks(
+                trip_end_groups.loc[trip_end_groups <= 0], k=5
+            )
+            pos_bins = mapclassify.NaturalBreaks(
+                trip_end_groups.loc[trip_end_groups >= 0], k=5
+            )
+            bins = np.concatenate([neg_bins.bins, [0], pos_bins.bins])
+
             for to, pa in plot_iterator:
                 fig = _heatmap_figure(
                     trip_end_groups.loc[:, to, pa],
                     plot_column,
                     f"{to.upper()} {pa.title()} NTEM & TEMPro Growth Comparison",
-                    bins=[-0.2, -0.1, -0.05, -0.01, 0, 0.01, 0.05, 0.1, 0.2],
+                    bins=bins,
                     analytical_area=analytical_area,
                     postive_negative_colormaps=True,
                 )
@@ -1048,7 +1063,11 @@ def main(params: PAPlotsParameters) -> None:
 
 
 def _colormap_classify(
-    data: pd.Series, cmap_name: str, n_bins: int = 5, label_fmt: str = "{:.0f}"
+    data: pd.Series,
+    cmap_name: str,
+    n_bins: int = 5,
+    label_fmt: str = "{:.0f}",
+    bins: Optional[List[Union[int, float]]] = None,
 ) -> CustomCmap:
     """Calculate a NaturalBreaks colour map."""
 
@@ -1056,11 +1075,15 @@ def _colormap_classify(
         return label_fmt.format(lower) + " - " + label_fmt.format(upper)
 
     finite = data.dropna()
-    mc_bins = mapclassify.NaturalBreaks(finite, k=n_bins)
+    if bins is not None:
+        mc_bins = mapclassify.UserDefined(finite, bins)
+    else:
+        mc_bins = mapclassify.NaturalBreaks(finite, k=n_bins)
+
     bin_categories = pd.Series(mc_bins.yb, index=finite.index)
     bin_categories = bin_categories.reindex_like(data)
 
-    cmap = cm.get_cmap(cmap_name, n_bins)
+    cmap = cm.get_cmap(cmap_name, mc_bins.k)
     colours = pd.DataFrame(
         cmap(bin_categories), index=bin_categories.index, columns=iter("RGBA")
     )
