@@ -2297,7 +2297,7 @@ class DVector:
                              ca_sector_path: nd.PathLike,
                              ie_sector_path: nd.PathLike,
                              lad_report_path: nd.PathLike = None,
-                             lad_report_seg: nd.core.zoning.ZoningSystem = None,
+                             lad_report_seg: nd.SegmentationLevel = None,
                              ) -> None:
         """
         Writes segment, CA sector, and IE sector reports to disk
