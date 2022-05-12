@@ -427,6 +427,7 @@ def translate_matrix(
     matrix: pd.DataFrame,
     matrix_zoning_name: str,
     new_zoning_name: str,
+    weighting: str = None,
     **kwargs,
 ) -> pd.DataFrame:
     """Tranlate square matrix into new zoning system.
@@ -442,6 +443,8 @@ def translate_matrix(
         Name of the current zone system.
     new_zoning_name : str
         Name of the zone system to translate to.
+    weighting : str, optional
+        Translation weighting to use.
 
     Returns
     -------
@@ -455,7 +458,7 @@ def translate_matrix(
     # Get correspondence DataFrame
     matrix_zoning = nd_core.get_zoning_system(matrix_zoning_name)
     new_zoning = nd_core.get_zoning_system(new_zoning_name)
-    lookup = matrix_zoning._get_translation_definition(new_zoning)
+    lookup = matrix_zoning._get_translation_definition(new_zoning, weighting)
     # Translate matrix
     return translation.pandas_matrix_zone_translation(
         matrix,
