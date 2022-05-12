@@ -16,6 +16,8 @@ from typing import Any, Dict, List, NamedTuple, Optional
 
 # Add parent folder to path
 sys.path.append("..")
+# Allow running from parent folder e.g. python run_models\run_ntem_forecast.py
+sys.path.append(".")
 # Local imports
 # pylint: disable=import-error,wrong-import-position
 from normits_demand import efs_constants as efs_consts
