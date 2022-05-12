@@ -29,7 +29,7 @@ from normits_demand import efs_constants as efs_consts
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
 COMPARISON_ZONE_SYSTEMS = {
-    "trip end": ntem_forecast.LAD_ZONE_SYSTEM,
+    "trip end": "lad_2020_internal_noham",
     "matrix 1": "3_sector",
     "matrix 2": "ca_sector_2020",
 }
@@ -401,7 +401,10 @@ def pa_matrix_comparison(
             tempro_data_comp,
             (efs_consts.BASE_YEAR, yr),
         )
-        out = output_folder / f"PA_TEMPro_comparisons-{yr}-LAD.csv"
+        out = (
+            output_folder
+            / f"PA_TEMPro_comparisons-{yr}-{COMPARISON_ZONE_SYSTEMS['trip end']}.csv"
+        )
         file_ops.write_df(comparison, out)
         LOG.info("Written: %s", out)
 
