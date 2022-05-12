@@ -16,9 +16,14 @@ import os
 import pathlib
 import dataclasses
 
+from typing import Any
+from typing import List
+from typing import Dict
+
 # Third Party
 
 # Local Imports
+import numpy as np
 import pandas as pd
 
 from normits_demand import core as nd_core
@@ -98,22 +103,26 @@ class NormsTpProportionFiles:
 class NoRMSPostMeTpProportions:
     """Extraction and conversion of NoRMS tour proportions from CUBE"""
 
+    _fh_th_valid_ca = [1, 2]
+    _int_tp_split_valid_ca = [1, 2]
+    _ext_tp_split_valid_ca = ['ca_fh', 'ca_th', 'nca']
+
+    _commute_key = 'commute'
+    _business_key = 'business'
+    _other_key = 'other'
+    _valid_purpose = [_commute_key, _business_key, _other_key]
+
     def __init__(self, tour_prop_import: os.PathLike):
         tour_prop_pickle = pd.read_pickle(tour_prop_import)
         self.zoning_system = nd_core.get_zoning_system("norms")
 
-        # Convert the dictionary into its component parts
+        # ## CONVERT DICTIONARY INTO COMPONENTS ## #
         fh_th_factors = tp_proportion_converter.convert_tour_proportions(
             tour_prop_pickle,
             self.zoning_system,
         )
         self.internal_fh_factors = fh_th_factors[0]
         self.internal_th_factors = fh_th_factors[1]
-        print(self.internal_th_factors.keys())
-        print(self.internal_th_factors[1].keys())
-        print(self.internal_th_factors[1][1].keys())
-        print(self.internal_th_factors[1][1][1])
-        print(self.internal_th_factors[1][1][1].shape)
 
         self.internal_tp_split_factors = (
             tp_proportion_converter.convert_internal_tp_split_factors(
@@ -121,11 +130,6 @@ class NoRMSPostMeTpProportions:
                 self.zoning_system,
             )
         )
-        print(self.internal_tp_split_factors.keys())
-        print(self.internal_tp_split_factors[12].keys())
-        print(self.internal_tp_split_factors[12][1].keys())
-        print(self.internal_tp_split_factors[12][1][1])
-        print(self.internal_tp_split_factors[12][1][1].shape)
 
         self.external_tp_split_factors = (
             tp_proportion_converter.convert_external_tp_split_factors(
@@ -133,6 +137,83 @@ class NoRMSPostMeTpProportions:
                 self.zoning_system,
             )
         )
+
+    def _validate_ca(self, ca: Any, valid_vals: List[Any]) -> None:
+        if ca not in valid_vals:
+            raise ValueError(
+                f"Invalid ca value received. Expected one of "
+                f"'{self._fh_th_valid_ca}'. Got '{ca}'"
+            )
+
+    def _validate_internal_fh_th_ca(self, ca: int) -> None:
+        self._validate_ca(ca, self._fh_th_valid_ca)
+
+    def _validate_internal_tp_split_ca(self, ca: int) -> None:
+        self._validate_ca(ca, self._int_tp_split_valid_ca)
+
+    def _validate_external_tp_split_ca(self, ca: str) -> None:
+        self._validate_ca(ca, self._ext_tp_split_valid_ca)
+
+    def _validate_purpose(self, purpose: str) -> None:
+        if purpose not in self._valid_purpose:
+            raise ValueError(
+                f"Invalid purpose value received. Expected one of "
+                f"'{self._valid_purpose}'. Got '{purpose}'"
+            )
+
+    def get_internal_business_fh_factors(self, ca: int) -> Dict[int, np.ndarray]:
+        """Return a dictionary of from home factors"""
+        self._validate_internal_fh_th_ca(ca)
+        return self.internal_fh_factors[self._business_key][ca]
+
+    def get_internal_business_th_factors(self, ca: int) -> Dict[int, np.ndarray]:
+        """Return a dictionary of to home factors"""
+        self._validate_internal_fh_th_ca(ca)
+        return self.internal_th_factors[self._business_key][ca]
+
+    def get_internal_commute_fh_factors(self, ca: int) -> Dict[int, np.ndarray]:
+        """Return a dictionary of from home factors"""
+        self._validate_internal_fh_th_ca(ca)
+        return self.internal_fh_factors[self._commute_key][ca]
+
+    def get_internal_commute_th_factors(self, ca: int) -> Dict[int, np.ndarray]:
+        """Return a dictionary of to home factors"""
+        self._validate_internal_fh_th_ca(ca)
+        return self.internal_th_factors[self._commute_key][ca]
+
+    def get_internal_other_fh_factors(self, ca: int) -> Dict[int, np.ndarray]:
+        """Return a dictionary of from home factors"""
+        self._validate_internal_fh_th_ca(ca)
+        return self.internal_fh_factors[self._other_key][ca]
+
+    def get_internal_other_th_factors(self, ca: int) -> Dict[int, np.ndarray]:
+        """Return a dictionary of to home factors"""
+        self._validate_internal_fh_th_ca(ca)
+        return self.internal_th_factors[self._other_key][ca]
+
+    def get_internal_fh_factors(self, purpose: str, ca: int) -> Dict[int, np.ndarray]:
+        """Return a dictionary of from home factors"""
+        self._validate_purpose(purpose)
+        self._validate_internal_fh_th_ca(ca)
+        return self.internal_fh_factors[purpose][ca]
+
+    def get_internal_th_factors(self, purpose: str, ca: int) -> Dict[int, np.ndarray]:
+        """Return a dictionary of to home factors"""
+        self._validate_purpose(purpose)
+        self._validate_internal_fh_th_ca(ca)
+        return self.internal_th_factors[purpose][ca]
+
+    def get_internal_nhb_tp_split_factors(self, purpose: str, ca: int) -> Dict[int, np.ndarray]:
+        """Return a dictionary of tp split factors"""
+        self._validate_purpose(purpose)
+        self._validate_internal_tp_split_ca(ca)
+        return self.internal_tp_split_factors[purpose][ca]
+
+    def get_external_tp_split_factors(self, purpose: str, ca: int) -> Dict[int, np.ndarray]:
+        """Return a dictionary of tp split factors"""
+        self._validate_purpose(purpose)
+        self._validate_internal_tp_split_ca(ca)
+        return self.external_tp_split_factors[purpose][ca]
 
 
 def get_norms_post_me_tp_proportions(

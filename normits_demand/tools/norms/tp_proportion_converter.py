@@ -30,7 +30,7 @@ from normits_demand import logging as nd_log
 from normits_demand import core as nd_core
 from normits_demand.utils import pandas_utils as pd_utils
 
-SegmentFactorDict = Dict[int, Dict[int, Dict[int, np.ndarray]]]
+SegmentFactorDict = Dict[Any, Dict[Any, Dict[int, np.ndarray]]]
 LOG = nd_log.get_logger(f"{nd_log.get_package_logger_name()}.norms_tp_extractor")
 
 
@@ -93,14 +93,9 @@ def convert_tour_proportions(
 ) -> Tuple[SegmentFactorDict, SegmentFactorDict]:
     """Convert the dictionary into from-home and to-home factor dicts"""
     purpose_to_keys = {
-        1: "hbw",
-        2: "hbeb",
-        3: "hbo",
-        4: "hbo",
-        5: "hbo",
-        6: "hbo",
-        7: "hbo",
-        8: "hbo",
+        'commute': "hbw",
+        'business': "hbeb",
+        'other': "hbo",
     }
     ca_to_keys = {1: "nca", 2: "ca"}
     fh_factors_to_keys = {
@@ -118,8 +113,8 @@ def convert_tour_proportions(
     }
 
     # Build the dictionaries
-    fh_factors = dict.fromkeys(purpose_to_keys.keys())
-    th_factors = dict.fromkeys(purpose_to_keys.keys())
+    fh_factors: SegmentFactorDict = dict.fromkeys(purpose_to_keys.keys())
+    th_factors: SegmentFactorDict = dict.fromkeys(purpose_to_keys.keys())
     for purpose, p_key in purpose_to_keys.items():
         # Create purpose specific stuff
         fh_factors[purpose] = dict.fromkeys(ca_to_keys)
@@ -154,7 +149,7 @@ def convert_tour_proportions(
             n_bad_values = idx[0].shape[0]
             if n_bad_values > 0:
                 LOG.warning(
-                    "In p%s, ca%s, from-home factors. Found %s values that are"
+                    "In %s, ca%s, from-home factors. Found %s values that are "
                     "not within the range %s-%s.",
                     purpose,
                     ca,
@@ -169,7 +164,7 @@ def convert_tour_proportions(
             n_bad_values = idx[0].shape[0]
             if n_bad_values > 0:
                 LOG.warning(
-                    "In p%s, ca%s, to-home factors. Found %s values that are"
+                    "In %s, ca%s, to-home factors. Found %s values that are "
                     "not within the range %s-%s.",
                     purpose,
                     ca,
@@ -183,12 +178,8 @@ def convert_tour_proportions(
 
 def convert_internal_tp_split_factors(tour_prop_pickle, zoning_system):
     purpose_to_keys = {
-        12: "nhbeb",
-        13: "nhbo",
-        14: "nhbo",
-        15: "nhbo",
-        16: "nhbo",
-        18: "nhbo",
+        'business': "nhbeb",
+        'other': "nhbo",
     }
     ca_to_keys = {1: "nca", 2: "ca"}
 
@@ -218,33 +209,63 @@ def convert_internal_tp_split_factors(tour_prop_pickle, zoning_system):
             sum_mat = sum_mat[:1156, :1156]
             idx = ((upper_bound > 1.1) | (sum_mat < lower_bound)).nonzero()
             n_bad_values = idx[0].shape[0]
-            LOG.warning(
-                "In p%s, ca%s, internal nhb tp split factors. Found %s "
-                "values that are not within the range %s-%s.",
-                purpose,
-                ca,
-                n_bad_values,
-                lower_bound,
-                upper_bound,
-            )
+            if n_bad_values > 0:
+                LOG.warning(
+                    "In %s, ca%s, internal nhb tp split factors. Found %s "
+                    "values that are not within the range %s-%s.",
+                    purpose,
+                    ca,
+                    n_bad_values,
+                    lower_bound,
+                    upper_bound,
+                )
 
     return splitting_factors
 
 
 def convert_external_tp_split_factors(tour_prop_pickle, zoning_system):
     purpose_to_keys = {
-        1: "ex_hbw",
-        2: "ex_eb",
-        3: "ex_oth",
-        4: "ex_oth",
-        5: "ex_oth",
-        6: "ex_oth",
-        7: "ex_oth",
-        8: "ex_oth",
-        12: "ex_eb",
-        13: "ex_oth",
-        14: "ex_oth",
-        15: "ex_oth",
-        16: "ex_oth",
-        18: "ex_oth",
+        'commute': "ex_hbw",
+        'business': "ex_eb",
+        'other': "ex_oth",
     }
+    ca_to_keys = {"nca": "nca", "ca_fh": "ca_fh", "ca_th": "ca_th"}
+
+    # Build the external splitting factor dictionary
+    splitting_factors = dict.fromkeys(purpose_to_keys.keys())
+    for purpose, p_key in purpose_to_keys.items():
+        # Create purpose specific stuff
+        splitting_factors[purpose] = dict.fromkeys(ca_to_keys)
+        purpose_dict = tour_prop_pickle[p_key]
+
+        for ca, ca_key in ca_to_keys.items():
+            # Create ca stuff
+            ca_dict = purpose_dict[ca_key]
+
+            # Infill any 0 values
+            splitting_factors[purpose][ca] = infill_missing_values(
+                infill_dict=ca_dict,
+                all_zones=zoning_system.unique_zones,
+                relevant_zones=zoning_system.internal_zones,
+            )
+
+            # Check for where things don't sum to 1
+            lower_bound = 0.9
+            upper_bound = 1.1
+
+            sum_mat = functools.reduce(operator.add, splitting_factors[purpose][ca].values())
+            sum_mat = sum_mat[:1156, :1156]
+            idx = ((upper_bound > 1.1) | (sum_mat < lower_bound)).nonzero()
+            n_bad_values = idx[0].shape[0]
+            if n_bad_values > 0:
+                LOG.warning(
+                    "In %s, %s, external tp split factors. Found %s "
+                    "values that are not within the range %s-%s.",
+                    purpose,
+                    ca,
+                    n_bad_values,
+                    lower_bound,
+                    upper_bound,
+                )
+
+    return splitting_factors
