@@ -12,6 +12,7 @@ import os
 
 from typing import List
 from typing import Tuple
+import warnings
 
 # Third Party
 import pyodbc
@@ -1229,6 +1230,10 @@ class TemproParser:
 
             if target_year > av_years[-1]:
                 # Extrapolating past largest year, using growth from last 2 years
+                warnings.warn(
+                    f"Extrapolating TEMPro data past largest year ({av_years[-1]})",
+                    RuntimeWarning
+                )
                 lower, upper = av_years[-2:]
                 start_year = upper
             else:
