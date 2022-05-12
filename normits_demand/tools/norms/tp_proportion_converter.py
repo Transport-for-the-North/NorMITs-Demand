@@ -93,9 +93,9 @@ def convert_tour_proportions(
 ) -> Tuple[SegmentFactorDict, SegmentFactorDict]:
     """Convert the dictionary into from-home and to-home factor dicts"""
     purpose_to_keys = {
-        'commute': "hbw",
-        'business': "hbeb",
-        'other': "hbo",
+        "commute": "hbw",
+        "business": "hbeb",
+        "other": "hbo",
     }
     ca_to_keys = {1: "nca", 2: "ca"}
     fh_factors_to_keys = {
@@ -178,8 +178,8 @@ def convert_tour_proportions(
 
 def convert_internal_tp_split_factors(tour_prop_pickle, zoning_system):
     purpose_to_keys = {
-        'business': "nhbeb",
-        'other': "nhbo",
+        "business": "nhbeb",
+        "other": "nhbo",
     }
     ca_to_keys = {1: "nca", 2: "ca"}
 
@@ -225,9 +225,9 @@ def convert_internal_tp_split_factors(tour_prop_pickle, zoning_system):
 
 def convert_external_tp_split_factors(tour_prop_pickle, zoning_system):
     purpose_to_keys = {
-        'commute': "ex_hbw",
-        'business': "ex_eb",
-        'other': "ex_oth",
+        "commute": "ex_hbw",
+        "business": "ex_eb",
+        "other": "ex_oth",
     }
     ca_to_keys = {"nca": "nca", "ca_fh": "ca_fh", "ca_th": "ca_th"}
 

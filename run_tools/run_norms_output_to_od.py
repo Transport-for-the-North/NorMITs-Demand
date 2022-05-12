@@ -25,7 +25,9 @@ from normits_demand.tools.norms import matrix_converter as norms_matrix_converte
 # RUNNING ARGS
 TP_PROPORTIONS_DIR = r"E:\temp\cube\2f ILF 2018\source - test"
 MATRIX_DIR = r"E:\temp\cube\2f ILF 2018"
+
 MATRIX_OUTPUT_DIRNAME = "converted_matrices"
+MATRIX_YEAR = 2018
 
 MATRIX_RENAME_PATH = r"I:\NorMITs Demand\import\norms\post_me_model_data\norms_to_demand_names.csv"
 
@@ -43,6 +45,7 @@ def main():
     # Convert the matrices
     converter = norms_matrix_converter.NormsOutputToOD(
         matrix_dir=import_matrix_dir,
+        matrix_year=MATRIX_YEAR,
         time_period_proportions=tp_proportions,
         matrix_renaming=MATRIX_RENAME_PATH,
         output_dir=import_matrix_dir / MATRIX_OUTPUT_DIRNAME

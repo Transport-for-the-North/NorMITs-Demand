@@ -896,8 +896,8 @@ def get_vdm_dist_name(trip_origin: str,
     return compiled_name
 
 
-def get_dist_name(trip_origin: str,
-                  matrix_format: str,
+def get_dist_name(trip_origin: str = None,
+                  matrix_format: str = None,
                   year: str = None,
                   purpose: str = None,
                   mode: str = None,
@@ -912,30 +912,33 @@ def get_dist_name(trip_origin: str,
     Generates the distribution name
     """
     # Generate the base name
-    name_parts = [
-        trip_origin,
-        matrix_format,
-    ]
+    name_parts = list()
 
-    # Optionally add the extra segmentation
+    # optionally add segments
+    if not is_none_like(trip_origin):
+        name_parts += [trip_origin]
+
+    if not is_none_like(matrix_format):
+        name_parts += [matrix_format]
+
     if not is_none_like(year):
-        name_parts += ["yr" + year]
+        name_parts += [f"yr{year}"]
 
     if not is_none_like(purpose):
-        name_parts += ["p" + purpose]
+        name_parts += [f"p{purpose}"]
 
     if not is_none_like(mode):
-        name_parts += ["m" + mode]
+        name_parts += [f"m{mode}"]
 
     if not is_none_like(segment) and not is_none_like(purpose):
-        seg_name = "soc" if int(purpose) in efs_consts.SOC_P else "ns"
-        name_parts += [seg_name + segment]
+        seg_name = "soc{0}" if int(purpose) in efs_consts.SOC_P else "ns{0}"
+        name_parts += [seg_name.format(segment)]
 
     if not is_none_like(car_availability):
-        name_parts += ["ca" + car_availability]
+        name_parts += [f"ca{car_availability}"]
 
     if not is_none_like(tp):
-        name_parts += ["tp" + tp]
+        name_parts += [f"tp{tp}"]
 
     # Create name string
     final_name = '_'.join(name_parts)

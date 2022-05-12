@@ -14,6 +14,7 @@ format where they can be picked up by other models
 # Built-Ins
 import os
 import pathlib
+import itertools
 import dataclasses
 
 from typing import Any
@@ -28,6 +29,9 @@ import pandas as pd
 
 from normits_demand import core as nd_core
 from normits_demand import logging as nd_log
+from normits_demand.utils import file_ops
+from normits_demand.utils import general as du
+from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand.tools.norms import tp_proportion_extractor
 from normits_demand.tools.norms import tp_proportion_converter
 
@@ -105,11 +109,11 @@ class NoRMSPostMeTpProportions:
 
     _fh_th_valid_ca = [1, 2]
     _int_tp_split_valid_ca = [1, 2]
-    _ext_tp_split_valid_ca = ['ca_fh', 'ca_th', 'nca']
+    _ext_tp_split_valid_ca = ["ca_fh", "ca_th", "nca"]
 
-    _commute_key = 'commute'
-    _business_key = 'business'
-    _other_key = 'other'
+    _commute_key = "commute"
+    _business_key = "business"
+    _other_key = "other"
     _valid_purpose = [_commute_key, _business_key, _other_key]
 
     def __init__(self, tour_prop_import: os.PathLike):
@@ -203,7 +207,9 @@ class NoRMSPostMeTpProportions:
         self._validate_internal_fh_th_ca(ca)
         return self.internal_th_factors[purpose][ca]
 
-    def get_internal_nhb_tp_split_factors(self, purpose: str, ca: int) -> Dict[int, np.ndarray]:
+    def get_internal_nhb_tp_split_factors(
+        self, purpose: str, ca: int
+    ) -> Dict[int, np.ndarray]:
         """Return a dictionary of tp split factors"""
         self._validate_purpose(purpose)
         self._validate_internal_tp_split_ca(ca)
@@ -225,26 +231,40 @@ class NormsOutputToOD:
     """
 
     # Class constants
-    _purposes = ['business', 'commute', 'other']
+    _hb_purpose_vals = ["business", "commute", "other"]
+    _nhb_purpose_vals = ["business", "other"]
+    _purpose_vals = _hb_purpose_vals
+    _ca_vals = [1, 2]
     _mode = nd_core.Mode.TRAIN
     _int_ca = [1, 2]
-    _ext_ca = ['ca_th', 'ca_fh', 'nca']
+
+    _internal_suffix = "_int"
+    _external_suffix = "_ext"
 
     # Output folder names
-    _renamed_dirname = 'renamed'
-    _od_dirname = 'OD Matrices'
+    _renamed_dirname = "renamed"
+    _od_dirname = "OD Matrices"
 
-    def __init__(self,
-                 matrix_dir: pathlib.Path,
-                 matrix_renaming: os.PathLike,
-                 time_period_proportions: NoRMSPostMeTpProportions,
-                 output_dir: pathlib.Path,
-                 ):
+    def __init__(
+        self,
+        matrix_dir: pathlib.Path,
+        matrix_year: int,
+        time_period_proportions: NoRMSPostMeTpProportions,
+        output_dir: pathlib.Path,
+        matrix_renaming: os.PathLike = None,
+    ):
         # Assign attributes
         self.matrix_dir = matrix_dir
-        self.matrix_renaming = matrix_renaming
+        self.matrix_year = matrix_year
         self.time_period_proportions = time_period_proportions
         self.output_dir = output_dir
+        
+        # Create the output paths
+        file_ops.create_folder(self.renamed_path)
+        file_ops.create_folder(self.od_path)
+
+        # Rename the given matrices if needed
+        self._rename_matrices(matrix_renaming)
 
     @property
     def renamed_path(self):
@@ -254,7 +274,140 @@ class NormsOutputToOD:
     def od_path(self):
         return self.output_dir / self._od_dirname
 
+    def _rename_matrices(self, matrix_renaming: os.PathLike = None):
+        """Rename the given matrices"""
+        # Init
+        in_col = 'input'
+        out_col = 'output'
+        expected_cols = [in_col, out_col]
+
+        # Get a list of all the expected filenames
+        expected_filenames = self._get_hb_internal_filenames()
+        expected_filenames += self._get_nhb_internal_filenames()
+        expected_filenames += self._get_external_filenames()
+
+        # Build the list of files to copy
+        if matrix_renaming is not None:
+            # ## RENAME FILES WHILE WE COPY ## #
+            # Validate the given file
+            if not os.path.exists(matrix_renaming):
+                raise ValueError(
+                    "Cannot find the matrix renaming file given. Path does " "not exist."
+                )
+
+            # Read in and check that all cols exist
+            rename_df = pd.read_csv(matrix_renaming)
+            rename_df = pd_utils.reindex_cols(rename_df, expected_cols)
+
+            # Check that all filenames exist in the out_col
+            got_filenames = set(rename_df[out_col].to_list())
+            missing_fnames = set(expected_filenames) - got_filenames
+            if len(missing_fnames) > 0:
+                raise ValueError(
+                    "The given rename file does not contain all the expected "
+                    "output filenames. The following filenames are missing:\n"
+                    f"{missing_fnames}"
+                )
+
+            # Build the list of paths to copy
+            in_paths = [self.matrix_dir / x for x in rename_df[in_col].to_list()]
+            out_paths = [self.renamed_path / x for x in rename_df[out_col].to_list()]
+            files_to_copy = list(zip(in_paths, out_paths))
+
+        else:
+            # ## JUST COPY FILES AS IS ## #
+            # Make sure all files exist ???
+            in_paths = [self.matrix_dir / x for x in expected_filenames]
+            out_paths = [self.renamed_path / x for x in expected_filenames]
+
+            # Build the list of files to copy
+            files_to_copy = list(zip(in_paths, out_paths))
+
+        # Copy and rename the files if needed
+        file_ops.copy_and_rename_files(files=files_to_copy)
+
+    def _get_filename(
+        self,
+        trip_origin: str = None,
+        matrix_format: str = None,
+        purpose: str = None,
+        ca: str = None,
+        suffix: str = None,
+    ) -> str:
+        """Build a filename using the default format"""
+        if matrix_format is None:
+            matrix_format = "{purpose}"
+        else:
+            matrix_format += "_{purpose}"
+
+        template = du.get_dist_name(
+            trip_origin=trip_origin,
+            matrix_format=matrix_format,
+            year=str(self.matrix_year),
+            mode=self._mode.get_mode_num(),
+            car_availability=ca,
+            suffix=suffix,
+            csv=True,
+        )
+        return template.format(purpose=purpose)
+
+    def _get_internal_filename(self, *args, **kwargs) -> str:
+        """Build an internal filename using the default format"""
+        return self._get_filename(*args, **dict(kwargs, suffix=self._internal_suffix))
+
+    def _get_external_filename(self, *args, **kwargs) -> str:
+        """Build an external filename using the default format"""
+        return self._get_filename(*args, **dict(kwargs, suffix=self._external_suffix))
+
+    def _get_hb_internal_filenames(self) -> List[str]:
+        """Build a list of filenames needed for the home-based pa files"""
+        filenames = list()
+        for purpose, ca in itertools.product(self._hb_purpose_vals, self._ca_vals):
+            filenames.append(
+                self._get_internal_filename(
+                    trip_origin='hb',
+                    matrix_format='pa',
+                    purpose=purpose,
+                    ca=ca,
+                )
+            )
+        return filenames
+
+    def _get_nhb_internal_filenames(self) -> List[str]:
+        """Build a list of filenames needed for the home-based pa files"""
+        filenames = list()
+        for purpose, ca in itertools.product(self._nhb_purpose_vals, self._ca_vals):
+            filenames.append(
+                self._get_internal_filename(
+                    trip_origin='nhb',
+                    matrix_format='od',
+                    purpose=purpose,
+                    ca=ca,
+                )
+            )
+        return filenames
+
+    def _get_external_filenames(self) -> List[str]:
+        """Build a list of filenames needed for the home-based pa files"""
+        filenames = list()
+        for purpose, ca in itertools.product(self._purpose_vals, self._ca_vals):
+            if ca == 1:
+                matrix_formats = ['od']
+            else:
+                matrix_formats = ['od_from', 'od_to']
+            for mf in matrix_formats:
+                filenames.append(
+                    self._get_external_filename(
+                        matrix_format=mf,
+                        purpose=purpose,
+                        ca=ca,
+                    )
+                )
+        return filenames
+
     def convert_hb_internal(self):
+        """Convert the home-based internal matrices to tp split OD"""
+        filenames = self._get_hb_internal_filenames()
         pass
 
     def convert_nhb_internal(self):
@@ -262,7 +415,6 @@ class NormsOutputToOD:
 
     def convert_external(self):
         pass
-
 
 
 def get_norms_post_me_tp_proportions(
