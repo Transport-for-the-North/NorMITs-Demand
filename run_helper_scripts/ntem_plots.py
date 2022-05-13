@@ -13,7 +13,7 @@ import re
 import sys
 import warnings
 from pathlib import Path
-from typing import Any, Iterator, List, NamedTuple, Optional, Union
+from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Union
 
 # Third party imports
 import geopandas as gpd
@@ -102,6 +102,8 @@ class PAPlotsParameters:
     geospatial_file: GeoSpatialFile
     analytical_area_shape: GeoSpatialFile
     tempro_comparison_folder: Path
+    tempro_comparison_summary_zoning: str
+    base_year: int
 
 
 class PlotType(nd_enum.AutoName):
@@ -317,7 +319,7 @@ def _plot_bars(
     max_height: float,
     label_fmt: str = ".3g",
 ):
-    """Creates the bar plots used in `matrix_total_plots`."""
+    """Create the bar plots used in `matrix_total_plots`."""
     bars = ax.bar(
         x_data,
         y_data,
@@ -353,7 +355,7 @@ def _plot_line(
     label: str,
     label_fmt: str = ".3g",
 ):
-    """Creates the line plots used in `matrix_total_plots`."""
+    """Create the line plots used in `matrix_total_plots`."""
     ax.plot(x_data, y_data, label=label, color=colour, marker="+")
 
     for x, y in zip(x_data, y_data):
@@ -1035,6 +1037,88 @@ def add_analytical_area(
     return legend_patch
 
 
+def _tempro_comparison_matrix_growth(
+    excel: Path, base_year: int, forecast_year: int
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Compare matrix and TEMPro growth and return summaries."""
+    GROUP_COLS = ["matrix_type", "purpose"]
+
+    tempro: pd.DataFrame = pd.read_excel(
+        excel,
+        sheet_name="TEMPro Data",
+        usecols=["matrix_type", "p", f"tempro_{base_year}", f"tempro_{forecast_year}"],
+    )
+    tempro.rename(columns={"p": "purpose"}, inplace=True)
+    tempro = tempro.groupby(GROUP_COLS).sum()
+    tempro.loc[:, "tempro_growth"] = (
+        tempro[f"tempro_{forecast_year}"] / tempro[f"tempro_{base_year}"]
+    )
+
+    matrices = pd.read_excel(
+        excel,
+        sheet_name=["Base Matrices Data", "Forecast Matrices Data"],
+        usecols=["matrix_type", "purpose", "trips"],
+    )
+    matrices: Dict[str, pd.DataFrame] = {k.split()[0].lower(): v for k, v in matrices.items()}
+    for nm, mat in matrices.items():
+        mat = mat.groupby(GROUP_COLS).sum()
+        matrices[nm] = mat.rename(columns={"trips": nm})
+
+    combined = pd.concat([tempro, matrices["base"], matrices["forecast"]], axis=1)
+    combined.reset_index(inplace=True)
+
+    combined.loc[:, "matrix_growth"] = combined["forecast"] / combined["base"]
+    combined.loc[:, "matrix_type"] = combined["matrix_type"].str.upper()
+    combined.loc[:, "growth_difference"] = (
+        combined["matrix_growth"] - combined["tempro_growth"]
+    )
+    combined.columns = combined.columns.str.replace("_", " ").str.title()
+
+    growth = combined.loc[
+        :, ["Matrix Type", "Purpose", "Matrix Growth", "Tempro Growth", "Growth Difference"]
+    ].copy()
+    growth.insert(2, "Year", forecast_year)
+
+    return combined, growth
+
+
+def tempro_comparison_summary(comparisons_folder: Path, zoning: str, base_year: int):
+    """Produce matrix totals TEMPro comparisons summary by purpose.
+
+    Parameters
+    ----------
+    comparisons_folder : Path
+        Folder containing the TEMPro comparisons spreadsheets.
+    zoning : str
+        Name of the matrix zoning system to read the TEMPro comparisons
+        for, the output file contains matrix totals.
+    base_year : int
+        Base model year.
+    """
+    file_name = f"PA_TEMPro_comparisons-{{year}}-{zoning}.xlsx"
+    output_path = comparisons_folder / "PA_TEMPro_comparisons_summary.xlsx"
+    LOG.info("Summarising TEMPro comparisons")
+
+    with pd.ExcelWriter(output_path) as excel_file:
+        growth_dfs = []
+        for path in comparisons_folder.glob(file_name.format(year="????")):
+            LOG.info("Summarising: %s", path.name)
+            match = re.match(file_name.format(year=r"(\d{4})"), path.name, re.IGNORECASE)
+            if match is None:
+                LOG.warning("Skipping file %s because cannot find year in name", path.name)
+                continue
+            year = int(match.group(1))
+
+            comparison, growth = _tempro_comparison_matrix_growth(path, base_year, year)
+            comparison.to_excel(excel_file, sheet_name=str(year), index=False)
+            growth_dfs.append(growth)
+
+        growth = pd.concat(growth_dfs)
+        growth.to_excel(excel_file, sheet_name="Growth Summary", index=False)
+
+    LOG.info("Written: %s", output_path)
+
+
 def main(params: PAPlotsParameters) -> None:
     """Produce the PA growth and TEMPro comparison maps and graphs.
 
@@ -1044,6 +1128,11 @@ def main(params: PAPlotsParameters) -> None:
         Parameters and input files for creating the graphs.
     """
     params.output_folder.mkdir(exist_ok=True)
+    tempro_comparison_summary(
+        params.tempro_comparison_folder,
+        params.tempro_comparison_summary_zoning,
+        params.base_year,
+    )
     ntem_pa_plots(
         params.base_matrix_folder,
         params.forecast_matrix_folder,
@@ -1075,6 +1164,10 @@ def _colormap_classify(
         return label_fmt.format(lower) + " - " + label_fmt.format(upper)
 
     finite = data.dropna()
+    if finite.empty:
+        # Return empty colour map
+        return CustomCmap(pd.Series(), pd.DataFrame(columns=iter("RGBA")), [])
+
     if bins is not None:
         mc_bins = mapclassify.UserDefined(finite, bins)
     else:
@@ -1122,6 +1215,8 @@ if __name__ == "__main__":
             "Name",
         ),
         tempro_comparison_folder=iteration_folder / r"Matrices\PA\TEMPro Comparisons",
+        tempro_comparison_summary_zoning="3_sector",
+        base_year=2018,
     )
 
     main(pa_parameters)
