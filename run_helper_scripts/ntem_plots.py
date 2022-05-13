@@ -1166,7 +1166,7 @@ def _colormap_classify(
     finite = data.dropna()
     if finite.empty:
         # Return empty colour map
-        return CustomCmap(pd.Series(), pd.DataFrame(), [])
+        return CustomCmap(pd.Series(dtype=float), pd.DataFrame(dtype=float), [])
 
     if bins is not None:
         mc_bins = mapclassify.UserDefined(finite, bins)
