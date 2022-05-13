@@ -377,7 +377,9 @@ def main(
         tempro_data.save(params.export_path / "TEMPro Data")
 
     tempro_data = model_mode_subset(tempro_data, params.model_name)
-    tempro_growth = ntem_forecast.tempro_growth(tempro_data, params.model_name)
+    tempro_growth = ntem_forecast.tempro_growth(
+        tempro_data, params.model_name, params.base_year
+    )
     if output_tempro_growth:
         tempro_growth.save(params.export_path / "TEMPro Growth Factors")
 
@@ -388,7 +390,9 @@ def main(
     )
     pa_folder = params.export_path / "Matrices" / "PA"
     ntem_forecast.grow_all_matrices(ntem_inputs, tempro_growth, pa_folder)
-    ntem_forecast_checks.pa_matrix_comparison(ntem_inputs, pa_folder, tempro_data)
+    ntem_forecast_checks.pa_matrix_comparison(
+        ntem_inputs, pa_folder, tempro_data, params.base_year
+    )
     od_folder = pa_folder.with_name("OD")
     ntem_forecast.convert_to_od(
         pa_folder,
@@ -415,6 +419,7 @@ def main(
         compiled_od_path / "PCU",
         params.model_name,
         ntem_forecast_checks.COMPARISON_ZONE_SYSTEMS["matrix 1"],
+        params.future_years,
     )
 
     LOG.info(

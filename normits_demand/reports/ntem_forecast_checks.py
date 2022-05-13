@@ -339,6 +339,7 @@ def pa_matrix_comparison(
     ntem_imports: ntem_forecast.NTEMImportMatrices,
     pa_folder: Path,
     tempro_data: tempro_trip_ends.TEMProTripEnds,
+    base_year: int,
 ):
     """Produce TEMPro comparisons for PA matrices.
 
@@ -350,6 +351,8 @@ def pa_matrix_comparison(
         Folder containing PA matrices.
     tempro_data : TEMProTripEnds
         TEMPro trip end data.
+    base_year : int
+        Base model year.
     """
     LOG.info("PA matrix trip ends comparison with TEMPro")
     output_folder = pa_folder / "TEMPro Comparisons"
@@ -399,7 +402,7 @@ def pa_matrix_comparison(
             base_trip_ends,
             forecast_trip_ends,
             tempro_data_comp,
-            (efs_consts.BASE_YEAR, yr),
+            (base_year, yr),
         )
         out = (
             output_folder
@@ -418,7 +421,7 @@ def pa_matrix_comparison(
                 ntem_imports.model_name,
                 tempro_data,
                 comp_zone,
-                (efs_consts.BASE_YEAR, yr),
+                (base_year, yr),
                 output_folder / f"PA_TEMPro_comparisons-{yr}-{comp_zone}",
             )
 
@@ -784,6 +787,7 @@ def od_matrix_comparison(
     forecast_folder: Path,
     matrix_zoning: str,
     comparison_zoning: str,
+    years: List[int],
 ):
     """Write spreadsheet summarising OD matrix growth.
 
@@ -797,6 +801,8 @@ def od_matrix_comparison(
         Name of the current matrix zoning system.
     comparison_zoning : str
         Name of the zoning system for the summaries.
+    years : List[int]
+        List of forecast years.
     """
     OD_MATRIX_NAMES = {
         "base": "od_m3_{purp}_tp{tp}_postME.csv",
@@ -834,7 +840,7 @@ def od_matrix_comparison(
                     "forecast"].format(purp=p, tp=t, yr=y)
                 forecast_paths = {
                     y: forecast_folder / forecast_name(purpose, tp, y)
-                    for y in efs_consts.FUTURE_YEARS
+                    for y in years
                 }
                 _compare_od_matrices(
                     writer,
