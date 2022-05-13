@@ -543,16 +543,16 @@ def _heatmap_figure(
         # Calculate, and apply, separate colormaps for positive and negative values
         label_fmt = "{:.1%}"
         negative_cmap = _colormap_classify(
-            geodata.loc[geodata[column_name] < 0, column_name],
+            geodata.loc[geodata[column_name] <= 0, column_name],
             "PuBu_r",
             label_fmt=label_fmt,
             bins=list(filter(lambda x: x <= 0, bins)),
         )
         positive_cmap = _colormap_classify(
-            geodata.loc[geodata[column_name] >= 0, column_name],
+            geodata.loc[geodata[column_name] > 0, column_name],
             "YlGn",
             label_fmt=label_fmt,
-            bins=list(filter(lambda x: x >= 0, bins)),
+            bins=list(filter(lambda x: x > 0, bins)),
         )
         cmap = negative_cmap + positive_cmap
         # Update colours index to be the same order as geodata
@@ -896,7 +896,7 @@ def ntem_tempro_comparison_plots(
         Folder to save output CSVs and PDF graphs to.
     """
     LOG.info("Producing NTEM vs TEMPro comparison plots")
-    comp_zone_lookup = {"lad_2020_internal_noham": "LAD NoHAM"}
+    nice_zone_name = {"lad_2020_internal_noham": "LAD Internal NoHAM External"}
     geospatial = get_geo_data(geospatial_file).to_frame()
     analytical_area = get_geo_data(analytical_area_shape).iloc[0]
 
@@ -906,14 +906,7 @@ def ntem_tempro_comparison_plots(
     geospatial.loc[geospatial.index.isin(plot_zone_system.external_zones), "IE"] = "External"
     geospatial.dropna(axis=0, inplace=True)
 
-    comparison_filename = "PA_TEMPro_comparisons-{year}-{zone}"
-    zone = comp_zone_lookup.get(plot_zoning, plot_zoning)
-    for file in comparison_folder.glob(comparison_filename.format(year="*", zone=zone) + "*"):
-        match = re.match(comparison_filename.format(year=r"(\d+)", zone=zone), file.stem)
-        if not match or file.is_dir():
-            continue
-        year = int(match.group(1))
-
+    for year, file in _tempro_comparisons_iterator(comparison_folder, plot_zoning):
         columns = {
             "matrix_type": "trip_origin",
             "trip_end_type": "pa",
@@ -955,14 +948,16 @@ def ntem_tempro_comparison_plots(
             trip_end_groups[["trip_origin", "pa"]].drop_duplicates().itertuples(index=False)
         )
         trip_end_groups.set_index(["zone", "trip_origin", "pa", "IE"], inplace=True)
-        out = output_folder / f"PA_TEMPro_growth_comparison_{year}_{zone}.csv"
+        out = output_folder / f"PA_TEMPro_growth_comparison_{year}_{plot_zoning}.csv"
         trip_end_groups.drop(columns=["geometry"]).to_csv(out)
         LOG.info("Written: %s", out)
 
         growth_comparison_regression(
             trip_end_groups,
             out.with_name(out.stem + "-scatter.pdf"),
-            f"NTEM Model and TEMPro Trip End Growth Comparison at {zone}",
+            "NTEM Model and TEMPro Trip End Growth Comparison at {}".format(
+                nice_zone_name.get(plot_zoning, plot_zoning)
+            ),
         )
 
         plot_column = "Growth Difference"
@@ -974,10 +969,10 @@ def ntem_tempro_comparison_plots(
         with backend_pdf.PdfPages(out) as pdf:
             # Calculate consistent bins for all heatmaps
             neg_bins = mapclassify.NaturalBreaks(
-                trip_end_groups.loc[trip_end_groups <= 0], k=5
+                trip_end_groups.loc[trip_end_groups[plot_column] <= 0, plot_column], k=5
             )
             pos_bins = mapclassify.NaturalBreaks(
-                trip_end_groups.loc[trip_end_groups >= 0], k=5
+                trip_end_groups.loc[trip_end_groups[plot_column] >= 0, plot_column], k=5
             )
             bins = np.concatenate([neg_bins.bins, [0], pos_bins.bins])
 
@@ -985,7 +980,8 @@ def ntem_tempro_comparison_plots(
                 fig = _heatmap_figure(
                     trip_end_groups.loc[:, to, pa],
                     plot_column,
-                    f"{to.upper()} {pa.title()} NTEM & TEMPro Growth Comparison",
+                    f"{to.upper()} {pa.title()} NTEM & TEMPro Growth Comparison"
+                    f"\n at {nice_zone_name.get(plot_zoning, plot_zoning)}",
                     bins=bins,
                     analytical_area=analytical_area,
                     postive_negative_colormaps=True,
@@ -1087,13 +1083,19 @@ def _tempro_comparison_matrix_growth(
 
 
 def _tempro_comparisons_iterator(
-    comparisons_folder: Path, zoning: str
+    comparisons_folder: Path, zoning: str, file_type: Optional[str] = None
 ) -> Iterator[Tuple[int, Path]]:
     """Iterate through PA TEMPro comparison spreadsheets."""
-    file_name = f"PA_TEMPro_comparisons-{{year}}-{zoning}.xlsx"
+    file_name = f"PA_TEMPro_comparisons-{{year}}-{zoning}"
+    if file_type is None:
+        file_type = ".*"
 
-    for path in comparisons_folder.glob(file_name.format(year="????")):
-        match = re.match(file_name.format(year=r"(\d{4})"), path.name, re.IGNORECASE)
+    for path in comparisons_folder.glob(file_name.format(year="????") + file_type):
+        match = re.match(
+            file_name.format(year=r"(\d{4})"),
+            file_ops.remove_suffixes(path).stem,
+            re.IGNORECASE,
+        )
         if match is None:
             LOG.warning("Skipping file %s because cannot find year in name", path.name)
             continue
@@ -1120,7 +1122,7 @@ def tempro_comparison_summary(comparisons_folder: Path, zoning: str, base_year: 
 
     with pd.ExcelWriter(output_path) as excel_file:
         growth_dfs = []
-        for year, path in _tempro_comparisons_iterator(comparisons_folder, zoning):
+        for year, path in _tempro_comparisons_iterator(comparisons_folder, zoning, ".xlsx"):
             LOG.info("Summarising: %s", path.name)
             comparison, growth = _tempro_comparison_matrix_growth(path, base_year, year)
             comparison.to_excel(excel_file, sheet_name=str(year), index=False)
@@ -1133,7 +1135,7 @@ def tempro_comparison_summary(comparisons_folder: Path, zoning: str, base_year: 
 
 
 def tempro_uc_summary(comparisons_folder: Path, zoning: str) -> None:
-    """Convert PA TEMPro comparison spreadsheets from purpose to user class
+    """Convert PA TEMPro comparison spreadsheets from purpose to user class.
 
     Parameters
     ----------
@@ -1149,7 +1151,7 @@ def tempro_uc_summary(comparisons_folder: Path, zoning: str) -> None:
     }
 
     LOG.info("Summarising TEMPro comparisons by user class")
-    for _, excel_path in _tempro_comparisons_iterator(comparisons_folder, zoning):
+    for _, excel_path in _tempro_comparisons_iterator(comparisons_folder, zoning, ".xlsx"):
         output_path = excel_path.with_name(excel_path.stem + "-by_userclass.xlsx")
 
         # Copy file and update new version
@@ -1226,7 +1228,6 @@ def main(params: PAPlotsParameters) -> None:
         params.base_year,
     )
     tempro_uc_summary(params.tempro_comparison_folder, params.tempro_comparison_summary_zoning)
-    raise SystemExit()
     ntem_pa_plots(
         params.base_matrix_folder,
         params.forecast_matrix_folder,
@@ -1255,6 +1256,10 @@ def _colormap_classify(
     """Calculate a NaturalBreaks colour map."""
 
     def make_label(lower: float, upper: float) -> str:
+        if lower == -np.inf:
+            return "< " + label_fmt.format(upper)
+        if upper == np.inf:
+            return "> " + label_fmt.format(lower)
         return label_fmt.format(lower) + " - " + label_fmt.format(upper)
 
     finite = data.dropna()
@@ -1276,9 +1281,18 @@ def _colormap_classify(
     )
     colours.loc[bin_categories.isna(), :] = np.nan
 
-    bins = [np.min(finite), *mc_bins.bins]
+    min_bin = np.min(finite)
+    if min_bin > mc_bins.bins[0]:
+        if mc_bins.bins[0] > 0:
+            min_bin = 0
+        else:
+            min_bin = -np.inf
+
+    bins = [min_bin, *mc_bins.bins]
     labels = [make_label(l, u) for l, u in zip(bins[:-1], bins[1:])]
-    legend = [patches.Patch(fc=c, label=l, ls="") for c, l in zip(cmap(range(n_bins)), labels)]
+    legend = [
+        patches.Patch(fc=c, label=l, ls="") for c, l in zip(cmap(range(mc_bins.k)), labels)
+    ]
 
     return CustomCmap(bin_categories, colours, legend)
 
