@@ -1098,9 +1098,8 @@ def _colormap_classify(
 
 ##### MAIN #####
 if __name__ == "__main__":
-    forecast_matrix_folder = Path(
-        r"I:\NorMITs Demand\noham\NTEM\iter1c\Matrices\24hr VDM PA Matrices"
-    )
+    iteration_folder = Path(r"I:\NorMITs Demand\noham\NTEM\iter1d")
+    forecast_matrix_folder = iteration_folder / r"Matrices\24hr VDM PA Matrices"
 
     pa_parameters = PAPlotsParameters(
         base_matrix_folder=Path(r"I:\NorMITs Demand\import\noham\post_me\tms_seg_pa"),
@@ -1122,9 +1121,7 @@ if __name__ == "__main__":
             ),
             "Name",
         ),
-        tempro_comparison_folder=Path(
-            r"I:\NorMITs Demand\noham\NTEM\iter1c\Matrices\PA\TEMPro Comparisons"
-        ),
+        tempro_comparison_folder=iteration_folder / r"Matrices\PA\TEMPro Comparisons",
     )
 
     main(pa_parameters)
