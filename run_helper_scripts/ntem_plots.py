@@ -8,22 +8,26 @@ from __future__ import annotations
 import collections
 import dataclasses
 import enum
+import itertools
 import math
 import re
+import shutil
 import sys
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Union
+from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Tuple, Union
 
 # Third party imports
 import geopandas as gpd
 import mapclassify
 import matplotlib.backends.backend_pdf as backend_pdf
 import numpy as np
+import openpyxl
 import pandas as pd
 from matplotlib import cm, colors, figure, lines, patches
 from matplotlib import pyplot as plt
 from matplotlib import ticker
+from openpyxl.worksheet.datavalidation import DataValidation, DataValidationList
 from scipy import stats
 from shapely import geometry
 
@@ -1082,7 +1086,23 @@ def _tempro_comparison_matrix_growth(
     return combined, growth
 
 
-def tempro_comparison_summary(comparisons_folder: Path, zoning: str, base_year: int):
+def _tempro_comparisons_iterator(
+    comparisons_folder: Path, zoning: str
+) -> Iterator[Tuple[int, Path]]:
+    """Iterate through PA TEMPro comparison spreadsheets."""
+    file_name = f"PA_TEMPro_comparisons-{{year}}-{zoning}.xlsx"
+
+    for path in comparisons_folder.glob(file_name.format(year="????")):
+        match = re.match(file_name.format(year=r"(\d{4})"), path.name, re.IGNORECASE)
+        if match is None:
+            LOG.warning("Skipping file %s because cannot find year in name", path.name)
+            continue
+
+        year = int(match.group(1))
+        yield year, path
+
+
+def tempro_comparison_summary(comparisons_folder: Path, zoning: str, base_year: int) -> None:
     """Produce matrix totals TEMPro comparisons summary by purpose.
 
     Parameters
@@ -1095,20 +1115,13 @@ def tempro_comparison_summary(comparisons_folder: Path, zoning: str, base_year: 
     base_year : int
         Base model year.
     """
-    file_name = f"PA_TEMPro_comparisons-{{year}}-{zoning}.xlsx"
     output_path = comparisons_folder / "PA_TEMPro_comparisons_summary.xlsx"
     LOG.info("Summarising TEMPro comparisons")
 
     with pd.ExcelWriter(output_path) as excel_file:
         growth_dfs = []
-        for path in comparisons_folder.glob(file_name.format(year="????")):
+        for year, path in _tempro_comparisons_iterator(comparisons_folder, zoning):
             LOG.info("Summarising: %s", path.name)
-            match = re.match(file_name.format(year=r"(\d{4})"), path.name, re.IGNORECASE)
-            if match is None:
-                LOG.warning("Skipping file %s because cannot find year in name", path.name)
-                continue
-            year = int(match.group(1))
-
             comparison, growth = _tempro_comparison_matrix_growth(path, base_year, year)
             comparison.to_excel(excel_file, sheet_name=str(year), index=False)
             growth_dfs.append(growth)
@@ -1117,6 +1130,85 @@ def tempro_comparison_summary(comparisons_folder: Path, zoning: str, base_year: 
         growth.to_excel(excel_file, sheet_name="Growth Summary", index=False)
 
     LOG.info("Written: %s", output_path)
+
+
+def tempro_uc_summary(comparisons_folder: Path, zoning: str) -> None:
+    """Convert PA TEMPro comparison spreadsheets from purpose to user class
+
+    Parameters
+    ----------
+    comparisons_folder : Path
+        Folder containing TEMPro comparison spreadsheets.
+    zoning : str
+        Name of the matrix zoning system for the TEMPro comparisons.
+    """
+    purpose_lookup = {
+        1: "commute",
+        **dict.fromkeys((2, 12), "business"),
+        **dict.fromkeys(itertools.chain(range(3, 9), range(13, 17), (18,)), "other"),
+    }
+
+    LOG.info("Summarising TEMPro comparisons by user class")
+    for _, excel_path in _tempro_comparisons_iterator(comparisons_folder, zoning):
+        output_path = excel_path.with_name(excel_path.stem + "-by_userclass.xlsx")
+
+        # Copy file and update new version
+        shutil.copy(excel_path, output_path)
+
+        with pd.ExcelWriter(output_path, mode="a", if_sheet_exists="replace") as excel_out:
+            wb: openpyxl.Workbook = excel_out.book
+
+            summary = wb["Summary"]
+            # Clear data validations before adding UC validation,
+            # otherwise new validation won't overwrite old
+            summary.data_validations = DataValidationList()
+            options = tuple(set(purpose_lookup.values()))
+            valid_uc = DataValidation(type="list", formula1=f'"{",".join(options)}"')
+            summary.add_data_validation(valid_uc)
+
+            purp_cell = "C2"
+            valid_uc.add(purp_cell)
+            summary["C2"] = options[0]
+
+            sheet_name = "TEMPro Data"
+            tempro = pd.read_excel(excel_out, sheet_name=sheet_name)
+            tempro.loc[:, "p"] = tempro["p"].replace(purpose_lookup)
+            tempro.rename(columns={"p": "uc"}, inplace=True)
+
+            tempro.loc[:, "id"] = (
+                tempro["trip_end_type"]
+                + "_"
+                + tempro["uc"]
+                + "_"
+                + tempro[f"{zoning}_zone_id"].astype(str)
+            )
+
+            tempro = tempro.groupby(
+                ["matrix_type", "trip_end_type", "uc", "m", f"{zoning}_zone_id", "id"],
+                as_index=False,
+            ).sum()
+            tempro.to_excel(excel_out, sheet_name=sheet_name, index=False)
+
+            for nm in ("Base", "Forecast"):
+                sheet_name = f"{nm} Matrices Data"
+                df = pd.read_excel(excel_out, sheet_name=sheet_name)
+                df.loc[:, "purpose"] = df["purpose"].replace(purpose_lookup)
+                df.rename(columns={"purpose": "uc"}, inplace=True)
+
+                df.loc[:, "id"] = (
+                    df["uc"]
+                    + "_"
+                    + df["from_zone"].astype(str)
+                    + "_"
+                    + df["to_zone"].astype(str)
+                )
+
+                df = df.groupby(
+                    ["matrix_type", "uc", "from_zone", "to_zone", "id"], as_index=False
+                ).sum()
+                df.to_excel(excel_out, sheet_name=sheet_name, index=False)
+
+        LOG.info("Written: %s", output_path)
 
 
 def main(params: PAPlotsParameters) -> None:
@@ -1133,6 +1225,8 @@ def main(params: PAPlotsParameters) -> None:
         params.tempro_comparison_summary_zoning,
         params.base_year,
     )
+    tempro_uc_summary(params.tempro_comparison_folder, params.tempro_comparison_summary_zoning)
+    raise SystemExit()
     ntem_pa_plots(
         params.base_matrix_folder,
         params.forecast_matrix_folder,
