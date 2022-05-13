@@ -20,6 +20,7 @@ from typing import Any
 from typing import List
 from typing import Dict
 from typing import Tuple
+from typing import Callable
 
 # Third Party
 import numpy as np
@@ -37,12 +38,13 @@ LOG = nd_log.get_logger(f"{nd_log.get_package_logger_name()}.norms_tp_extractor"
 def infill_missing_values(
     infill_dict: Dict[int, np.ndarray],
     all_zones: List[Any],
-    relevant_zones: List[Any] = None,
+    relevant_zones_fn: Callable = None,
+    relevant_zones_fn_kwargs: Dict[str, Any] = None,
 ) -> Dict[int, np.ndarray]:
     # init
     return_dict = dict.fromkeys(infill_dict.keys())
-    if relevant_zones is None:
-        relevant_zones = all_zones
+    if relevant_zones_fn_kwargs is None:
+        relevant_zones_fn_kwargs = dict()
 
     # Infill any missing values
     factor_sum = functools.reduce(operator.add, infill_dict.values())
@@ -52,14 +54,14 @@ def infill_missing_values(
         new_mat = mat.copy()
         new_mat[missing_idx] = 1 / len(infill_dict)
 
-        # Filter to internal area only
+        # Filter to relevant area only
         df = pd.DataFrame(
             data=new_mat,
             index=all_zones,
             columns=all_zones,
         )
-        internal_df = pd_utils.get_internal_values(df, relevant_zones)
-        return_dict[tp] = internal_df.values
+        relevant_df = relevant_zones_fn(df, **relevant_zones_fn_kwargs)
+        return_dict[tp] = relevant_df.values
 
     return return_dict
 
@@ -82,7 +84,8 @@ def extract_fh_th_factors(
     return_dict = infill_missing_values(
         infill_dict=return_dict,
         all_zones=zoning_system.unique_zones,
-        relevant_zones=zoning_system.internal_zones,
+        relevant_zones_fn=pd_utils.get_internal_values,
+        relevant_zones_fn_kwargs={"zones": zoning_system.internal_zones},
     )
 
     return return_dict
@@ -142,9 +145,10 @@ def convert_tour_proportions(
             # Check for where things don't sum to 1
             lower_bound = 0.9
             upper_bound = 1.1
+            n_zones = len(zoning_system.internal_zones)
 
             sum_mat = functools.reduce(operator.add, fh_factors[purpose][ca].values())
-            sum_mat = sum_mat[:1156, :1156]
+            sum_mat = sum_mat[:n_zones, :n_zones]
             idx = ((upper_bound > 1.1) | (sum_mat < lower_bound)).nonzero()
             n_bad_values = idx[0].shape[0]
             if n_bad_values > 0:
@@ -159,8 +163,8 @@ def convert_tour_proportions(
                 )
 
             sum_mat = functools.reduce(operator.add, th_factors[purpose][ca].values())
-            sum_mat = sum_mat[:1156, :1156]
-            idx = ((upper_bound > 1.1) | (sum_mat < lower_bound)).nonzero()
+            sum_mat = sum_mat[:n_zones, :n_zones]
+            idx = ((sum_mat > upper_bound) | (sum_mat < lower_bound)).nonzero()
             n_bad_values = idx[0].shape[0]
             if n_bad_values > 0:
                 LOG.warning(
@@ -198,16 +202,18 @@ def convert_internal_tp_split_factors(tour_prop_pickle, zoning_system):
             splitting_factors[purpose][ca] = infill_missing_values(
                 infill_dict=ca_dict,
                 all_zones=zoning_system.unique_zones,
-                relevant_zones=zoning_system.internal_zones,
+                relevant_zones_fn=pd_utils.get_internal_values,
+                relevant_zones_fn_kwargs={"zones": zoning_system.internal_zones},
             )
 
             # Check for where things don't sum to 1
             lower_bound = 0.9
             upper_bound = 1.1
+            n_zones = len(zoning_system.internal_zones)
 
             sum_mat = functools.reduce(operator.add, splitting_factors[purpose][ca].values())
-            sum_mat = sum_mat[:1156, :1156]
-            idx = ((upper_bound > 1.1) | (sum_mat < lower_bound)).nonzero()
+            sum_mat = sum_mat[:n_zones, :n_zones]
+            idx = ((sum_mat > upper_bound) | (sum_mat < lower_bound)).nonzero()
             n_bad_values = idx[0].shape[0]
             if n_bad_values > 0:
                 LOG.warning(
@@ -246,16 +252,19 @@ def convert_external_tp_split_factors(tour_prop_pickle, zoning_system):
             splitting_factors[purpose][ca] = infill_missing_values(
                 infill_dict=ca_dict,
                 all_zones=zoning_system.unique_zones,
-                relevant_zones=zoning_system.internal_zones,
+                relevant_zones_fn=pd_utils.get_external_values,
+                relevant_zones_fn_kwargs={"zones": zoning_system.external_zones},
             )
 
             # Check for where things don't sum to 1
             lower_bound = 0.9
             upper_bound = 1.1
+            n_zones = len(zoning_system.internal_zones)
 
             sum_mat = functools.reduce(operator.add, splitting_factors[purpose][ca].values())
-            sum_mat = sum_mat[:1156, :1156]
-            idx = ((upper_bound > 1.1) | (sum_mat < lower_bound)).nonzero()
+            sum_mat[:n_zones, :n_zones] = np.inf
+            idx = ((sum_mat > upper_bound) | (sum_mat < lower_bound))
+            idx = (idx & (sum_mat != np.inf)).nonzero()
             n_bad_values = idx[0].shape[0]
             if n_bad_values > 0:
                 LOG.warning(

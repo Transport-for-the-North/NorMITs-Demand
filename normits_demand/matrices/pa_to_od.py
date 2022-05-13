@@ -20,9 +20,8 @@ import pandas as pd
 from typing import Any
 from typing import List
 from typing import Dict
-from itertools import product
+from typing import Tuple
 
-from tqdm import tqdm
 
 # self imports
 import normits_demand as nd
@@ -814,24 +813,76 @@ def maybe_get_aggregated_tour_proportions(orig: int,
     return od_tour_props
 
 
-def to_od_via_tour_props(n_od_vals,
-                         pa_24,
-                         fh_factor_dict,
-                         th_factor_dict,
-                         tp_needed,
-                         ):
-    # TODO: Write to_od_via_tour_props() docs
+def to_od_via_fh_th_factors(
+    pa_24: pd.DataFrame,
+    fh_factor_dict: Dict[int, np.ndarray],
+    th_factor_dict: Dict[int, np.ndarray],
+    tp_needed: List[int],
+) -> Tuple[Dict[int, pd.DataFrame], Dict[int, pd.DataFrame]]:
+    """Convert 24hr PA matrix into tp split OD-to and OD-from
+
+    OD_from is simply the 24hr PA matrix split into time periods (which is
+    the `fh_factors_dict`). OD_to is the transpose of PA 24hr which has been
+    split into the `th_factor_dict` time periods.
+
+    NOTE that the produced od_to matrices will be calculated with the
+    following calculation:
+    `(pa_24 * th_factor_dict[tp]).T`
+
+    Parameters
+    ----------
+    pa_24:
+        A pandas DataFrame containing the 24hr Demand. The index and the
+        columns will be retained and copied into the produced od_from and
+        od_to matrices. This means they should likely be the model zoning.
+
+    fh_factor_dict:
+        A Dictionary of {tp: fh_factor} values. Where `tp` is an integer time
+        period that should be one of `tp_needed`, and `fh_factor` is a
+        numpy array of shape `pa_24.shape` factors to generate the time
+        period split od_from matrices.
+
+    th_factor_dict:
+        A Dictionary of {tp: th_factor} values. Where `tp` is an integer time
+        period that should be one of `tp_needed`, and `th_factor` is a
+        numpy array of shape `pa_24.shape` factors to generate the time
+        period split od_to matrices.
+        NOTE that after multiplication, the result will be transposed to
+        generate the true od_to matrices, i.e.
+        `(pa_24 * th_factor_dict[tp]).T`
+    
+    tp_needed:
+        The time periods to be expected in the output and the
+
+    Returns
+    -------
+    od_from_matrices:
+        A dictionary in the same format as fh_factor_dict, but the values
+        will be pandas DataFrames of each from home matrix at a time period.
+
+    od_to_matrices:
+        A dictionary in the same format as th_factor_dict, but the values
+        will be pandas DataFrames of each from home matrix at a time period.
+    """
+    # Make sure we have a square matrix
+    if len(pa_24.index) != len(pa_24.columns):
+        raise ValueError(
+            "Expected pa24 to be a square matrix where the index and columns "
+            "are the zone numbers. Instead, got a matrix of shape "
+            f"'{pa_24.shape}'"
+        )
+
     # Make sure the given factors are the correct shape
     mat_utils.check_fh_th_factors(
         factor_dict=fh_factor_dict,
         tp_needed=tp_needed,
-        n_row_col=n_od_vals,
+        n_row_col=len(pa_24.index),
     )
 
     mat_utils.check_fh_th_factors(
         factor_dict=th_factor_dict,
         tp_needed=tp_needed,
-        n_row_col=n_od_vals,
+        n_row_col=len(pa_24.index),
     )
 
     # Create the from home OD matrices
@@ -842,7 +893,7 @@ def to_od_via_tour_props(n_od_vals,
     # Create the to home OD matrices
     th_mats = dict.fromkeys(th_factor_dict.keys())
     for tp, factor_mat in th_factor_dict.items():
-        th_mats[tp] = pa_24 * factor_mat
+        th_mats[tp] = (pa_24 * factor_mat).T
 
     # Validate return matrix totals
     fh_total = np.sum([x.values.sum() for x in fh_mats.values()])
@@ -852,11 +903,10 @@ def to_od_via_tour_props(n_od_vals,
     # From home and to home should be the same total
     if not math_utils.is_almost_equal(fh_total, th_total):
         raise nd.NormitsDemandError(
-            "From-home and to-home OD matrix totals are not the same."
+            "From-home and to-home OD matrix totals are not the same. "
             "Are the given splitting factors correct?\n"
-            "from-home total: %.2f\n"
-            "to-home total: %.2f\n"
-            % (float(fh_total), float(th_total))
+            f"from-home total: {float(fh_total):.2f}\n"
+            f"to-home total: {float(th_total):.2f}\n"
         )
 
     # OD total should be double the input PA
@@ -864,10 +914,11 @@ def to_od_via_tour_props(n_od_vals,
         raise nd.NormitsDemandError(
             "OD Matrices total is not 2 * the input PA input."
             "Are the given splitting factors correct?"
-            "2 * PA total total: %.2f\n"
-            "OD total: %.2f\n"
-            % (float(pa_24.values.sum() * 2), float(od_total))
+            f"2 * PA total total: {float(pa_24.values.sum() * 2):.2f}\n"
+            f"OD total: {float(od_total):.2f}\n"
         )
+
+    # BACKLOG: Add a tidality check into the PA to OD process
 
     return fh_mats, th_mats
 
@@ -904,10 +955,6 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
     pa_24.columns = pa_24.columns.astype(int)
     pa_24.index = pa_24.index.astype(int)
 
-    # Get a list of the zone names for iterating - make sure integers
-    orig_vals = [int(x) for x in pa_24.index.values]
-    dest_vals = [int(x) for x in list(pa_24)]
-
     # ## Load the from home and to home factors - always generated on base year ## #
     # Load the model zone tour proportions
     fh_factor_fname = du.get_dist_name(
@@ -925,8 +972,7 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
     th_factor_fname = fh_factor_fname.replace('fh_factors', 'th_factors')
     th_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, th_factor_fname))
 
-    fh_mats, th_mats = to_od_via_tour_props(
-        n_od_vals=len(orig_vals),
+    fh_mats, th_mats = to_od_via_fh_th_factors(
         pa_24=pa_24,
         fh_factor_dict=fh_factor_dict,
         th_factor_dict=th_factor_dict,
@@ -962,7 +1008,7 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
             compressed=True
         )
         # Need to transpose to_home before writing
-        file_ops.write_df(mat.T, os.path.join(od_export, dist_name))
+        file_ops.write_df(mat, os.path.join(od_export, dist_name))
 
 
 def _tms_od_from_fh_th_factors(pa_import: str,
@@ -1106,10 +1152,6 @@ def _vdm_od_from_fh_th_factors_internal(pa_import,
     pa_24.columns = pa_24.columns.astype(int)
     pa_24.index = pa_24.index.astype(int)
 
-    # Get a list of the zone names for iterating - make sure integers
-    orig_vals = [int(x) for x in pa_24.index.values]
-    dest_vals = [int(x) for x in list(pa_24)]
-
     # ## Load the from home and to home factors - always generated on base year ## #
     # Load the model zone tour proportions
     fh_factor_fname = du.get_vdm_dist_name(
@@ -1126,8 +1168,7 @@ def _vdm_od_from_fh_th_factors_internal(pa_import,
     th_factor_fname = fh_factor_fname.replace('fh_factors', 'th_factors')
     th_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, th_factor_fname))
 
-    fh_mats, th_mats = to_od_via_tour_props(
-        n_od_vals=len(orig_vals),
+    fh_mats, th_mats = to_od_via_fh_th_factors(
         pa_24=pa_24,
         fh_factor_dict=fh_factor_dict,
         th_factor_dict=th_factor_dict,
@@ -1163,7 +1204,7 @@ def _vdm_od_from_fh_th_factors_internal(pa_import,
             csv=True
         )
         # Need to transpose to_home before writing
-        mat.T.to_csv(os.path.join(od_export, dist_name))
+        mat.to_csv(os.path.join(od_export, dist_name))
 
 
 def _vdm_od_from_fh_th_factors(pa_import: str,

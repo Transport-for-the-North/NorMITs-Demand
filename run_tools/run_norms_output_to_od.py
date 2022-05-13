@@ -30,6 +30,8 @@ MATRIX_OUTPUT_DIRNAME = "converted_matrices"
 MATRIX_YEAR = 2018
 
 MATRIX_RENAME_PATH = r"I:\NorMITs Demand\import\norms\post_me_model_data\norms_to_demand_names.csv"
+MATRIX_COMPILE_PATH = r"I:\NorMITs Demand\import\norms\post_me_model_data\od_compile_params.csv"
+INTERNAL_MATRIX_COMPILE_PATH = r"I:\NorMITs Demand\import\norms\post_me_model_data\od_from_to_internal_compile_params.csv"
 
 
 def main():
@@ -51,9 +53,12 @@ def main():
         output_dir=import_matrix_dir / MATRIX_OUTPUT_DIRNAME
     )
 
-    converter.convert_hb_internal()
-    converter.convert_nhb_internal()
-    converter.convert_external()
+    # converter.convert_hb_internal()
+    # converter.convert_nhb_internal()
+    # converter.convert_external()
+    # converter.compile_matrices(MATRIX_COMPILE_PATH)
+    converter.compile_internal_matrices(INTERNAL_MATRIX_COMPILE_PATH)
+
 
     print("DONE")
 

@@ -22,16 +22,20 @@ from typing import List
 from typing import Dict
 
 # Third Party
-
-# Local Imports
+import tqdm
 import numpy as np
 import pandas as pd
+
+# Local Imports
 
 from normits_demand import core as nd_core
 from normits_demand import logging as nd_log
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
+from normits_demand.matrices import pa_to_od as pa2od
+from normits_demand.matrices import utils as matrix_utils
+from normits_demand.matrices import matrix_processing
 from normits_demand.tools.norms import tp_proportion_extractor
 from normits_demand.tools.norms import tp_proportion_converter
 
@@ -142,6 +146,11 @@ class NoRMSPostMeTpProportions:
             )
         )
 
+        # Should check that all have matching time periods
+        ca_dict = list(self.internal_th_factors.values())[0]
+        tp_dict = list(ca_dict.values())[0]
+        self.time_periods = list(tp_dict.keys())
+
     def _validate_ca(self, ca: Any, valid_vals: List[Any]) -> None:
         if ca not in valid_vals:
             raise ValueError(
@@ -185,40 +194,40 @@ class NoRMSPostMeTpProportions:
         self._validate_internal_fh_th_ca(ca)
         return self.internal_th_factors[self._commute_key][ca]
 
-    def get_internal_other_fh_factors(self, ca: int) -> Dict[int, np.ndarray]:
+    def get_internal_other_fh_factors(self, ca: int,) -> Dict[int, np.ndarray]:
         """Return a dictionary of from home factors"""
         self._validate_internal_fh_th_ca(ca)
         return self.internal_fh_factors[self._other_key][ca]
 
-    def get_internal_other_th_factors(self, ca: int) -> Dict[int, np.ndarray]:
+    def get_internal_other_th_factors(self, ca: int,) -> Dict[int, np.ndarray]:
         """Return a dictionary of to home factors"""
         self._validate_internal_fh_th_ca(ca)
         return self.internal_th_factors[self._other_key][ca]
 
-    def get_internal_fh_factors(self, purpose: str, ca: int) -> Dict[int, np.ndarray]:
+    def get_internal_fh_factors(self, purpose: str, ca: int,) -> Dict[int, np.ndarray]:
         """Return a dictionary of from home factors"""
         self._validate_purpose(purpose)
         self._validate_internal_fh_th_ca(ca)
         return self.internal_fh_factors[purpose][ca]
 
-    def get_internal_th_factors(self, purpose: str, ca: int) -> Dict[int, np.ndarray]:
+    def get_internal_th_factors(self, purpose: str, ca: int,) -> Dict[int, np.ndarray]:
         """Return a dictionary of to home factors"""
         self._validate_purpose(purpose)
         self._validate_internal_fh_th_ca(ca)
         return self.internal_th_factors[purpose][ca]
 
     def get_internal_nhb_tp_split_factors(
-        self, purpose: str, ca: int
+        self, purpose: str, ca: int,
     ) -> Dict[int, np.ndarray]:
         """Return a dictionary of tp split factors"""
         self._validate_purpose(purpose)
         self._validate_internal_tp_split_ca(ca)
         return self.internal_tp_split_factors[purpose][ca]
 
-    def get_external_tp_split_factors(self, purpose: str, ca: int) -> Dict[int, np.ndarray]:
+    def get_external_tp_split_factors(self, purpose: str, ca: str,) -> Dict[int, np.ndarray]:
         """Return a dictionary of tp split factors"""
         self._validate_purpose(purpose)
-        self._validate_internal_tp_split_ca(ca)
+        self._validate_external_tp_split_ca(ca)
         return self.external_tp_split_factors[purpose][ca]
 
 
@@ -244,6 +253,8 @@ class NormsOutputToOD:
     # Output folder names
     _renamed_dirname = "renamed"
     _od_dirname = "OD Matrices"
+    _compiled_od_dirname = "Compiled OD Matrices"
+    _internal_compiled_od_dirname = "Internal Compiled OD Matrices"
 
     def __init__(
         self,
@@ -258,21 +269,35 @@ class NormsOutputToOD:
         self.matrix_year = matrix_year
         self.time_period_proportions = time_period_proportions
         self.output_dir = output_dir
-        
+
         # Create the output paths
         file_ops.create_folder(self.renamed_path)
         file_ops.create_folder(self.od_path)
+        file_ops.create_folder(self.compiled_od_path)
+        file_ops.create_folder(self.internal_compiled_od_path)
 
         # Rename the given matrices if needed
         self._rename_matrices(matrix_renaming)
 
     @property
     def renamed_path(self):
+        """Path to the folder containing renamed matrices"""
         return self.output_dir / self._renamed_dirname
 
     @property
     def od_path(self):
+        """Path to the folder containing initial OD matrices"""
         return self.output_dir / self._od_dirname
+
+    @property
+    def compiled_od_path(self):
+        """Path to the folder containing compiled OD matrices"""
+        return self.output_dir / self._compiled_od_dirname
+
+    @property
+    def internal_compiled_od_path(self):
+        """Path to the folder containing compiled internal OD matrices"""
+        return self.output_dir / self._internal_compiled_od_dirname
 
     def _rename_matrices(self, matrix_renaming: os.PathLike = None):
         """Rename the given matrices"""
@@ -332,6 +357,7 @@ class NormsOutputToOD:
         matrix_format: str = None,
         purpose: str = None,
         ca: str = None,
+        tp: str = None,
         suffix: str = None,
     ) -> str:
         """Build a filename using the default format"""
@@ -346,6 +372,7 @@ class NormsOutputToOD:
             year=str(self.matrix_year),
             mode=self._mode.get_mode_num(),
             car_availability=ca,
+            tp=tp,
             suffix=suffix,
             csv=True,
         )
@@ -360,61 +387,207 @@ class NormsOutputToOD:
         return self._get_filename(*args, **dict(kwargs, suffix=self._external_suffix))
 
     def _get_hb_internal_filenames(self) -> List[str]:
-        """Build a list of filenames needed for the home-based pa files"""
-        filenames = list()
-        for purpose, ca in itertools.product(self._hb_purpose_vals, self._ca_vals):
-            filenames.append(
-                self._get_internal_filename(
-                    trip_origin='hb',
-                    matrix_format='pa',
-                    purpose=purpose,
-                    ca=ca,
-                )
-            )
-        return filenames
+        """Build a list of filenames needed for the int home-based pa files"""
+        return list(self._get_hb_internal_filenames_with_segments().keys())
 
-    def _get_nhb_internal_filenames(self) -> List[str]:
-        """Build a list of filenames needed for the home-based pa files"""
-        filenames = list()
-        for purpose, ca in itertools.product(self._nhb_purpose_vals, self._ca_vals):
-            filenames.append(
-                self._get_internal_filename(
-                    trip_origin='nhb',
-                    matrix_format='od',
-                    purpose=purpose,
-                    ca=ca,
-                )
-            )
-        return filenames
+    def _get_nhb_internal_filenames(self) -> list[str]:
+        """Build a list of filenames needed for the 24hr int non-home-based files"""
+        return list(self._get_nhb_internal_filenames_with_segments().keys())
 
-    def _get_external_filenames(self) -> List[str]:
-        """Build a list of filenames needed for the home-based pa files"""
-        filenames = list()
-        for purpose, ca in itertools.product(self._purpose_vals, self._ca_vals):
-            if ca == 1:
-                matrix_formats = ['od']
+    def _get_external_filenames(self) -> list[str]:
+        """Build a list of filenames needed for the 24hr external files"""
+        return list(self._get_external_filenames_with_segments().keys())
+
+    def _get_hb_internal_filenames_with_segments(self) -> Dict[str, Dict[str, Any]]:
+        """Build a dictionary of filenames with segment_params as keys"""
+        filenames_to_segments = dict()
+        for segment_params in self._get_hb_internal_segments():
+            fname = self._get_internal_filename(
+                trip_origin='hb',
+                matrix_format='pa',
+                purpose=segment_params['p'],
+                ca=segment_params['ca'],
+            )
+            filenames_to_segments[fname] = segment_params
+
+        return filenames_to_segments
+
+    def _get_nhb_internal_filenames_with_segments(self) -> Dict[str, Dict[str, Any]]:
+        """Build a dictionary of filenames with segment_params as keys"""
+        filenames_to_segments = dict()
+        for segment_params in self._get_nhb_internal_segments():
+            fname = self._get_internal_filename(
+                trip_origin='nhb',
+                matrix_format='od',
+                purpose=segment_params['p'],
+                ca=segment_params['ca'],
+            )
+            filenames_to_segments[fname] = segment_params
+
+        return filenames_to_segments
+
+    def _get_external_filenames_with_segments(self) -> Dict[str, Dict[str, Any]]:
+        """Build a dictionary of filenames with segment_params as keys"""
+        filenames_to_segments = dict()
+        for segment_params in self._get_external_segments():
+            fname = self._get_external_filename(
+                matrix_format=segment_params['matrix_format'],
+                purpose=segment_params['p'],
+                ca=segment_params['ca'],
+            )
+            filenames_to_segments[fname] = segment_params
+
+        return filenames_to_segments
+
+    def _get_hb_internal_segments(self) -> List[Dict[str, Any]]:
+        return [
+            {'p': p, 'ca': ca}
+            for p, ca in itertools.product(self._hb_purpose_vals, self._ca_vals)
+        ]
+
+    def _get_nhb_internal_segments(self) -> List[Dict[str, Any]]:
+        return [
+            {'p': p, 'ca': ca}
+            for p, ca in itertools.product(self._nhb_purpose_vals, self._ca_vals)
+        ]
+
+    def _get_external_segments(self) -> List[Dict[str, Any]]:
+        segment_params = [
+            {'p': p, 'ca': ca}
+            for p, ca in itertools.product(self._purpose_vals, self._ca_vals)
+        ]
+
+        # Add in matrix formats as it changes depending on CA
+        final_segment_params = list()
+        for params in segment_params:
+            # Determine the matrix format
+            if params['ca'] == 1:
+                new_params = params.copy()
+                new_params['matrix_format'] = 'od'
+                final_segment_params.append(new_params)
             else:
-                matrix_formats = ['od_from', 'od_to']
-            for mf in matrix_formats:
-                filenames.append(
-                    self._get_external_filename(
-                        matrix_format=mf,
-                        purpose=purpose,
-                        ca=ca,
-                    )
-                )
-        return filenames
+                for matrix_format in ['od_from', 'od_to']:
+                    new_params = params.copy()
+                    new_params['matrix_format'] = matrix_format
+                    final_segment_params.append(new_params)
+
+        return final_segment_params
 
     def convert_hb_internal(self):
         """Convert the home-based internal matrices to tp split OD"""
-        filenames = self._get_hb_internal_filenames()
-        pass
+
+        # Convert into OD-from and OD-to matrices and write out
+        desc = "Converting segments to OD matrices"
+        filename_dict = self._get_hb_internal_filenames_with_segments()
+        for fname, segment_params in tqdm.tqdm(filename_dict.items(), desc=desc):
+            # Grab the factors
+            kwargs = {"purpose": segment_params['p'], "ca": segment_params['ca']}
+            fh_factors = self.time_period_proportions.get_internal_fh_factors(**kwargs)
+            th_factors = self.time_period_proportions.get_internal_th_factors(**kwargs)
+
+            # Convert into od-from and od-to
+            od_from, od_to = pa2od.to_od_via_fh_th_factors(
+                pa_24=file_ops.read_df(self.renamed_path / fname, index_col=0),
+                fh_factor_dict=fh_factors,
+                th_factor_dict=th_factors,
+                tp_needed=self.time_period_proportions.time_periods,
+            )
+
+            # Write out to disk
+            for mat_format, mat_dict in [('od_from', od_from), ('od_to', od_to)]:
+                for tp, mat in mat_dict.items():
+                    mat = mat.round(8)
+                    fname = self._get_internal_filename(
+                        trip_origin='hb',
+                        matrix_format=mat_format,
+                        tp=tp,
+                        **kwargs,  # purpose and ca
+                    )
+                    file_ops.write_df(mat, self.od_path / fname)
 
     def convert_nhb_internal(self):
-        pass
+        """Split the NHB internal OD matrices by time period"""
+
+        # Convert into tp split and write out
+        desc = "Splitting nhb internal by time periods"
+        filename_dict = self._get_nhb_internal_filenames_with_segments()
+        for fname, segment_params in tqdm.tqdm(filename_dict.items(), desc=desc):
+            # Grab the factors
+            kwargs = {"purpose": segment_params['p'], "ca": segment_params['ca']}
+            split_factors = self.time_period_proportions.get_internal_nhb_tp_split_factors(**kwargs)
+
+            # Convert into tp split matrices
+            tp_mats = matrix_utils.split_matrix_by_time_periods(
+                mat_24=file_ops.read_df(self.renamed_path / fname, index_col=0),
+                tp_factor_dict=split_factors,
+            )
+
+            # Write out to disk
+            for tp, mat in tp_mats.items():
+                mat = mat.round(8)
+                fname = self._get_internal_filename(
+                    trip_origin='nhb',
+                    matrix_format='od',
+                    tp=tp,
+                    **kwargs,  # purpose and ca
+                )
+                file_ops.write_df(mat, self.od_path / fname)
 
     def convert_external(self):
-        pass
+        """Split the external OD matrices by time period"""
+
+        # Convert into tp split matrices and write out
+        desc = "Splitting external by time periods"
+        filename_dict = self._get_external_filenames_with_segments()
+        for fname, segment_params in tqdm.tqdm(filename_dict.items(), desc=desc):
+            # Grab the factors
+            matrix_format = segment_params['matrix_format']
+            if matrix_format == 'od':
+                ca_key = 'nca'
+            elif matrix_format == 'od_from':
+                ca_key = 'ca_fh'
+            elif matrix_format == 'od_to':
+                ca_key = 'ca_th'
+            else:
+                raise ValueError(f"Can't deal with matrix format '{matrix_format}'")
+
+            split_factors = self.time_period_proportions.get_external_tp_split_factors(
+                purpose=segment_params['p'],
+                ca=ca_key,
+            )
+
+            # Convert into tp split matrices
+            tp_mats = matrix_utils.split_matrix_by_time_periods(
+                mat_24=file_ops.read_df(self.renamed_path / fname, index_col=0),
+                tp_factor_dict=split_factors,
+            )
+
+            # Write out to disk
+            for tp, mat in tp_mats.items():
+                mat = mat.round(8)
+                fname = self._get_external_filename(
+                    matrix_format=segment_params['matrix_format'],
+                    purpose=segment_params['p'],
+                    ca=segment_params['ca'],
+                    tp=tp,
+                )
+                file_ops.write_df(mat, self.od_path / fname)
+
+    def compile_matrices(self, compile_params_path: os.PathLike) -> None:
+        """Compile the matrices into a more aggregate format"""
+        matrix_processing.compile_matrices(
+            mat_import=self.od_path,
+            mat_export=self.compiled_od_path,
+            compile_params_path=compile_params_path,
+        )
+
+    def compile_internal_matrices(self, compile_params_path: os.PathLike) -> None:
+        """Compile the matrices into a more aggregate format"""
+        matrix_processing.compile_matrices(
+            mat_import=self.od_path,
+            mat_export=self.internal_compiled_od_path,
+            compile_params_path=compile_params_path,
+        )
 
 
 def get_norms_post_me_tp_proportions(
