@@ -244,6 +244,39 @@ def nan_report(mat: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(idx_cols)
 
 
+def nan_report_with_input(mat: np.ndarray, input_dict: Dict[str, np.ndarray]) -> pd.DataFrame:
+    """Create a report of where np.nan values are in mat
+
+    Parameters
+    ----------
+    mat:
+        The numpy array to generate the report for
+
+    input_dict:
+        A dictionary of the input values that generated `mat`. The keys are the
+        names to define each input, and the values the input value.
+
+    Returns
+    -------
+    report:
+        A pandas DataFrame reporting where the np.nan values are.
+        Will have a column named "axis_{i}" for each axis i in mat.
+        Will also have additional columns named "output" and after each input
+        in `input_dict`.
+    """
+    # Create the columns
+    mat_idxs = np.isnan(mat).nonzero()
+    idx_cols = {f"axis_{i}": x for i, x in enumerate(mat_idxs)}
+    output_col = {"output": mat[mat_idxs]}
+    in_cols = {k: v[mat_idxs] for k, v in input_dict.items()}
+
+    # Combine and convert to DataFrame
+    final_dict = dict()  # type: ignore
+    for d in [idx_cols, output_col, in_cols]:
+        final_dict.update(d)
+    return pd.DataFrame(final_dict)
+
+
 def overflow_msg(
     x1: np.ndarray,
     x2: np.ndarray,

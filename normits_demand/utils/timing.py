@@ -53,8 +53,8 @@ def get_datetime(time_format: str = "%d-%m-%Y  %H:%M:%S.%f",
                      "how to format it. There must be a missing if statement!")
 
 
-def time_taken(start_time: int,
-               end_time: int,
+def time_taken(start_time: float,
+               end_time: float,
                ) -> str:
     """
     Formats the time taken into hours, minutes and seconds

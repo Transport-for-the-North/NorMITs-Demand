@@ -222,6 +222,10 @@ class ZoningSystem:
         """Overrides the default implementation"""
         return not self.__eq__(other)
 
+    def __len__(self) -> int:
+        """Get the length of the zoning system"""
+        return len(self.unique_zones)
+
     def _get_weighting_suffix(self, weighting: str) -> str:
         """
         Takes a weighting name and converts it into a file suffix

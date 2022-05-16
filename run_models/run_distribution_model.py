@@ -30,8 +30,8 @@ from normits_demand.pathing.distribution_model import DistributionModelArgumentB
 
 # ## CONSTANTS ## #
 # Trip end import args
-NOTEM_ITERATION_NAME = '9.7'
-TOUR_PROPS_VERSION = 'v%s' % NOTEM_ITERATION_NAME
+NOTEM_ITERATION_NAME = '9.10'
+TOUR_PROPS_VERSION = f"v{NOTEM_ITERATION_NAME}"
 
 NOTEM_EXPORT_HOME = r"I:\NorMITs Demand\NoTEM"
 TRAM_EXPORT_HOME = r"I:\NorMITs Demand\Tram"
@@ -39,38 +39,39 @@ TRAM_EXPORT_HOME = r"I:\NorMITs Demand\Tram"
 # Distribution running args
 BASE_YEAR = 2018
 SCENARIO = nd.Scenario.SC01_JAM
-DM_ITERATION_NAME = '9.7.1'
+DM_ITERATION_NAME = '9.10.1'
 DM_IMPORT_HOME = r"I:\NorMITs Demand\import"
 DM_EXPORT_HOME = r"E:\NorMITs Demand\Distribution Model"
 
 # General constants
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
 REDUCE_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
-HB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_wday'
-NHB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced_wday'
+HB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output'
+NHB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
 
 # TODO(BT): KLUDGE. INPUTS SHOULDN'T NEED THIS!!
 TARGET_TLD_MULTIPLIER = constants.MILES_TO_KM
 
 
 def main():
-    # mode = nd.Mode.CAR
+    mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
     # mode = nd.Mode.TRAIN
-    mode = nd.Mode.TRAM
+    # mode = nd.Mode.TRAM
 
-    # Running params
+    # Running options
     use_tram = True
     memory_optimised_multi_area_grav = True
 
     calibrate_params = True
 
+    # Choose what to run
     run_hb = True
     run_nhb = False
 
     run_all = False
     run_upper_model = True
-    run_lower_model = False
+    run_lower_model = True
     run_pa_matrix_reports = False
     run_pa_to_od = False
     run_od_matrix_reports = False
@@ -88,12 +89,12 @@ def main():
         # Define segmentations for trip ends and running
         if use_tram:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m7_tp')
         else:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_car')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_car')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_car')
 
         # Define segments
         hb_seg_name = 'p_m'
@@ -171,12 +172,12 @@ def main():
         # Define segmentations for trip ends and running
         if use_tram:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m7_tp')
         else:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_bus')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_bus')
 
         # Define segments
         hb_seg_name = 'p_m'
@@ -250,12 +251,12 @@ def main():
         # Define segmentations for trip ends and running
         if use_tram:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m7_ca')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_ca_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m7_ca_tp')
         else:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m_ca')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_ca_tp')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_ca_rail')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday_rail')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_ca_tp_rail')
 
         # Define segments
         hb_seg_name = 'p_m_ca'
@@ -329,12 +330,12 @@ def main():
         # Define segmentations for trip ends and running
         if use_tram:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m7_tp')
         else:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_tram')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_tram')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_tram')
 
         # Define segments
         hb_seg_name = 'p_m'
@@ -396,9 +397,10 @@ def main():
             lower_model_kwargs = [x[1].copy() for x in choice if x[0] == lower_model_method][0]
         else:
             lower_model_kwargs = None
+
     else:
         raise ValueError(
-            "Don't know what mode %s is!" % mode.value
+            f"Don't know what mode {mode.value} is!"
         )
 
     # ## DEAL WITH PROCESS COUNT NEEDS ## #
@@ -521,7 +523,7 @@ def main():
         )
         trip_end_kwargs = {
             'reduce_segmentation': None,
-            'subset_segmentation': nd.get_segmentation_level(subset_name),
+            # 'subset_segmentation': nd.get_segmentation_level(subset_name),
             'aggregation_segmentation': hb_agg_seg,
             'modal_segmentation': hb_running_seg,
         }
@@ -563,7 +565,7 @@ def main():
         reduce_name = REDUCE_SEG_BASE_NAME.format(**kwargs)
         trip_end_kwargs = {
             'reduce_segmentation': nd.get_segmentation_level(reduce_name),
-            'subset_segmentation': nd.get_segmentation_level(subset_name),
+            # 'subset_segmentation': nd.get_segmentation_level(subset_name),
             'aggregation_segmentation': nhb_agg_seg,
             'modal_segmentation': nhb_running_seg,
         }

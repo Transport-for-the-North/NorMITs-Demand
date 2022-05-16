@@ -13,19 +13,22 @@ Master run file to run tram inclusion
 import sys
 
 sys.path.append("..")
+# pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
+from normits_demand import core as nd_core
 from normits_demand.models.tram_model import TramModel
 from normits_demand.pathing import TramImportPaths
+# pylint: enable=import-error,wrong-import-position
 
 # GLOBAL VARIABLES
 # years = [2018, 2033, 2040, 2050]
-years = [2018]
-scenario = nd.constants.SC01_JAM
-notem_iter = '9.7'
-tram_import_home = r"I:\NorMITs Demand\import\modal\tram\tram_pa"
-notem_export_home = r"E:\NorMITs Demand\NoTEM"
+YEARS = [2018]
+SCENARIO = nd_core.Scenario.SC01_JAM
+NOTEM_ITER = '9.9'
+NOTEM_EXPORT_HOME = r"F:\NorMITs Demand\NoTEM"
 
-export_home = r"E:\NorMITs Demand\Tram"
+TRAM_IMPORT_HOME = r"I:\NorMITs Demand\import\modal\tram\tram_pa"
+TRAM_EXPORT_HOME = r"F:\NorMITs Demand\Tram"
 
 
 def main():
@@ -55,16 +58,16 @@ def main():
 
     # Generate the imports
     notem_exports = nd.pathing.NoTEMExportPaths(
-        path_years=years,
-        scenario=scenario,
-        iteration_name=notem_iter,
-        export_home=notem_export_home,
+        path_years=YEARS,
+        scenario=SCENARIO,
+        iteration_name=NOTEM_ITER,
+        export_home=NOTEM_EXPORT_HOME,
     )
 
     import_builder = TramImportPaths(
-        years=years,
+        years=YEARS,
         notem_exports=notem_exports,
-        tram_import_home=tram_import_home,
+        tram_import_home=TRAM_IMPORT_HOME,
         hb_production_data_version=hb_production_data_version,
         hb_attraction_data_version=hb_attraction_data_version,
         nhb_production_data_version=nhb_production_data_version,
@@ -73,24 +76,24 @@ def main():
 
     # Instantiate and run the tram model
     n = TramModel(
-        years=years,
-        scenario=scenario,
-        iteration_name=notem_iter,
+        years=YEARS,
+        scenario=SCENARIO,
+        iteration_name=NOTEM_ITER,
         import_builder=import_builder,
-        export_home=export_home,
+        export_home=TRAM_EXPORT_HOME,
         tram_competitors=tram_competitors,
         hb_balance_zoning=hb_balance_zoning,
         nhb_balance_zoning=nhb_balance_zoning,
     )
 
     n.run_tram(
-        generate_all=False,
+        generate_all=True,
         generate_hb=False,
         generate_nhb=False,
         generate_hb_production=False,
-        generate_hb_attraction=True,
-        generate_nhb_production=True,
-        generate_nhb_attraction=True,
+        generate_hb_attraction=False,
+        generate_nhb_production=False,
+        generate_nhb_attraction=False,
         before_after_report=False,
     )
 
