@@ -56,8 +56,8 @@ def main():
     mode = nd.Mode.BUS
 
     # Running params
-    run_hb = True
-    run_nhb = False
+    run_hb = False
+    run_nhb = True
 
     run_all = False
     run_upper_model = False
@@ -78,9 +78,9 @@ def main():
 
         # Define segmentations for trip ends and running
         hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+        nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_walk')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_walk')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_wday_walk')
         hb_seg_name = 'p_m'
         nhb_seg_name = 'p_m_tp'
 
@@ -90,9 +90,9 @@ def main():
 
         # Define segmentations for trip ends and running
         hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+        nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_cycle')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_cycle')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_wday_cycle')
         hb_seg_name = 'p_m'
         nhb_seg_name = 'p_m_tp'
 
@@ -102,9 +102,9 @@ def main():
 
         # Define segmentations for trip ends and running
         hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+        nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_bus')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_wday_bus')
         hb_seg_name = 'p_m'
         nhb_seg_name = 'p_m_tp'
 
@@ -146,6 +146,7 @@ def main():
         'grav_max_iters': 100,
         'furness_max_iters': 3000,
         'furness_tol': 0.1,
+        "default_init_params": {"sigma": 1, "mu": 2},
         'calibrate_params': True,
         'estimate_init_params': False
     }
