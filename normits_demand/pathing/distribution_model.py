@@ -1234,8 +1234,8 @@ class DistributionModelExportPaths:
                  iteration_name: str,
                  running_mode: nd.Mode,
                  upper_model_method: nd.DistributionMethod,
-                 lower_model_method: nd.DistributionMethod,
                  export_home: nd.PathLike,
+                 lower_model_method: Optional[nd.DistributionMethod] = None,
                  ):
         """
         Builds the export paths for all the distribution model

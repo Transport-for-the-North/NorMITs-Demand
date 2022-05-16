@@ -16,9 +16,12 @@ from typing import Dict
 
 # Third Party
 import numpy as np
-
+import pandas as pd
 
 # Local imports
+import normits_demand as nd
+from normits_demand.utils import math_utils
+
 def check_fh_th_factors(factor_dict: Dict[int, np.array],
                         tp_needed: List[int],
                         n_row_col: int,
@@ -73,3 +76,47 @@ def check_fh_th_factors(factor_dict: Dict[int, np.array],
 
     # If here, all checks have passed
     return
+
+
+def split_matrix_by_time_periods(
+    mat_24: pd.DataFrame,
+    tp_factor_dict: Dict[int, np.ndarray],
+) -> Dict[int, pd.DataFrame]:
+    """Convert 24hr matrix into tp split matrix
+
+    Parameters
+    ----------
+    mat_24:
+        A pandas DataFrame containing the 24hr Demand. The index and the
+        columns will be retained and copied into the produced od_from and
+        od_to matrices. This means they should likely be the model zoning.
+
+    tp_factor_dict:
+        A Dictionary of {tp: split_factor} values. Where `tp` is an integer time
+        period, and `split_factor` is a numpy array of shape `mat_24.shape`
+        factors to generate the time period split matrices.
+
+    Returns
+    -------
+    tp_split_matrices:
+        A dictionary in the same format as `tp_factor_dict`, but the values
+        will be pandas DataFrames of each matrix at a time period.
+    """
+    # Split the matrix
+    tp_mats = dict.fromkeys(tp_factor_dict.keys())
+    for tp, factor_mat in tp_factor_dict.items():
+        tp_mats[tp] = mat_24 * factor_mat
+
+    # Validate return matrix totals
+    tp_total = np.sum([x.values.sum() for x in tp_mats.values()])
+
+    # OD total should be double the input PA
+    if not math_utils.is_almost_equal(tp_total, mat_24.values.sum()):
+        raise nd.NormitsDemandError(
+            "Tp split matrix total isn't similar enough to mat_24 total."
+            "Are the given splitting factors correct?\n"
+            f"24hr Matrix total: {float(mat_24.values.sum()):.2f}\n"
+            f"tp split matrices: {float(tp_total):.2f}\n"
+        )
+
+    return tp_mats

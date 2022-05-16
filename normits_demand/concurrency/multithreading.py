@@ -388,6 +388,146 @@ def get_data_from_queue(
     return data
 
 
+def get_data_from_queue_list(
+    q_list: List[queue.Queue],
+    stop_event: threading.Event = None,
+    total_timeout: float = 86400,
+    default_return_val: Any = None,
+) -> List[Any]:
+    """Retrieves data from the given list of queues.
+
+    Waits until data can be retrieved from each queue. If total_timeout
+    is reached, a Timeout error is thrown.
+
+    Parameters
+    ----------
+    q_list:
+        The list of queues to retrieve data from.
+
+    stop_event:
+        An event telling this function to stop waiting for return values.
+
+    total_timeout:
+        The total amount of time to wait before terminating.
+
+    default_return_val:
+        The default value to return if the stop event is set before the data
+        is able to be retrieved from the queue.
+
+    Returns
+    -------
+    q_data:
+        A list of the data retrieved from queues. The order of the queues will
+        be used to order the return. i.e. q_list[0] returned the data in
+        q_data[0].
+
+    Raises
+    ------
+    TimeoutError:
+        If total_timeout is exceeded while waiting to get data from q_list.
+    """
+    # Init
+    got_all_results = False
+    results = [default_return_val] * len(q_list)
+    start_time = time.time()
+
+    if stop_event is None:
+        stop_event = threading.Event()
+
+    # Add index to save original order
+    idx_qs = list(enumerate(q_list))
+
+    # Now try get all the results
+    while not got_all_results:
+        # Wait for a little bit to avoid intensive looping
+        time.sleep(0.05)
+
+        # If told to stop, just return what we have so far
+        if stop_event.is_set():
+            return results
+
+        # Check if we've ran out of time
+        if (time.time() - start_time) > total_timeout:
+            raise TimeoutError("Ran out of time while waiting for results.")
+
+        # Check if any results are ready
+        done_threads = list()
+        for cur_idx, (orig_idx, q) in enumerate(idx_qs):
+            # Try get the data, catch the error if not available
+            try:
+                results[orig_idx] = q.get_nowait()
+                done_threads.append(cur_idx)
+            except queue.Empty:
+                pass
+
+        # Remove results we've got
+        for i in sorted(done_threads, reverse=True):
+            del idx_qs[i]
+
+        # Check if we have all results
+        if len(idx_qs) == 0:
+            got_all_results = True
+
+    return results
+
+
+def get_data_from_queue_dict(
+    q_dict: Dict[Any, queue.Queue],
+    stop_event: threading.Event = None,
+    total_timeout: float = 86400,
+    default_return_val: Any = None,
+) -> Dict[Any, Any]:
+    """Retrieves data from the given dictionary of queues.
+
+    Waits until data can be retrieved from each queue. If total_timeout
+    is reached, a Timeout error is thrown.
+
+    Parameters
+    ----------
+    q_dict:
+        The dictionary of queues to retrieve data from. It doesn't matter
+        what the keys are. Keys will be used in the return to define
+        which data came from which queue.
+
+    stop_event:
+        An event telling this function to stop waiting for return values.
+
+    total_timeout:
+        The total amount of time to wait before terminating.
+
+    default_return_val:
+        The default value to return if the stop event is set before the data
+        is able to be retrieved from the queue.
+
+    Returns
+    -------
+    q_data:
+        A dictionary of the data retrieved from queue
+
+    Raises
+    ------
+    TimeoutError:
+        If total_timeout is exceeded while waiting to get data from q.
+    """
+    # Convert dict to list
+    key_order = list(q_dict.keys())
+    q_list = [q_dict[x] for x in key_order]
+
+    # Call list based function
+    results_list = get_data_from_queue_list(
+        q_list=q_list,
+        stop_event=stop_event,
+        total_timeout=total_timeout,
+        default_return_val=default_return_val,
+    )
+
+    # Convert back to dict
+    return_dict = dict.fromkeys(q_dict.keys())
+    for key, value in zip(key_order, results_list):
+        return_dict[key] = value
+    return return_dict
+
+
 def empty_queue(
     q: queue.Queue,
     wait_for_items: bool = False,

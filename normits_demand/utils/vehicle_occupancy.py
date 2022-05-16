@@ -14,8 +14,11 @@ import pandas as pd
 
 # Local imports
 from normits_demand import constants as consts
+from normits_demand import logging as nd_log
 
 from normits_demand.concurrency import multiprocessing
+
+LOG = nd_log.get_logger(__name__)
 
 
 def _people_vehicle_conversion_internal(mat_import,
@@ -78,8 +81,13 @@ def people_vehicle_conversion(mat_import: str,
                               process_count: int = consts.PROCESS_COUNT,
                               ) -> None:
     # TODO: Write people_vehicle_conversion() docs
-
     # TODO: Add refactor up to totals after conversion
+    LOG.info(
+        "DEPRECATED: normits_demand.utils.vehicle_occupancy.people_vehicle_conversion() "
+        "has been deprecated. Please use normits_demand.utils.people_vehicle_conversion "
+        "functions instead: vehicle_to_people_units(), people_to_vehicle_units()"
+    )
+
     if method not in ['to_vehicles', 'to_people']:
         raise ValueError('method should be to_vehicles or to_people')
 

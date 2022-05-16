@@ -19,6 +19,7 @@ from typing import List
 
 # Local Imports
 import normits_demand as nd
+from normits_demand import core as nd_core
 
 from normits_demand.models.notem import HBProductionModel
 from normits_demand.models.notem import NHBProductionModel
@@ -35,7 +36,7 @@ class NoTEM(NoTEMExportPaths):
 
     def __init__(self,
                  years: List[int],
-                 scenario: str,
+                 scenario: nd_core.Scenario,
                  iteration_name: str,
                  import_builder: nd.pathing.NoTEMImportPathsBase,
                  export_home: nd.PathLike,
@@ -57,7 +58,7 @@ class NoTEM(NoTEMExportPaths):
             set to '3i' the iteration folder would be called 'iter3i'.
 
         scenario:
-            The name of the scenario to run for.
+            The scenario to run for.
 
         import_builder:
             A subclass of nd.pathing.NoTEMImportPathsBase. This class will
@@ -93,7 +94,6 @@ class NoTEM(NoTEMExportPaths):
 
         # Assign
         self.years = years
-        self.scenario = scenario
         self.import_builder = import_builder
         self.hb_attraction_balance_zoning = hb_attraction_balance_zoning
         self.nhb_attraction_balance_zoning = nhb_attraction_balance_zoning
@@ -125,7 +125,7 @@ class NoTEM(NoTEMExportPaths):
         out_lines = [
             'Code Version: %s' % str(nd.__version__),
             'NoTEM Iteration: %s' % str(self.iteration_name),
-            'Scenario: %s' % str(self.scenario),
+            'Scenario: %s' % str(self.scenario.value),
             '',
             '### HB Productions ###',
             'import_files: %s' % self.import_builder.generate_hb_production_imports(),

@@ -70,7 +70,7 @@ class CostFunction:
         self.param_max = {k: max(v) for k, v in params.items()}
 
         self.kw_order = list(inspect.signature(self.function).parameters.keys())[1:]
-        self.kw_order.remove('min_return_val')
+        self.kw_order.remove("min_return_val")
 
         # Validate the params and cost function
         try:
@@ -80,17 +80,16 @@ class CostFunction:
                 "Received a TypeError while testing the given params "
                 "definition and cost function will work together. Have the "
                 "params been defined correctly for the given function?\n"
-                "Tried passing in '%s' to function %s."
-                % (self.param_names, self.function)
+                "Tried passing in '%s' to function %s." % (self.param_names, self.function)
             )
 
     @property
     def parameter_names(self):
+        """Return the key-word names of the cost function params"""
         return self.kw_order
 
     def validate_params(self, param_dict: Dict[str, Any]) -> None:
-        """
-        Validates that the given values are valid and within min/max ranges
+        """Validates that the given values are valid and within min/max ranges
 
         Validates that the param dictionary given contains only and all
         expected parameter names as keys, and that the values for each key
@@ -204,10 +203,7 @@ def tanner(
     # Don't do 0 to the power in case alpha is negative
     # 0^x where x is anything (other than 0) is always 0
     power = np.float_power(
-        base_cost,
-        alpha,
-        out=np.zeros_like(base_cost, dtype=float),
-        where=base_cost != 0,
+        base_cost, alpha, out=np.zeros_like(base_cost, dtype=float), where=base_cost != 0,
     )
     exp = np.exp(beta * base_cost)
 
@@ -261,10 +257,7 @@ def log_normal(
     # First calculate the fraction
     frac_denominator = base_cost * sigma * np.sqrt(2 * np.pi)
     frac = np.divide(
-        1,
-        frac_denominator,
-        where=frac_denominator != 0,
-        out=np.zeros_like(frac_denominator),
+        1, frac_denominator, where=frac_denominator != 0, out=np.zeros_like(frac_denominator),
     )
 
     # Now calculate the exponential
