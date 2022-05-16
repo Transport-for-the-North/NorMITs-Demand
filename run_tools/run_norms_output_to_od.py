@@ -60,8 +60,5 @@ def main():
     converter.compile_internal_matrices(INTERNAL_MATRIX_COMPILE_PATH)
 
 
-    print("DONE")
-
-
 if __name__ == '__main__':
     main()

@@ -59,6 +59,14 @@ Below, a brief summary of patches made since the previous version can be found.
     inputs and outputs into NorMITs Demand
   - Added classes to convert demand from NoTEM/Tram Models into Distribution 
     Model.
+- Tools
+  - Updated the Trip Length Distribution (TLD) code to become a tool for 
+    generating TLDs for Demand Models
+  - Created a NoRMS output converter tool which takes outputs from NoRMS
+    CUBE model and uses them to create OD matrices which can be used by
+    other Analytical Framework tools. Note that this is a work in progress
+    and isn't a fully developed tool yet. It requires better integration with
+    NoRMS.
 - Bug Fixes
   - Updated the TfGM translations and zoning definitions
   - Fixed some overflow handling in the `doubly_contstrained_furness()`
