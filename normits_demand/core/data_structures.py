@@ -285,7 +285,7 @@ class DVector:
     def __init__(self,
                  segmentation: core.SegmentationLevel,
                  import_data: Union[pd.DataFrame, nd.DVectorData],
-                 zoning_system: Optional[core.ZoningSystem] = None,
+                 zoning_system: Optional[core.ZoninpagSystem] = None,
                  time_format: Optional[Union[str, TimeFormat]] = None,
                  zone_col: Optional[str] = None,
                  val_col: Optional[str] = None,
