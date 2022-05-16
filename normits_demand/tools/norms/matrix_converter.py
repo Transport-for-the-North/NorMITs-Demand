@@ -544,10 +544,13 @@ class NormsOutputToOD:
             matrix_format = segment_params['matrix_format']
             if matrix_format == 'od':
                 ca_key = 'nca'
+                split_into_from_to = True
             elif matrix_format == 'od_from':
                 ca_key = 'ca_fh'
+                split_into_from_to = False
             elif matrix_format == 'od_to':
                 ca_key = 'ca_th'
+                split_into_from_to = False
             else:
                 raise ValueError(f"Can't deal with matrix format '{matrix_format}'")
 
@@ -562,16 +565,33 @@ class NormsOutputToOD:
                 tp_factor_dict=split_factors,
             )
 
-            # Write out to disk
+            # Write matrix out to disk
             for tp, mat in tp_mats.items():
                 mat = mat.round(8)
-                fname = self._get_external_filename(
-                    matrix_format=segment_params['matrix_format'],
-                    purpose=segment_params['p'],
-                    ca=segment_params['ca'],
-                    tp=tp,
-                )
-                file_ops.write_df(mat, self.od_path / fname)
+
+                if split_into_from_to:
+                    # Split the matrix in half to get the od-from and od-to
+                    # Assuming External is HB only here otherwise this doesn't
+                    # hold
+                    for matrix_format in ["od_from", "od_to"]:
+                        temp_mat = mat * 0.5
+                        fname = self._get_external_filename(
+                            matrix_format=matrix_format,
+                            purpose=segment_params['p'],
+                            ca=segment_params['ca'],
+                            tp=tp,
+                        )
+                        file_ops.write_df(temp_mat, self.od_path / fname)
+                else:
+                    # Just write out
+                    fname = self._get_external_filename(
+                        matrix_format=segment_params['matrix_format'],
+                        purpose=segment_params['p'],
+                        ca=segment_params['ca'],
+                        tp=tp,
+                    )
+                    file_ops.write_df(mat, self.od_path / fname)
+
 
     def compile_matrices(self, compile_params_path: os.PathLike) -> None:
         """Compile the matrices into a more aggregate format"""

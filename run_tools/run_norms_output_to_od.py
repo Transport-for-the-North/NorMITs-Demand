@@ -53,10 +53,10 @@ def main():
         output_dir=import_matrix_dir / MATRIX_OUTPUT_DIRNAME
     )
 
-    # converter.convert_hb_internal()
-    # converter.convert_nhb_internal()
-    # converter.convert_external()
-    # converter.compile_matrices(MATRIX_COMPILE_PATH)
+    converter.convert_hb_internal()
+    converter.convert_nhb_internal()
+    converter.convert_external()
+    converter.compile_matrices(MATRIX_COMPILE_PATH)
     converter.compile_internal_matrices(INTERNAL_MATRIX_COMPILE_PATH)
 
 
