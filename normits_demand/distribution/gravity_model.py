@@ -682,6 +682,8 @@ class GravityModelBase(abc.ABC):
                 )
                 optimal_params = result.x
 
+            # BACKLOG: Try random init_params as a final option
+
         else:
             optimal_params = self._order_init_params(init_params)
 
