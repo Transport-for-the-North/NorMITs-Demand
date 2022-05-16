@@ -78,9 +78,9 @@ def main():
 
         # Define segmentations for trip ends and running
         hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+        nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_walk')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_walk')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_wday_walk')
         hb_seg_name = 'p_m'
         nhb_seg_name = 'p_m_tp'
 
@@ -90,9 +90,9 @@ def main():
 
         # Define segmentations for trip ends and running
         hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+        nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_cycle')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_cycle')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_wday_cycle')
         hb_seg_name = 'p_m'
         nhb_seg_name = 'p_m_tp'
 
@@ -102,9 +102,9 @@ def main():
 
         # Define segmentations for trip ends and running
         hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-        nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+        nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_wday')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_bus')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_wday_bus')
         hb_seg_name = 'p_m'
         nhb_seg_name = 'p_m_tp'
 
