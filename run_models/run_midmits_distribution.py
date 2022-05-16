@@ -37,7 +37,7 @@ def main() -> None:
     mitem_iteration_name = run_mitem.mitem_iter
     dm_iteration_name = f"{mitem_iteration_name}.1"
     base_year = 2018
-    mode = nd.Mode.TRAIN
+    mode = nd.Mode.CAR
     use_tram = False
     scenario = nd.Scenario.SC01_JAM
     # Distribution model paths
