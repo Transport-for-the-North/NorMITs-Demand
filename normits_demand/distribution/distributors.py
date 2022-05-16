@@ -802,6 +802,8 @@ class GravityDistributor(AbstractDistributor):
             grav_max_iters=kwargs.get('grav_max_iters'),
             calibrate_params=kwargs.get('calibrate_params', True),
             ftol=kwargs.get('ftol', 1e-5),
+            failure_tol=kwargs.get("failure_tol", 0),
+            default_init_params=kwargs.get("default_init_params", None),
             verbose=kwargs.get('verbose', 2),
         )
 

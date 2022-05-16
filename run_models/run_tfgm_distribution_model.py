@@ -56,8 +56,8 @@ def main():
     mode = nd.Mode.BUS
 
     # Running params
-    run_hb = True
-    run_nhb = False
+    run_hb = False
+    run_nhb = True
 
     run_all = False
     run_upper_model = False
@@ -146,6 +146,7 @@ def main():
         'grav_max_iters': 100,
         'furness_max_iters': 3000,
         'furness_tol': 0.1,
+        "default_init_params": {"sigma": 1, "mu": 2},
         'calibrate_params': True,
         'estimate_init_params': False
     }
