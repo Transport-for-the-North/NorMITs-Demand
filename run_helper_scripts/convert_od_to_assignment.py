@@ -128,8 +128,10 @@ def main(params: ODToAssignmentParameters, init_logger: bool = True) -> None:
 
 ##### MAIN #####
 if __name__ == "__main__":
+    distribution_model_iteration = "9.6b.1"
     mat_folder = Path(
-        r"C:\WSP_Projects\MidMITs\02 MidMITs\Outputs\iter9.3.3\OD PCU Matrices"
+        fr"T:\MidMITs Demand\Distribution Model\iter{distribution_model_iteration}"
+        r"\car_and_passenger\Final Outputs\Compiled OD Matrices\PCU"
     )
     prior_folder = Path(
         r"C:\WSP_Projects\MidMITs\00 From Client\MiHAM From Motts"
