@@ -1,20 +1,21 @@
+#imports
 import pandas as pd
 import sys
 import os
 import pathlib
-import normits_demand as nd
-
 sys.path.append("..")
+sys.path.append(".")
+import normits_demand as nd
 # constants
-MSOA = zoning.get_zoning_system("msoa")
-LAD = zoning.get_zoning_system("lad_2020")
-HB_P_TP_WEEK = segments.get_segmentation_level("hb_p_tp_week")
-M_TP_WEEK = segments.get_segmentation_level("m_tp_week")
-HB_P_M_TP_WEEK = segments.get_segmentation_level("hb_p_m_tp_week")
+MSOA = nd.get_zoning_system("msoa")
+LAD = nd.get_zoning_system("lad_2020")
+HB_P_TP_WEEK = nd.get_segmentation_level("hb_p_tp_week")
+M_TP_WEEK = nd.get_segmentation_level("m_tp_week")
+HB_P_M_TP_WEEK = nd.get_segmentation_level("hb_p_m_tp_week")
 test_path = pathlib.Path(r"C:\Projects\MidMITS\Python\outputs\tests")
 
 
-def mnd_factors(org_dest: str) -> data_structures.DVector:
+def mnd_factors(org_dest: str) -> nd.DVector:
     """_summary_
    Reads in a csv of MND data and returns a dataframe of factors from 2019-November 2021
    Args:
@@ -35,7 +36,7 @@ def mnd_factors(org_dest: str) -> data_structures.DVector:
     )
     df.reset_index(inplace=True)
     unstacked = df[["LAD", "p", "tp", "factor"]]
-    dvec = data_structures.DVector(
+    dvec = nd.DVector(
         segmentation=HB_P_TP_WEEK,
         import_data=unstacked,
         zoning_system=LAD,
@@ -49,7 +50,7 @@ def mnd_factors(org_dest: str) -> data_structures.DVector:
 def loop(
     factored: nd.data_structures.DVector,
     base: nd.data_structures.DVector,
-    iters: int,
+    convergence: int,
     dft_vec: nd.data_structures.DVector,
     mnd_vec: nd.data_structures.DVector,
 ):
@@ -71,27 +72,30 @@ def loop(
     dvec = factored
     dft_base = base.aggregate(M_TP_WEEK)
     mnd_base = base.aggregate(HB_P_TP_WEEK)
-    for i in range(iters):
+    i = convergence + 1
+    while i > convergence:
         dvec_agg = dvec.aggregate(M_TP_WEEK)
         mnd_res = dvec_agg / dft_base
-        print("mnd_res created")
         adj_dft = dft_vec / mnd_res
         final_dft = dvec * adj_dft
-        print(f"Adjusted to DfT factors {i+1} times.")
         dft_res = final_dft.aggregate(HB_P_TP_WEEK).translate_zoning(
             LAD
         ) / mnd_base.translate_zoning(LAD)
         adj_mnd = (mnd_vec / dft_res).translate_zoning(MSOA, weighting="no_weight")
+        dvec_ss = dvec.aggregate(M_TP_WEEK)
         dvec = final_dft * adj_mnd
+        i = abs(dvec.aggregate(M_TP_WEEK)-dvec_ss).sum()
+        print(i)
+
     return dvec
 
 
 def main():
-    trips_19 = data_structures.DVector.load(
+    trips_19 = nd.DVector.load(
         r"C:\Projects\MidMITS\Python\outputs\tests\hb_msoa_notem_segmented_2018_dvec.pkl"
     )
     dft_factors = pd.read_csv(r"C:\Projects\MidMITS\Python\outputs\output\dft_factors.csv")
-    dft_dvec = data_structures.DVector(
+    dft_dvec = nd.DVector(
         segmentation=M_TP_WEEK,
         import_data=dft_factors,
         zoning_system=MSOA,

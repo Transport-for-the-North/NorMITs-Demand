@@ -637,11 +637,11 @@ class DVector:
         #   with different segmentation
         if self.segmentation != other.segmentation:
             raise DVectorError(
-                "Cannot add 2 DVectors with different segmentation"
+                "Cannot subtract 2 DVectors with different segmentation"
             )
         if self.time_format != other.time_format:
             raise DVectorError(
-                "Cannot add 2 DVectors with different time_format"
+                "Cannot subtract 2 DVectors with different time_format"
             )
 
         # Perform addition
