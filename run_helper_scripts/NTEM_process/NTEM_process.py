@@ -51,8 +51,8 @@ class params:
     }
     data_source = pathlib.Path(r"C:\Projects\MidMITS\NTEM")
     lookup_dir = pathlib.Path(r"SHP/NTEM_land_use_growth_lookup.xlsx")
-    tfn_base_pop_dir = pathlib.Path(path.join("SHP",f"land_use_{years['base year']}_pop.csv"))
-    tfn_base_emp_dir = pathlib.Path(path.join("SHP",f"land_use_{years['base year']}_emp.csv"))
+    tfn_base_pop_dir = pathlib.Path(path.join("SHP", f"land_use_{years['base year']}_pop.csv"))
+    tfn_base_emp_dir = pathlib.Path(path.join("SHP", f"land_use_{years['base year']}_emp.csv"))
     NTEM_output_dir = pathlib.Path(r"Temp storage")
     NTEM_input_dir = pathlib.Path(r"NTEM")
     emp_corr_dir = pathlib.Path(r"SHP/emp/ntem_to_int_zone_correspondence.csv")
@@ -99,7 +99,10 @@ def read_tfn() -> dict:
     pop_base.index.rename(["msoa_zone_id", "tfn_traveller_type", "pop code"])
     emp_base.columns = ["soc", f"{p.years['base year']}"]
     pop_base.columns = ["area type", f"{p.years['base year']}"]
-    dict = {"emp": [emp_base, ["soc", f"{p.years['base year']}"]], "pop": [pop_base, ["area type", f"{p.years['base year']}"]]}
+    dict = {
+        "emp": [emp_base, ["soc", f"{p.years['base year']}"]],
+        "pop": [pop_base, ["area type", f"{p.years['base year']}"]],
+    }
     return dict
 
 
@@ -284,7 +287,7 @@ def process_df(sector: str) -> pd.DataFrame:
 
 
 def final(sector: str):
-    p=params
+    p = params
     growth_df = process_df(sector).drop(["pct", "growth"], axis=1)
     tfn_dict = read_tfn()
     tfn_data = tfn_dict[sector][0]
@@ -293,12 +296,14 @@ def final(sector: str):
     )
     int = tfn_data.join(growth_df["factor"], how="inner")
     int[f"{p.years['target year']}"] = int[f"{p.years['base year']}"] * int["factor"]
-    export = int.drop([f"{p.years['base year']}", "factor"], axis=1).droplevel(f"{sector} code")
+    export = int.drop([f"{p.years['base year']}", "factor"], axis=1).droplevel(
+        f"{sector} code"
+    )
     export.to_csv(path.join(p.data_source, "SHP", sector, f"landuse 2021_{sector}.csv"))
     int.to_csv(path.join(p.data_source, "SHP", sector, f"landuse 2021 complete_{sector}.csv"))
 
 
-def apply_abs(sector: str)->pd.DataFrame:
+def apply_abs(sector: str) -> pd.DataFrame:
     """_summary_
     Applies growth to TfN landuse using absolute increases from NTEM instead of percentage
     Args:
@@ -326,11 +331,17 @@ def apply_abs(sector: str)->pd.DataFrame:
     )
     NTEM.index.rename(["msoa_zone_id", f"{sector} code"], inplace=True)
     NTEM["diff"] = NTEM[f"{p.years['target year']}"] - NTEM[f"{p.years['base year']}"]
-    grouped = tfn_data.groupby(["msoa_zone_id", f"{sector} code"]).sum()[f"{p.years['base year']}"]
+    grouped = tfn_data.groupby(["msoa_zone_id", f"{sector} code"]).sum()[
+        f"{p.years['base year']}"
+    ]
     joined = tfn_data.join(grouped, how="inner", rsuffix="_grouped")
-    joined["prop"] = joined[f"{p.years['base year']}"] / joined[f"{p.years['base year']}_grouped"]
+    joined["prop"] = (
+        joined[f"{p.years['base year']}"] / joined[f"{p.years['base year']}_grouped"]
+    )
     output = joined.join(NTEM["diff"], how="inner")
-    output[f"{p.years['target year']}"] = output[f"{p.years['base year']}"] + output["diff"] * output["prop"]
+    output[f"{p.years['target year']}"] = (
+        output[f"{p.years['base year']}"] + output["diff"] * output["prop"]
+    )
     output.loc[output[f"{p.years['target year']}"] < 0, f"{p.years['target year']}"] = 0
     return output
 
@@ -339,12 +350,18 @@ def main():
     p = params
     for sector in ["emp", "pop"]:
         dic = read_tfn()
-        cols = ['msoa_zone_id','tfn_traveller_type','2019']
+        cols = ["msoa_zone_id", "tfn_traveller_type", "2019"]
         cols.append(dic[sector][1][0])
         df = apply_abs(sector).reset_index()
         output = df[cols]
-        output.set_index(['msoa_zone_id','tfn_traveller_type', dic[sector][1][0]],inplace=True)
-        output.to_csv(path.join(p.data_source, "SHP", sector, f"landuse_{p.years['target year']}_{sector}.csv"))
+        output.set_index(
+            ["msoa_zone_id", "tfn_traveller_type", dic[sector][1][0]], inplace=True
+        )
+        output.to_csv(
+            path.join(
+                p.data_source, "SHP", sector, f"landuse_{p.years['target year']}_{sector}.csv"
+            )
+        )
 
 
 if __name__ == "__main__":
