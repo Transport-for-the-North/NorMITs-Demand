@@ -24,6 +24,7 @@ from typing import Tuple
 
 # Local imports
 import normits_demand as nd
+from normits_demand import core as nd_core
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
 
@@ -183,7 +184,7 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
 
     def __init__(self,
                  import_home: nd.PathLike,
-                 scenario: str,
+                 scenario: nd_core.Scenario,
                  years: List[int],
                  land_use_import_home: nd.PathLike,
                  by_land_use_iter: str,
@@ -203,7 +204,7 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
             NoTEMImportPath._normits_land_use in there.
 
         scenario:
-            The name of the scenario to run for.
+            The scenario to run for.
 
         years:
             List of years to run NoTEM for. Will assume that the smallest
@@ -250,7 +251,7 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
         )
 
     def _generate_land_use_paths(self,
-                                 scenario: str,
+                                 scenario: nd_core.Scenario,
                                  years: List[int],
                                  land_use_import_home: nd.PathLike,
                                  by_land_use_iter: str,
@@ -278,7 +279,7 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
             fy_land_use_iter,
             'outputs',
             'scenarios',
-            scenario,
+            scenario.value,
         )
 
         # Because of the way land use is written, we have this weird legacy
@@ -428,7 +429,7 @@ class NoTEMExportPaths:
 
     def __init__(self,
                  path_years: List[int],
-                 scenario: str,
+                 scenario: nd_core.Scenario,
                  iteration_name: str,
                  export_home: nd.PathLike,
                  ):
@@ -441,7 +442,7 @@ class NoTEMExportPaths:
             A list of the years the models are running for.
 
         scenario:
-            The name of the scenario to run for.
+            The scenario to run for.
 
         iteration_name:
             The name of this iteration of the NoTEM models. Will have 'iter'
@@ -452,14 +453,13 @@ class NoTEMExportPaths:
             The home directory of all the export paths. A sub-directory will
             be made for each of the NoTEM sub models.
         """
-        # TODO(BT): Integrate new scenario enum
         # Init
         file_ops.check_path_exists(export_home)
 
         self.path_years = path_years
         self.scenario = scenario
         self.iteration_name = du.create_iter_name(iteration_name)
-        self.export_home = os.path.join(export_home, self.iteration_name, self.scenario)
+        self.export_home = os.path.join(export_home, self.iteration_name, self.scenario.value)
         file_ops.create_folder(self.export_home)
 
         # ## BUILD ALL MODEL PATHS ## #

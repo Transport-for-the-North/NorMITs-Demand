@@ -600,6 +600,8 @@ class GravityModelBase(abc.ABC):
                    ftol: float = 1e-4,
                    xtol: float = 1e-4,
                    grav_max_iters: int = 100,
+                   failure_tol: float = 0,
+                   default_params: Dict[str, Any] = None,
                    verbose: int = 0,
                    ) -> None:
         """Internal function of calibrate.
@@ -626,6 +628,25 @@ class GravityModelBase(abc.ABC):
                 kwargs={'diff_step': diff_step},
             )
             optimal_params = result.x
+
+            # If performance was terrible, try again with default params
+            if self.achieved_convergence <= failure_tol and default_params is not None:
+                result = optimize.least_squares(
+                    fun=self._gravity_function,
+                    x0=self._order_init_params(default_params),
+                    method=self._least_squares_method,
+                    bounds=self._order_bounds(),
+                    jac=self._jacobian_function,
+                    verbose=verbose,
+                    ftol=ftol,
+                    xtol=xtol,
+                    max_nfev=grav_max_iters,
+                    kwargs={'diff_step': diff_step},
+                )
+                optimal_params = result.x
+
+            # BACKLOG: Try random init_params as a final option
+
         else:
             optimal_params = self._order_init_params(init_params)
 
@@ -832,6 +853,8 @@ class GravityModelCalibrator(GravityModelBase):
                   ftol: float = 1e-4,
                   xtol: float = 1e-4,
                   grav_max_iters: int = 100,
+                  failure_tol: float = 0,
+                  default_init_params: Dict[str, Any] = None,
                   verbose: int = 0,
                   ) -> Dict[str, Any]:
         """Finds the optimal parameters for self.cost_function
@@ -867,17 +890,17 @@ class GravityModelCalibrator(GravityModelBase):
             is passed to:
             Determines the relative step size for the finite difference
             approximation of the Jacobian. The actual step is computed as
-            x * diff_step. If None (default), then diff_step is taken to be a
+            `x * diff_step`. If None (default), then diff_step is taken to be a
             conventional “optimal” power of machine epsilon for the finite
             difference scheme used
 
         ftol:
-            The tolerance to pass to scipy.optimize.least_squares. The search
+            The tolerance to pass to `scipy.optimize.least_squares`. The search
             will stop once this tolerance has been met. This is the
             tolerance for termination by the change of the cost function
 
         xtol:
-            The tolerance to pass to scipy.optimize.least_squares. The search
+            The tolerance to pass to `scipy.optimize.least_squares`. The search
             will stop once this tolerance has been met. This is the
             tolerance for termination by the change of the independent
             variables.
@@ -885,6 +908,17 @@ class GravityModelCalibrator(GravityModelBase):
         grav_max_iters:
             The maximum number of calibration iterations to complete before
             termination if the ftol has not been met.
+
+        failure_tol:
+            The threshold that a convergence needs to pass to not be
+            considered a failure. Any convergence values less than or equal
+            to this value will be considered a failure. Used in conjunction
+            with `default_init_params`.
+
+        default_init_params:
+            The default initial parameters to be used to try and calibrate
+            the gravity model if the given initial params in `init_params`
+            lead to a failing convergence.
 
         verbose:
             Copied from scipy.optimize.least_squares documentation, where it
@@ -930,6 +964,8 @@ class GravityModelCalibrator(GravityModelBase):
             ftol=ftol,
             xtol=xtol,
             grav_max_iters=grav_max_iters,
+            failure_tol=failure_tol,
+            default_params=default_init_params,
             verbose=verbose,
         )
 

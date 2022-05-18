@@ -49,7 +49,10 @@ Below, a brief summary of patches made since the previous version can be found.
     - Initial implementation of a multi-area gravity model. Each area calibrates
       its own cost params, and aims for its own target cost distribution. All
       areas share the same Furness and Jacobian matrices via threading.
-  - Added a built in cache method for trip end inputs
+  - Added a built-in cache method for trip end inputs
+  - If the gravity model fails to converge, and option has now been added
+    to allow it to run again using default parameters. This often solves
+    most problems.
 - NTEM Forecasting
   - Added plotting module for the NTEM forecasting, which produces:
     - Trip end growth heatmaps for all forecast years
@@ -75,6 +78,14 @@ Below, a brief summary of patches made since the previous version can be found.
   - Added `lad_2020_internal_noham` zone system which contains LAD zones in the North analytical
     area and NoHAM zones outside, used for the NTEM plots
   - Added NoHAM and MSOA to `lad_2020_internal_noham` zone correspondences
+- Tools
+  - Updated the Trip Length Distribution (TLD) code to become a tool for 
+    generating TLDs for Demand Models
+  - Created a NoRMS output converter tool which takes outputs from NoRMS
+    CUBE model and uses them to create OD matrices which can be used by
+    other Analytical Framework tools. Note that this is a work in progress
+    and isn't a fully developed tool yet. It requires better integration with
+    NoRMS.
 - Bug Fixes
   - Updated the TfGM translations and zoning definitions
   - Fixed some overflow handling in the `doubly_contstrained_furness()`

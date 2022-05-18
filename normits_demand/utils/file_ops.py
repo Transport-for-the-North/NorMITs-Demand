@@ -15,6 +15,7 @@ A collections of utility functions for file operations
 from __future__ import annotations
 
 import os
+import shutil
 import time
 import pickle
 import pathlib
@@ -24,6 +25,7 @@ from os import PathLike
 
 from typing import Any
 from typing import List
+from typing import Tuple
 from typing import Iterable
 
 # Third Party
@@ -558,6 +560,53 @@ def copy_all_files(import_dir: nd.PathLike,
     )
 
 
+def _copy_files_internal(
+    src: os.PathLike,
+    dst: os.PathLike,
+) -> None:
+    """Copy a file from one location to another"""
+    shutil.copy(
+        src=src,
+        dst=dst,
+    )
+
+
+def copy_and_rename_files(
+    files: List[Tuple[os.PathLike, os.PathLike]],
+    process_count: int = consts.PROCESS_COUNT,
+) -> None:
+    """
+    Copy files from one location to another
+
+    Takes a list of tuples and copies the first item of each tuple into
+    the location given by the second item in a tuple
+
+    Parameters
+    ----------
+    files:
+        A list of Tuples of files to copy from and to. `(src, dst)` Tuples
+
+    process_count:
+        THe number of processes to use when copying the data over.
+        0 - use no multiprocessing, run as a loop.
+        +ve value - the number of processes to use.
+        -ve value - the number of processes less than the cpu count to use.
+
+    Returns
+    -------
+    None
+    """
+    # Convert into a list of kwargs
+    keys = [('src', 'dst')] * len(files)
+    kwarg_list = [dict(zip(ks, vs)) for ks, vs in zip(keys, files)]
+
+    multiprocessing.multiprocess(
+        fn=_copy_files_internal,
+        kwargs=kwarg_list,
+        process_count=process_count,
+    )
+
+
 def remove_from_fname(path: nd.PathLike,
                       to_remove: str,
                       ) -> pathlib.Path:
@@ -746,13 +795,13 @@ def create_folder(folder_path: nd.PathLike,
 
     os.makedirs(folder_path, exist_ok=True)
     du.print_w_toggle(
-        "New project folder created at %s" % folder_path,
+        f"New project folder created at {folder_path}",
         verbose=verbose_create,
     )
 
 
 def write_pickle(obj: object,
-                 path: nd.PathLike,
+                 path: os.PathLike,
                  protocol: int = pickle.HIGHEST_PROTOCOL,
                  **kwargs,
                  ) -> None:

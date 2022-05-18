@@ -55,7 +55,7 @@ def main():
         # Generate the export paths
         export_paths = NoTEMExportPaths(
             path_years=[YEAR],
-            scenario=SCENARIO.value,
+            scenario=SCENARIO,
             iteration_name=iter_name,
             export_home=NOTEM_PATH,
         )
