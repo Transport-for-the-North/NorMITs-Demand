@@ -1,18 +1,22 @@
-#imports
-import pandas as pd
+# imports
 import sys
 import os
 import pathlib
+import logging
+import pandas as pd
+
+logging.basicConfig(filename="log.log", level=logging.INFO)
 sys.path.append("..")
 sys.path.append(".")
 import normits_demand as nd
+
 # constants
 MSOA = nd.get_zoning_system("msoa")
 LAD = nd.get_zoning_system("lad_2020")
 HB_P_TP_WEEK = nd.get_segmentation_level("hb_p_tp_week")
 M_TP_WEEK = nd.get_segmentation_level("m_tp_week")
 HB_P_M_TP_WEEK = nd.get_segmentation_level("hb_p_m_tp_week")
-test_path = pathlib.Path(r"C:\Projects\MidMITS\Python\outputs\tests")
+FILE_PATH = pathlib.Path(r"C:\Projects\MidMITS\Python\outputs\ApplyMND")
 
 
 def mnd_factors(org_dest: str) -> nd.DVector:
@@ -24,7 +28,7 @@ def mnd_factors(org_dest: str) -> nd.DVector:
        a dvector of mnd factors at LAD zoning, and 'hb_p_tp_week' segmentation
    """
     df = (
-        pd.read_csv(r"C:\Projects\MidMITS\Python\outputs\output\mnd_factors.csv")
+        pd.read_csv(os.path.join(FILE_PATH,r"mnd_factors.csv"))
         .groupby(["LAD", "tp", "p"])
         .sum()
     )
@@ -78,23 +82,26 @@ def loop(
         mnd_res = dvec_agg / dft_base
         adj_dft = dft_vec / mnd_res
         final_dft = dvec * adj_dft
+        logging.info("Adjusted to DfT.")
         dft_res = final_dft.aggregate(HB_P_TP_WEEK).translate_zoning(
             LAD
         ) / mnd_base.translate_zoning(LAD)
         adj_mnd = (mnd_vec / dft_res).translate_zoning(MSOA, weighting="no_weight")
         dvec_ss = dvec.aggregate(M_TP_WEEK)
         dvec = final_dft * adj_mnd
-        i = abs(dvec.aggregate(M_TP_WEEK)-dvec_ss).sum()
-        print(i)
-
+        logging.info("Adjusted to MND.")
+        i = abs(dvec.aggregate(M_TP_WEEK) - dvec_ss).sum()
+        logging.info(f"DVector is {i} trips out from the previous iteration.")
+    logging.info("Convergence criteria met, writing DVector to pickle file.")
     return dvec
 
 
 def main():
+    logging.info("Beginning initial factoring.")
     trips_19 = nd.DVector.load(
-        r"C:\Projects\MidMITS\Python\outputs\tests\hb_msoa_notem_segmented_2018_dvec.pkl"
+        os.path.join(FILE_PATH,r"hb_msoa_notem_segmented_2018_dvec.pkl")
     )
-    dft_factors = pd.read_csv(r"C:\Projects\MidMITS\Python\outputs\output\dft_factors.csv")
+    dft_factors = pd.read_csv(os.path.join(FILE_PATH,r"dft_factors.csv"))
     dft_dvec = nd.DVector(
         segmentation=M_TP_WEEK,
         import_data=dft_factors,
@@ -110,18 +117,18 @@ def main():
     dft_res = agg_21 / agg_19
     adj = (mnd / dft_res).translate_zoning(MSOA, weighting="no_weight")
     final = dft_21 * adj
-    print("About to begin looping")
-    export = loop(final, trips_19, 10, dft_dvec, mnd)
+    logging.info("About to begin looping.")
+    export = loop(final, trips_19, 5, dft_dvec, mnd)
     return export
 
 
 if __name__ == "__main__":
     DVEC = main()
-    DVEC.save(r"C:\Projects\MidMITS\Python\outputs\output\test_4.pkl")
+    DVEC.save(os.path.join(FILE_PATH,r"test_4.pkl"))
     DVEC.write_sector_reports(
-        os.path.join(test_path, "final_seg.csv"),
-        os.path.join(test_path, "ca.csv"),
-        os.path.join(test_path, "ie.csv"),
-        os.path.join(test_path, "final_lad_2.csv"),
+        os.path.join(FILE_PATH, "final_seg.csv"),
+        os.path.join(FILE_PATH, "ca.csv"),
+        os.path.join(FILE_PATH, "ie.csv"),
+        os.path.join(FILE_PATH, "final_lad_2.csv"),
         HB_P_M_TP_WEEK,
     )
