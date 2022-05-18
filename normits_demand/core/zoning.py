@@ -31,13 +31,14 @@ import pandas as pd
 
 # Local Imports
 import normits_demand as nd
+from normits_demand import logging as nd_log
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import compress
 from normits_demand.utils import pandas_utils as pd_utils
 
 
-LOG = logging.getLogger(__name__)
+LOG = nd_log.get_logger(__name__)
 
 
 class ZoningSystem:

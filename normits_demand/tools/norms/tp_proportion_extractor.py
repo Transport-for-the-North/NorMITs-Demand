@@ -24,7 +24,6 @@ WARNING: Need an instance of CUBE installed in order for this to work.
 """
 # Built-Ins
 import os
-import logging
 import multiprocessing as mp
 import pickle as pk
 
@@ -40,7 +39,7 @@ from normits_demand import logging as nd_log
 # BACKLOG: Rewrite all of CUBE to CSV code to be more generic
 #  label: rewrite
 
-LOG = logging.getLogger(__name__)
+LOG = nd_log.get_logger(__name__)
 
 # GLOBAL VARIABLES
 SOURCE_DIRECTORY = r'E:\temp\cube\2f ILF 2018\source - test'

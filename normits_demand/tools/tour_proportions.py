@@ -11,7 +11,6 @@ File purpose:
 
 """
 # Built-Ins
-import logging
 import itertools
 import dataclasses
 import os
@@ -26,6 +25,7 @@ import pandas as pd
 import numpy as np
 
 # Local Imports
+from normits_demand import logging as nd_log
 from normits_demand import core as nd_core
 from normits_demand import types as nd_types
 from normits_demand.utils import general as du
@@ -33,8 +33,7 @@ from normits_demand.utils import file_ops
 from normits_demand.utils import pandas_utils as pd_utils
 
 
-LOG = logging.getLogger(__name__)
-
+LOG = nd_log.get_logger(__name__)
 
 @dataclasses.dataclass
 class ReturnHomeFactors:
