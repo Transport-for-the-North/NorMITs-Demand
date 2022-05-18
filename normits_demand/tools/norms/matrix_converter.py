@@ -13,6 +13,7 @@ format where they can be picked up by other models
 """
 # Built-Ins
 import os
+import logging
 import pathlib
 import itertools
 import dataclasses
@@ -40,7 +41,7 @@ from normits_demand.tools.norms import tp_proportion_extractor
 from normits_demand.tools.norms import tp_proportion_converter
 
 
-LOG = nd_log.get_logger(f"{nd_log.get_package_logger_name()}.norms_generaliser")
+LOG = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass

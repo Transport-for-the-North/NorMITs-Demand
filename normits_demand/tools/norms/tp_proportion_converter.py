@@ -15,6 +15,7 @@ DEPENDS HEAVILY ON THE FORMAT OUTPUT IN tp_proportion_extractor
 # Built-Ins
 import operator
 import functools
+import logging
 
 from typing import Any
 from typing import List
@@ -32,7 +33,7 @@ from normits_demand import core as nd_core
 from normits_demand.utils import pandas_utils as pd_utils
 
 SegmentFactorDict = Dict[Any, Dict[Any, Dict[int, np.ndarray]]]
-LOG = nd_log.get_logger(f"{nd_log.get_package_logger_name()}.norms_tp_extractor")
+LOG = logging.getLogger(__name__)
 
 
 def infill_missing_values(

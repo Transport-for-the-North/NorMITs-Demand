@@ -23,8 +23,9 @@ Values: 1300 * 1300 matrix of tour proportion values for the given purpose,
 WARNING: Need an instance of CUBE installed in order for this to work.
 """
 # Built-Ins
-import multiprocessing as mp
 import os
+import logging
+import multiprocessing as mp
 import pickle as pk
 
 # Third Party
@@ -39,7 +40,7 @@ from normits_demand import logging as nd_log
 # BACKLOG: Rewrite all of CUBE to CSV code to be more generic
 #  label: rewrite
 
-LOG = nd_log.get_logger(f"{nd_log.get_package_logger_name()}.cube_extractor")
+LOG = logging.getLogger(__name__)
 
 # GLOBAL VARIABLES
 SOURCE_DIRECTORY = r'E:\temp\cube\2f ILF 2018\source - test'
