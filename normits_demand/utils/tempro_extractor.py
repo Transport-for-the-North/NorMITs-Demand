@@ -1236,6 +1236,8 @@ class TemproParser:
                 )
                 lower, upper = av_years[-2:]
                 start_year = upper
+            elif target_year < av_years[0]:
+                raise ValueError("target year is less than the minimum TEMPro year available")
             else:
                 # Interpolating between one year either side
                 lower = max(i for i in av_years if i < target_year)
