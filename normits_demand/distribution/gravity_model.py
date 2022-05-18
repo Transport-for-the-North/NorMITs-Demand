@@ -454,6 +454,9 @@ class GravityModelBase(abc.ABC):
         init_matrix = self.cost_function.calculate(cost_matrix, **cost_kwargs)
 
         # Do some prep for jacobian calculations
+        # TODO(BT): Move this into the Jacobian function. We don't need it here
+        #  and it's just using it memory before we need to. Could single loop it
+        #  too, so that only one extra cost matrix is needed. NOT n_cost_params
         self._jacobian_mats = {'base': init_matrix.copy()}
         for cost_param in self.cost_function.kw_order:
             # Adjust cost slightly
