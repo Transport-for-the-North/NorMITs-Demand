@@ -901,9 +901,10 @@ class DVector:
             raise ValueError(
                 "Found extra columns in the given DataFrame than needed. The "
                 "given DataFrame should only contain val_col, "
-                "segmentation_cols, and the zone_col (where applicable). "
+                "segmentation_cols, and the zone_col (where applicable).\n"
+                "Expected: %s\n"
                 "Found the following extra columns: %s"
-                % extra_cols
+                % (required_cols, extra_cols)
             )
 
         # Add the segment column - drop the individual cols

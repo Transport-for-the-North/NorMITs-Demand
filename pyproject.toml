@@ -1,6 +1,10 @@
 [tool.black]
 line-length = 95
 
+# Pylint settings
+[tool.pylint.basic]
+good-names="df, x"
+
 [tool.pylint.messages_control]
 disable = [
     "C0330",            # Compatibility with black
@@ -16,8 +20,9 @@ disable = [
 good-names = ["df", "ca", "tp", "to", "x", "i", "f"]
 
 [tool.pylint.design]
-max-attributes = 15
 max-args = 10
+max-attributes = 15
+max-statements = 100
 
 [tool.mypy]
 ignore_missing_imports = true

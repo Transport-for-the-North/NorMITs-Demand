@@ -12,6 +12,7 @@ Home of the NorMITs Distribution Model
 """
 # Built-Ins
 import os
+import pathlib
 
 from typing import Any
 from typing import List
@@ -33,6 +34,7 @@ from normits_demand.utils import vehicle_occupancy
 from normits_demand.utils import general as du
 from normits_demand.matrices import matrix_processing
 from normits_demand.matrices import pa_to_od
+from normits_demand.reports import matrix_reports
 
 from normits_demand.pathing.distribution_model import DistributionModelExportPaths
 from normits_demand.pathing.distribution_model import DMArgumentBuilderBase
@@ -348,17 +350,46 @@ class DistributionModel(DistributionModelExportPaths):
         self._logger.info("Lower Model Done!")
 
     def run_pa_matrix_reports(self):
-        # PA RUN REPORTS
-        # Matrix Trip ENd totals
-        #   Inter / Intra Report by segment?
-        #   Aggregate segments and report again too? (CBO)
-        # Sector Reports Dvec style
-        #   Output 24x24 square at 12 hours
-        # TLD curve
-        #   single mile bands - p/m (ca ) segments full matrix
-        #   NorMITs Vis
+        # Make sure we have full PA matrices before running
+        self._maybe_recombine_pa_matrices()
 
-        pass
+        input_fname_template = self.running_segmentation.generate_template_file_name(
+                file_desc="synthetic_pa",
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                csv=True
+            )
+        print(input_fname_template)
+        cost_matrices = self.arg_builder.build_pa_report_arguments(
+            self.compile_zoning_system,
+        )
+
+        # TODO(BT, PW): Moved all code into here - this can then be called by
+        #  the OD matrix reports too to get the same reports. Add all new code
+        #  into this function.
+        matrix_reports.generate_matrix_reports(
+            matrix_dir=pathlib.Path(self.export_paths.full_pa_dir),
+            report_dir=pathlib.Path(self.report_paths.pa_reports_dir),
+            matrix_segmentation=self.running_segmentation,
+            matrix_zoning_system=self.compile_zoning_system,
+            matrix_fname_template=input_fname_template,
+            cost_matrices=cost_matrices,
+            row_name='productions',
+            col_name='attractions',
+        )
+
+    def _maybe_recombine_pa_matrices(self):
+        """Combine pa matrices if it hasn't been done yet"""
+        # Build the I/O paths
+        in_paths = [
+            pathlib.Path(self.lower.export_paths.matrix_dir),
+            pathlib.Path(self.export_paths.upper_external_pa),
+        ]
+        out_path = pathlib.Path(self.export_paths.full_pa_dir)
+
+        # Only recombine if cache is older than original files
+        if file_ops.is_cache_older(original=in_paths, cache=out_path):
+            self._recombine_pa_matrices()
 
     def _recombine_pa_matrices(self):
         # ## GET THE FULL PA MATRICES ## #
@@ -431,8 +462,8 @@ class DistributionModel(DistributionModelExportPaths):
 
         # Get the translations
         pop_trans, emp_trans = translation.get_long_pop_emp_translations(
-            in_zoning_system=current_zoning,
-            out_zoning_system=self.compile_zoning_system,
+            from_zoning_system=current_zoning,
+            to_zoning_system=self.compile_zoning_system,
             weight_col_name=translation_weight_col
         )
 
@@ -474,7 +505,7 @@ class DistributionModel(DistributionModelExportPaths):
         # TODO(BT): Make sure the upper and lower matrices exist!
 
         # ## GET THE FULL PA MATRICES ## #
-        self._recombine_pa_matrices()
+        self._maybe_recombine_pa_matrices()
 
         # ## CONVERT HB PA TO OD ## #
         if self.trip_origin == 'hb':
@@ -588,7 +619,7 @@ class DistributionModel(DistributionModelExportPaths):
             )
 
         elif self.running_mode == nd.Mode.TRAIN:
-            self._recombine_pa_matrices()
+            self._maybe_recombine_pa_matrices()
 
             # Translate matrices if needed
             compile_in_path = self._maybe_translate_matrices_for_compile(

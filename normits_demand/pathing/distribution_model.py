@@ -147,8 +147,8 @@ class DMArgumentBuilderBase(abc.ABC):
     def _get_translations(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Get the translations between upper and lower zoning"""
         return translation.get_long_pop_emp_translations(
-            in_zoning_system=self.upper_zoning_system,
-            out_zoning_system=self.lower_zoning_system,
+            from_zoning_system=self.upper_zoning_system,
+            to_zoning_system=self.lower_zoning_system,
             weight_col_name=self._translation_weight_col
         )
 
@@ -610,6 +610,14 @@ class DMArgumentBuilderBase(abc.ABC):
 
     @abc.abstractmethod
     def build_pa_to_od_arguments(self) -> Dict[str, Any]:
+        pass
+
+    @abc.abstractmethod
+    def build_pa_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        pass
+
+    @abc.abstractmethod
+    def build_od_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
         pass
 
 
@@ -1127,6 +1135,15 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             'seg_params': seg_params,
             'fh_th_factors_dir': fh_th_factors_dir,
         }
+
+    def get_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        return self._build_cost_matrices(zoning_system)
+
+    def build_pa_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        return self.get_report_arguments(zoning_system)
+
+    def build_od_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        return self.get_report_arguments(zoning_system)
 
 
 # ## DEFINE EXPORT PATHS ##
