@@ -1,10 +1,6 @@
 [tool.black]
 line-length = 95
 
-# Pylint settings
-[tool.pylint.basic]
-good-names="df, x"
-
 [tool.pylint.messages_control]
 disable = [
     "C0330",            # Compatibility with black
