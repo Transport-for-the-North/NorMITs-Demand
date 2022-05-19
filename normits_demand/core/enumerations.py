@@ -67,14 +67,15 @@ class IsValidEnum(enum.Enum):
 @enum.unique
 class Mode(IsValidEnum):
     """Collection of valid modes and their values/names"""
-    WALK = 'walk'
-    CYCLE = 'cycle'
-    ACTIVE = 'walk_and_cycle'
-    CAR = 'car_and_passenger'
-    BUS = 'bus'
-    RAIL = 'rail'
-    TRAIN = 'train'
-    TRAM = 'tram'
+
+    WALK = "walk"
+    CYCLE = "cycle"
+    ACTIVE = "walk_and_cycle"
+    CAR = "car_and_passenger"
+    BUS = "bus"
+    RAIL = "rail"
+    TRAIN = "train"
+    TRAM = "tram"
 
     def get_mode_values(self):
         """Conversion from enum to modes"""
@@ -91,9 +92,7 @@ class Mode(IsValidEnum):
         }
 
         if self not in conversion:
-            raise nd.NormitsDemandError(
-                f"No definition exists for {self} mode_values"
-            )
+            raise nd.NormitsDemandError(f"No definition exists for {self} mode_values")
 
         return conversion[self]
 
@@ -131,11 +130,12 @@ class Mode(IsValidEnum):
 @enum.unique
 class Scenario(IsValidEnum):
     """Collection of valid Scenario names"""
-    NTEM = 'NTEM'
-    SC01_JAM = 'SC01_JAM'
-    SC02_PP = 'SC02_PP'
-    SC03_DD = 'SC03_DD'
-    SC04_UZC = 'SC04_UZC'
+
+    NTEM = "NTEM"
+    SC01_JAM = "SC01_JAM"
+    SC02_PP = "SC02_PP"
+    SC03_DD = "SC03_DD"
+    SC04_UZC = "SC04_UZC"
 
     @staticmethod
     def tfn_scenarios():
@@ -151,8 +151,9 @@ class Scenario(IsValidEnum):
 @enum.unique
 class TripOrigin(IsValidEnum):
     """Collection of valid trip origins"""
-    HB = 'hb'
-    NHB = 'nhb'
+
+    HB = "hb"
+    NHB = "nhb"
 
     def get_purposes(self):
         """Returns a list of purposes for this TripOrigin"""
@@ -184,15 +185,15 @@ class TripOrigin(IsValidEnum):
                 return to
 
         raise ValueError(
-            f"No TripOrigin exists with the value '{val}'. "
-            f"Expected one of: {valid_values}"
+            f"No TripOrigin exists with the value '{val}'. " f"Expected one of: {valid_values}"
         )
 
 
 @enum.unique
 class MatrixFormat(IsValidEnum):
     """Collection of valid matrix formats"""
-    PA = 'pa'
-    OD = 'od'
-    OD_TO = 'od_to'
-    OD_FROM = 'od_from'
+
+    PA = "pa"
+    OD = "od"
+    OD_TO = "od_to"
+    OD_FROM = "od_from"
