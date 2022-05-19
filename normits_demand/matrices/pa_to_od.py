@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on: Fri September 11 12:46:25 2020
+Created on: 11/09/2020
 Updated on:
 
 Original author: Ben Taylor
@@ -11,20 +11,24 @@ File purpose:
 Collection of functions for translating PA matrices into OD matrices.
 TODO: After integrations with TMS, combine with pa_to_od.py
   to create a general pa_to_od.py file
-
 """
+from __future__ import annotations
 
-import numpy as np
-import pandas as pd
+# Built-Ins
+import pathlib
 
 from typing import Any
 from typing import List
 from typing import Dict
 from typing import Tuple
 
+# Third Party
+import numpy as np
+import pandas as pd
 
-# self imports
+# Local Imports
 import normits_demand as nd
+from normits_demand import core as nd_core
 from normits_demand import logging as nd_log
 
 from normits_demand import constants as consts
@@ -38,6 +42,7 @@ from normits_demand.utils import math_utils
 
 # Can call tms pa_to_od.py functions from here
 from normits_demand.matrices.tms_pa_to_od import *
+
 
 LOG = nd_log.get_logger(__name__)
 
@@ -1269,6 +1274,18 @@ def _vdm_od_from_fh_th_factors(pa_import: str,
         )
 
         # Repeat loop for every wanted year
+
+
+def build_of_from_fh_th_factors(
+    pa_import_dir: pathlib.Path,
+    od_export_dir: pathlib.Path,
+    segmentation: nd_core.SegmentationLevel,
+    template_pa_name: str,
+    template_od_from_name: str,
+    template_od_to_name: str,
+    process_count: consts.PROCESS_COUNT,
+) -> None:
+    pass
 
 
 def build_od_from_fh_th_factors_old(
