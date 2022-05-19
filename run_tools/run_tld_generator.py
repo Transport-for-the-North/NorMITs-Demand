@@ -11,39 +11,44 @@ File purpose:
 
 """
 # Built-Ins
-import sys
-
-# Third Party
-
+import os
 # Local Imports
-sys.path.append("..")
-from normits_demand.cost import nts_extractor
+from normits_demand.cost import tld_generator
 
 
 def main():
-    # TODO(CS): path and smart search should be in constants
-    _TLB_FOLDER = 'I:/NorMITs Demand/import/trip_length_distributions'
-    _NTS_IMPORT = 'I:/NTS/classified builds/cb_tfn_v9.csv'
-    output_home = r'I:\NorMITs Demand\import\trip_length_distributions\tld_tool_outputs'
+    _TLB_FOLDER = 'I:/NTS/outputs/tld'
+    _TLB_VERSION = 'nts_tld_data_v3.1.csv'
+    _OUTPUT_FOLDER = r'I:\NorMITs Demand\import\trip_length_distributions\demand_imports'
+    run_version = 'v2.0'
+    target_folder = os.path.join(_OUTPUT_FOLDER, run_version)
 
-    run_another = True
-    while run_another:
-        extract = nts_extractor.TripLengthDistributionBuilder(
-            tlb_folder=_TLB_FOLDER,
-            nts_import=_NTS_IMPORT,
-            output_home=output_home,
-        )
+    _TLD_HOME = r'I:\NorMITs Demand\import\trip_length_distributions\config'
+    _BAND_FOLDER = os.path.join(_TLD_HOME, 'bands')
+    available_bands = os.listdir(_BAND_FOLDER)
+    available_bands = [x for x in available_bands if '.csv' in x]
 
-        extract.run_tlb_lookups(weekday=True)
+    _SEGMENTATION_FOLDER = os.path.join(_TLD_HOME, 'segmentations')
+    available_segmentations = os.listdir(_SEGMENTATION_FOLDER)
+    available_segmentations = [x for x in available_segmentations if '.csv' in x]
 
-        extract.build_mode_time_splits()
+    bands_path = os.path.join(_BAND_FOLDER, available_bands[0])
+    segmentation_path = os.path.join(_SEGMENTATION_FOLDER, available_segmentations[0])
 
-        extract.build_phi_factors(default_to_p = True)
+    extract = tld_generator.TripLengthDistributionGenerator(
+        tlb_folder=_TLB_FOLDER,
+        tlb_version=_TLB_VERSION,
+        output_folder=target_folder,
+    )
 
-        extract.build_tour_props()
-
-        if input('Run another y/n').lower() == 'n':
-            run_another = False
+    extract.tld_generator(
+        geo_area='north_incl_ie',
+        sample_period='week',
+        trip_filter_type='trip_OD',
+        bands_path=bands_path,
+        segmentation_path=segmentation_path,
+        cost_units='km'
+    )
 
 
 if __name__ == '__main__':
