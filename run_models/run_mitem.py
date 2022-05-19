@@ -25,7 +25,7 @@ from normits_demand.pathing import MiTEMImportPaths
 
 ##### CONSTANTS #####
 years = [2018, 2019]
-scenario = nd.Scenario.NTEM
+scenario = nd.Scenario.NTEM.value
 mitem_iter = "9.6c"
 lu_drive = run_notem.lu_drive
 by_iteration = run_notem.by_iteration
