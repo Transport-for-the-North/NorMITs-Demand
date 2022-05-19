@@ -2131,9 +2131,10 @@ def list_files(path: nd.PathLike,
 
     # Filter down to only the filetypes asked for
     keep_paths = list()
-    for file_type in ftypes:
-        temp = [x for x in paths if file_type in x]
-        keep_paths = list(set(temp + keep_paths))
+    for p in paths:
+        suffix = "".join(Path(p).suffixes)
+        if suffix in ftypes:
+            keep_paths.append(p)
 
     return keep_paths
 

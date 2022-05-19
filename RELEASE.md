@@ -53,6 +53,18 @@ Below, a brief summary of patches made since the previous version can be found.
   - If the gravity model fails to converge, and option has now been added
     to allow it to run again using default parameters. This often solves
     most problems.
+- NTEM Forecasting
+  - Added plotting module for the NTEM forecasting, which produces:
+    - Trip end growth heatmaps for all forecast years
+    - Heatmaps comparing model growth to TEMPro
+    - Scatter plots comparing model growth to TEMPro
+    - Matrix total growth plots
+  - Added functionality to read input parameters from a config file
+  - Updated to extract data from TEMPro databases directly, can still pass the
+    TEMPro data as a CSV if needed
+  - `TemproParser` can now handle extrapolating past the most recent year with data,
+    a warning to the user will be emitted when extrapolating
+  - Added base and forecast years to the NTEM parameters, instead of using EFS constants
 - Concurrency
   - Multi-threading framework added to make multi-threading simpler in codebase
   - `SharedNumpyArrayHelper` added to make communication of large numpy 
@@ -62,6 +74,10 @@ Below, a brief summary of patches made since the previous version can be found.
     inputs and outputs into NorMITs Demand
   - Added classes to convert demand from NoTEM/Tram Models into Distribution 
     Model.
+- Zone systems
+  - Added `lad_2020_internal_noham` zone system which contains LAD zones in the North analytical
+    area and NoHAM zones outside, used for the NTEM plots
+  - Added NoHAM and MSOA to `lad_2020_internal_noham` zone correspondences
 - Tools
   - Updated the Trip Length Distribution (TLD) code to become a tool for 
     generating TLDs for Demand Models
@@ -87,3 +103,5 @@ Below, a brief summary of patches made since the previous version can be found.
     values have been found
   - Fixed an issue with PA to OD conversion where not all arguments were being
     passed in
+  - Fixed LAD zoning system with some zones in the North area mislabelled as external
+  - Fixed NTEM forecast Excel growth comparison output filenames
