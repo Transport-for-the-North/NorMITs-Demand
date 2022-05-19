@@ -124,6 +124,7 @@ class Mode(IsValidEnum):
         )
 
     def get_name(self):
+        """Gets the name of this mode"""
         return self.value
 
 
@@ -136,11 +137,9 @@ class Scenario(IsValidEnum):
     SC03_DD = 'SC03_DD'
     SC04_UZC = 'SC04_UZC'
 
-    def get_name(self):
-        return self.value
-
     @staticmethod
     def tfn_scenarios():
+        """Gets a list of the TfN Future Travel Scenarios"""
         return [
             Scenario.SC01_JAM,
             Scenario.SC02_PP,
@@ -154,9 +153,6 @@ class TripOrigin(IsValidEnum):
     """Collection of valid trip origins"""
     HB = 'hb'
     NHB = 'nhb'
-
-    def get_name(self):
-        return self.value
 
     def get_purposes(self):
         """Returns a list of purposes for this TripOrigin"""

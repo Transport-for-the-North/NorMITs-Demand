@@ -13,7 +13,7 @@ disable = [
 
 # Pylint settings
 [tool.pylint.basic]
-good-names = ["df", "ca", "tp", "x", "i", "f"]
+good-names = ["df", "ca", "tp", "to", "x", "i", "f"]
 
 [tool.pylint.design]
 max-attributes = 15
