@@ -16,6 +16,7 @@ from __future__ import annotations
 
 # Built-Ins
 import pathlib
+import functools
 
 from typing import Any
 from typing import List
@@ -826,7 +827,7 @@ def to_od_via_fh_th_factors(
     pa_24: pd.DataFrame,
     fh_factor_dict: Dict[int, np.ndarray],
     th_factor_dict: Dict[int, np.ndarray],
-    tp_needed: List[int],
+    tp_needed: List[int] = None,
 ) -> Tuple[Dict[int, pd.DataFrame], Dict[int, pd.DataFrame]]:
     """Convert 24hr PA matrix into tp split OD-to and OD-from
 
@@ -861,7 +862,9 @@ def to_od_via_fh_th_factors(
         `(pa_24 * th_factor_dict[tp]).T`
     
     tp_needed:
-        The time periods to be expected in the output and the
+        The time periods to be expected in the output. If left as None, the
+        `fh_factor_dict` and `th_factor_dict` provided are the source of truth
+        for which tps should be output.
 
     Returns
     -------
@@ -1276,16 +1279,117 @@ def _vdm_od_from_fh_th_factors(pa_import: str,
         # Repeat loop for every wanted year
 
 
-def build_of_from_fh_th_factors(
+def _build_od_from_fh_th_factors_internal(
+    segmentation: nd_core.SegmentationLevel,
+    segment_params: Dict[str, Any],
+    pa_24_path: pathlib.Path,
+    fh_factor_path: pathlib.Path,
+    th_factor_path: pathlib.Path,
+    od_export_dir: pathlib.Path,
+    template_od_from_name: str,
+    template_od_to_name: str,
+) -> None:
+    """Internal multiprocessed function of build_od_from_fh_th_factors"""
+    # Convert into od-from and od-to
+    od_from, od_to = to_od_via_fh_th_factors(
+        pa_24=file_ops.read_df(pa_24_path, index_col=0),
+        fh_factor_dict=file_ops.read_pickle(fh_factor_path),
+        th_factor_dict=file_ops.read_pickle(th_factor_path),
+    )
+
+    # TODO(BT): Add in total checks and tidality checks!
+
+    # Write out to disk
+    iterator = [
+        (od_from, template_od_from_name),
+        (od_to, template_od_to_name),
+    ]
+
+    for mat_dict, template in iterator:
+        for tp, mat in mat_dict.items():
+            mat = mat.round(8)
+            segment_params.update({'tp': tp})
+            segment_str = segmentation.generate_template_segment_str(
+                naming_order=segmentation.naming_order + ['tp'],
+                segment_params=segment_params,
+            )
+            fname = template.format(segment_params=segment_str)
+            file_ops.write_df(mat, od_export_dir / fname)
+
+
+def build_od_from_fh_th_factors(
     pa_import_dir: pathlib.Path,
     od_export_dir: pathlib.Path,
+    factor_dir: pathlib.Path,
     segmentation: nd_core.SegmentationLevel,
     template_pa_name: str,
     template_od_from_name: str,
     template_od_to_name: str,
-    process_count: consts.PROCESS_COUNT,
+    template_fh_factor_name: str,
+    template_th_factor_name: str,
+    process_count: int = consts.PROCESS_COUNT,
 ) -> None:
-    pass
+    """
+
+    Parameters
+    ----------
+    pa_import_dir
+    od_export_dir
+    factor_dir
+    segmentation
+    template_pa_name
+    template_od_from_name
+    template_od_to_name
+    template_fh_factor_name
+    template_th_factor_name
+    process_count
+
+    Returns
+    -------
+
+    """
+    # Build a dictionary of the constant arguments across processes
+    unchanging_kwargs = {
+        "segmentation": segmentation,
+        "od_export_dir": od_export_dir,
+        "template_od_from_name": template_od_from_name,
+        "template_od_to_name": template_od_to_name,
+    }
+
+    # Build the changing kwargs
+    kwarg_list = list()
+    for segment_params in segmentation:
+
+        # Build the needed file paths
+        partial_fn_call = functools.partial(
+            segmentation.generate_file_name_from_template,
+            segment_params=segment_params,
+        )
+
+        fname = partial_fn_call(template=template_pa_name)
+        pa_24_path = pa_import_dir / fname
+
+        fname = partial_fn_call(template=template_fh_factor_name)
+        fh_factor_path = factor_dir / fname
+
+        fname = partial_fn_call(template=template_th_factor_name)
+        th_factor_path = factor_dir / fname
+
+        kwargs = {
+            "segment_params": segment_params,
+            "pa_24_path": pa_24_path,
+            "fh_factor_path": fh_factor_path,
+            "th_factor_path": th_factor_path,
+        }
+        kwargs.update(unchanging_kwargs.copy())
+        kwarg_list.append(kwargs)
+
+    # Call the multiprocessing
+    multiprocessing.multiprocess(
+        fn=_build_od_from_fh_th_factors_internal,
+        kwargs=kwarg_list,
+        process_count=process_count,
+    )
 
 
 def build_od_from_fh_th_factors_old(

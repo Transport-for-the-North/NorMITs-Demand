@@ -22,12 +22,10 @@ from typing import List
 # Third Party
 
 # Local Imports
-
-
-# ## CLASSES ## #
 import normits_demand as nd
 
 
+# ## CLASSES ## #
 class IsValidEnum(enum.Enum):
     """Enum with helper functions to check if a given value is valid"""
 

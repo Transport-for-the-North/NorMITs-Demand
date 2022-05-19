@@ -22,10 +22,12 @@ import pandas as pd
 import normits_demand as nd
 from normits_demand.utils import math_utils
 
-def check_fh_th_factors(factor_dict: Dict[int, np.array],
-                        tp_needed: List[int],
-                        n_row_col: int,
-                        ) -> None:
+
+def check_fh_th_factors(
+    factor_dict: Dict[int, np.array],
+    n_row_col: int,
+    tp_needed: List[int] = None,
+) -> None:
     """Validates the given factor_dict
 
     Checks the the factor_dict has the correct keys, as defined by tp_needed,
@@ -52,16 +54,16 @@ def check_fh_th_factors(factor_dict: Dict[int, np.array],
         If all the expected keys do not exist, or the values are not the
         expected shape.
     """
-    # Check all the expected keys are there
-    current_keys = set(factor_dict.keys())
-    expected_keys = set(tp_needed)
-    if current_keys != expected_keys:
-        raise ValueError(
-            "Not all expected time periods are in the given factor_dict."
-            "Expected: %s\n"
-            "Got: %s\n"
-            % (expected_keys, current_keys)
-        )
+    if tp_needed is not None:
+        # Check all the expected keys are there
+        current_keys = set(factor_dict.keys())
+        expected_keys = set(tp_needed)
+        if current_keys != expected_keys:
+            raise ValueError(
+                "Not all expected time periods are in the given factor_dict."
+                "Expected: %s\n"
+                "Got: %s\n" % (expected_keys, current_keys)
+            )
 
     # Make sure all values are the expected shape
     expected_shape = (n_row_col, n_row_col)
@@ -70,8 +72,7 @@ def check_fh_th_factors(factor_dict: Dict[int, np.array],
             raise ValueError(
                 "One of the values in factor_dict is no the expected shape."
                 "Expected: %s\n"
-                "Got: %s\n"
-                % (expected_shape, v.shape)
+                "Got: %s\n" % (expected_shape, v.shape)
             )
 
     # If here, all checks have passed
