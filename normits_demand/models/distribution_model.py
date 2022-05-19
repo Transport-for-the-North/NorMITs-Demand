@@ -13,6 +13,7 @@ Home of the NorMITs Distribution Model
 # Built-Ins
 import os
 import pathlib
+import functools
 
 from typing import Any
 from typing import List
@@ -114,6 +115,7 @@ class DistributionModel(DistributionModelExportPaths):
 
         # Assign attributes
         self.running_segmentation = running_segmentation
+        self.process_count = process_count
         self.upper_model_process_count = upper_model_process_count
         self.lower_model_process_count = lower_model_process_count
 
@@ -388,7 +390,7 @@ class DistributionModel(DistributionModelExportPaths):
         out_path = pathlib.Path(self.export_paths.full_pa_dir)
 
         # Only recombine if cache is older than original files
-        if file_ops.is_cache_older(original=in_paths, cache=out_path):
+        if file_ops.is_old_cache(original=in_paths, cache=out_path):
             self._recombine_pa_matrices()
 
     def _recombine_pa_matrices(self):
@@ -511,15 +513,33 @@ class DistributionModel(DistributionModelExportPaths):
         if self.trip_origin == 'hb':
             self._logger.info("Converting HB PA matrices to OD")
             kwargs = self.arg_builder.build_pa_to_od_arguments()
+
+            # Generate the template file names
+            template_fname = self.running_segmentation.generate_template_file_name(
+                file_desc="{matrix_format}",
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                compressed=True,
+            )
+            template_fname = functools.partial(
+                template_fname.format,
+                segment_params="{segment_params}",
+            )
+
+            template_pa_name = template_fname(matrix_format=self._pa_matrix_desc)
+            template_od_from_name = template_fname(matrix_format=self._od_from_matrix_desc)
+            template_od_to_name = template_fname(matrix_format=self._od_to_matrix_desc)
+
+            # Convert the matrices
             pa_to_od.build_od_from_fh_th_factors(
-                pa_import=self.export_paths.full_pa_dir,
-                od_export=self.export_paths.full_od_dir,
-                pa_matrix_desc=self._pa_matrix_desc,
-                od_to_matrix_desc=self._od_to_matrix_desc,
-                od_from_matrix_desc=self._od_from_matrix_desc,
-                base_year=self.year,
-                years_needed=[self.year],
-                **kwargs
+                pa_import_dir=pathlib.Path(self.export_paths.full_pa_dir),
+                od_export_dir=pathlib.Path(self.export_paths.full_od_dir),
+                segmentation=self.running_segmentation,
+                template_pa_name=template_pa_name,
+                template_od_from_name=template_od_from_name,
+                template_od_to_name=template_od_to_name,
+                process_count=self.process_count,
+                **kwargs,
             )
 
         # ## MOVE NHB TO OD DIR ## #

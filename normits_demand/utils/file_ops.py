@@ -1022,7 +1022,7 @@ def _convert_to_path_list(
     return [x for x in to_convert.iterdir() if x.is_file()]
 
 
-def is_cache_older(
+def is_old_cache(
     original: Union[pathlib.Path, Iterable[pathlib.Path]],
     cache: Union[pathlib.Path, Iterable[pathlib.Path]],
     ignore_cache: bool = False,
@@ -1062,4 +1062,4 @@ def is_cache_older(
     original = _convert_to_path_list(original)
     cache = _convert_to_path_list(cache)
 
-    return get_oldest_modified_time(cache) > get_latest_modified_time(original)
+    return get_oldest_modified_time(cache) < get_latest_modified_time(original)
