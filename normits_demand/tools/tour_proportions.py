@@ -289,6 +289,7 @@ class TourProportions:
     def get_tour_proportions_dictionary(
         self,
         segment_params: Dict[str, Any],
+        out_dtype: type = None,
     ) -> nd_types.TimePeriodNestedDict:
         """Generate the tour proportion nested dictionary
 
@@ -304,6 +305,10 @@ class TourProportions:
             segments, and the values are the values of the segments.
             This is the format returned when iterating over a
             nd.core.SegmentationLevel
+
+        out_dtype:
+            The datatype to cast the matrices to before writing to disk.
+            If left as None, no casting is done.
 
         Returns
         -------
@@ -333,6 +338,10 @@ class TourProportions:
             col = col.sort_values(by=self.zone_col)
             col = col[str(tp_to)].values
             matrix = np.broadcast_to(col, (len(col), len(col))).T
+
+            # Cast if needed and attach to the dictionary
+            if out_dtype is not None:
+                matrix = matrix.astype(out_dtype)
             return_dict[tp_from][tp_to] = matrix
 
         return return_dict
@@ -340,6 +349,7 @@ class TourProportions:
     def get_from_home_factor_dictionary(
         self,
         segment_params: Dict[str, Any],
+        out_dtype: type = None,
     ) -> Dict[int, np.ndarray]:
         """Generate a from-home factor dictionary
 
@@ -354,6 +364,10 @@ class TourProportions:
             This is the format returned when iterating over a
             nd.core.SegmentationLevel
 
+        out_dtype:
+            The datatype to cast the matrices to before writing to disk.
+            If left as None, no casting is done.
+
         Returns
         -------
         from_home_factor_dict:
@@ -362,7 +376,7 @@ class TourProportions:
             arrays.
         """
         # Get the tour proportions
-        tour_props = self.get_tour_proportions_dictionary(segment_params)
+        tour_props = self.get_tour_proportions_dictionary(segment_params, out_dtype)
 
         # Simplify into from home factors
         return_dict = dict.fromkeys(self.time_periods)
@@ -378,6 +392,7 @@ class TourProportions:
     def get_to_home_factor_dictionary(
         self,
         segment_params: Dict[str, Any],
+        out_dtype: type = None,
     ) -> Dict[int, np.ndarray]:
         """Generate a to-home factor dictionary
 
@@ -392,6 +407,10 @@ class TourProportions:
             This is the format returned when iterating over a
             nd.core.SegmentationLevel
 
+        out_dtype:
+            The datatype to cast the matrices to before writing to disk.
+            If left as None, no casting is done.
+
         Returns
         -------
         from_home_factor_dict:
@@ -400,7 +419,7 @@ class TourProportions:
             arrays.
         """
         # Get the tour proportions
-        tour_props = self.get_tour_proportions_dictionary(segment_params)
+        tour_props = self.get_tour_proportions_dictionary(segment_params, out_dtype)
 
         # Simplify into from home factors
         return_dict = dict.fromkeys(self.time_periods)
@@ -417,6 +436,7 @@ class TourProportions:
         self,
         segment_params: Dict[str, Any],
         path: os.PathLike,
+        out_dtype: type = None,
     ) -> None:
         """Generate the tour proportions and write to disk
 
@@ -438,17 +458,22 @@ class TourProportions:
             The path to write the generated tour proportions to. Written
             out file will be a pickle file.
 
+        out_dtype:
+            The datatype to cast the matrices to before writing to disk.
+            If left as None, no casting is done.
+
         Returns
         -------
         None
         """
-        tour_props = self.get_tour_proportions_dictionary(segment_params)
+        tour_props = self.get_tour_proportions_dictionary(segment_params, out_dtype)
         file_ops.write_pickle(tour_props, path)
 
     def write_from_home_factors(
         self,
         segment_params: Dict[str, Any],
         path: os.PathLike,
+        out_dtype: type = None,
     ) -> None:
         """Generate a from-home factor dictionary and write to disk
 
@@ -463,6 +488,10 @@ class TourProportions:
             This is the format returned when iterating over a
             nd.core.SegmentationLevel
 
+        out_dtype:
+            The datatype to cast the matrices to before writing to disk.
+            If left as None, no casting is done.
+
         path:
             The path to write the generated tour proportions to. Written
             out file will be a pickle file.
@@ -471,13 +500,14 @@ class TourProportions:
         -------
         None
         """
-        fh_factors = self.get_from_home_factor_dictionary(segment_params)
+        fh_factors = self.get_from_home_factor_dictionary(segment_params, out_dtype)
         file_ops.write_pickle(fh_factors, path)
 
     def write_to_home_factors(
         self,
         segment_params: Dict[str, Any],
         path: os.PathLike,
+        out_dtype: type = None,
     ) -> None:
         """Generate a to-home factor dictionary and write to disk
 
@@ -492,6 +522,10 @@ class TourProportions:
             This is the format returned when iterating over a
             nd.core.SegmentationLevel
 
+        out_dtype:
+            The datatype to cast the matrices to before writing to disk.
+            If left as None, no casting is done.
+
         path:
             The path to write the generated tour proportions to. Written
             out file will be a pickle file.
@@ -500,7 +534,7 @@ class TourProportions:
         -------
         None
         """
-        fh_factors = self.get_to_home_factor_dictionary(segment_params)
+        fh_factors = self.get_to_home_factor_dictionary(segment_params, out_dtype)
         file_ops.write_pickle(fh_factors, path)
 
 

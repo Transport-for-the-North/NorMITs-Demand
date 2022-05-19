@@ -21,6 +21,7 @@ from typing import Union
 
 # Third Party
 import tqdm
+import numpy as np
 import pandas as pd
 
 # Local Imports
@@ -165,7 +166,7 @@ def main():
 
         fname = tp_splits.output_seg.generate_file_name(file_desc='tour_proportions', **fname_kwargs)
         path = os.path.join(io_paths.tour_props_export_dir, fname)
-        ooo.write_tour_proportions(segment_params, path)
+        ooo.write_tour_proportions(segment_params, path, out_dtype=np.float32)
 
         fname = tp_splits.output_seg.generate_file_name(file_desc='fh_factors', **fname_kwargs)
         path = os.path.join(io_paths.fh_th_factor_export_dir, fname)
