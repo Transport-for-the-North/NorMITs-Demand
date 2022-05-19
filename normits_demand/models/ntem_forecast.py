@@ -785,7 +785,7 @@ def convert_to_od(
     """
     LOG.info("Converting PA to OD")
     od_folder.mkdir(exist_ok=True, parents=True)
-    pa_to_od.build_od_from_fh_th_factors(
+    pa_to_od.build_od_from_fh_th_factors_old(
         pa_import=pa_folder,
         od_export=od_folder,
         fh_th_factors_dir=pa_to_od_factors["post_me_fh_th_factors"],

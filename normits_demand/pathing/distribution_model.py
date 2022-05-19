@@ -754,7 +754,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         )
         fname = self.running_segmentation.generate_file_name(
             trip_origin=self.trip_origin.value,
-            file_desc="%s_cost" % zoning_system.name,
+            file_desc=f"{zoning_system.name}_cost",
             segment_params=segment_params,
             csv=True,
         )
