@@ -25,6 +25,7 @@ from typing import Tuple
 
 # self imports
 import normits_demand as nd
+from normits_demand import logging as nd_log
 
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
@@ -37,6 +38,9 @@ from normits_demand.utils import math_utils
 
 # Can call tms pa_to_od.py functions from here
 from normits_demand.matrices.tms_pa_to_od import *
+
+LOG = nd_log.get_logger(__name__)
+
 
 def trip_end_pa_to_od(pa_productions,
                       phi_lookup_folder: str,
@@ -1267,18 +1271,19 @@ def _vdm_od_from_fh_th_factors(pa_import: str,
         # Repeat loop for every wanted year
 
 
-def build_od_from_fh_th_factors(pa_import: str,
-                                od_export: str,
-                                fh_th_factors_dir: str,
-                                seg_level: str,
-                                seg_params: Dict[str, Any],
-                                base_year: str = efs_consts.BASE_YEAR,
-                                years_needed: List[int] = efs_consts.FUTURE_YEARS,
-                                pa_matrix_desc: str = 'pa',
-                                od_to_matrix_desc: str = 'od_to',
-                                od_from_matrix_desc: str = 'od_from',
-                                process_count: int = consts.PROCESS_COUNT,
-                                ) -> None:
+def build_od_from_fh_th_factors_old(
+    pa_import: str,
+    od_export: str,
+    fh_th_factors_dir: str,
+    seg_level: str,
+    seg_params: Dict[str, Any],
+    base_year: str = efs_consts.BASE_YEAR,
+    years_needed: List[int] = efs_consts.FUTURE_YEARS,
+    pa_matrix_desc: str = 'pa',
+    od_to_matrix_desc: str = 'od_to',
+    od_from_matrix_desc: str = 'od_from',
+    process_count: int = consts.PROCESS_COUNT,
+) -> None:
     """Builds OD Matrices from PA using the factors in fh_th_factors_dir
 
     Builds OD matrices based on the base year tour proportions
@@ -1341,6 +1346,11 @@ def build_od_from_fh_th_factors(pa_import: str,
     -------
     None
     """
+    LOG.info(
+        "pa_to_od.build_od_from_fh_th_factors_old() is deprecated and will be "
+        "removed in a future update. Please move all functionality over to "
+        "using pa_to_od.build_od_from_fh_th_factors() instead."
+    )
     # Init
     seg_level = du.validate_seg_level(seg_level)
 

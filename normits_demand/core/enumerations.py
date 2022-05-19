@@ -15,6 +15,7 @@ from __future__ import annotations
 # Built-Ins
 import enum
 
+from typing import Any
 from typing import Dict
 from typing import List
 
@@ -27,8 +28,45 @@ from typing import List
 import normits_demand as nd
 
 
+class IsValidEnum(enum.Enum):
+    """Enum with helper functions to check if a given value is valid"""
+
+    @classmethod
+    def to_list(cls):
+        """Convert Enum into a list of Enums"""
+        return list(cls)
+
+    @classmethod
+    def values_to_list(cls):
+        """Convert Enum into a list of Enum values"""
+        return [x.value for x in list(cls)]
+
+    @classmethod
+    def to_enum(cls, value: Any) -> enum.Enum:
+        """Converts a value to a member of this enum class"""
+        # NOTE: enum("value") does the same thing
+        if isinstance(value, IsValidEnum):
+            return value
+        return cls(value)
+
+    @classmethod
+    def is_valid(cls, value: Any) -> bool:
+        """Checks if a value is a valid member of this enum"""
+        if isinstance(value, IsValidEnum):
+            return value in cls.to_list()
+
+        # Try convert to enum, if fails, it isn't valid
+        success = True
+        try:
+            cls(value)
+        except ValueError:
+            success = False
+        return success
+
+
 @enum.unique
-class Mode(enum.Enum):
+class Mode(IsValidEnum):
+    """Collection of valid modes and their values/names"""
     WALK = 'walk'
     CYCLE = 'cycle'
     ACTIVE = 'walk_and_cycle'
@@ -54,8 +92,7 @@ class Mode(enum.Enum):
 
         if self not in conversion:
             raise nd.NormitsDemandError(
-                "No definition exists for %s mode_values"
-                % self
+                f"No definition exists for {self} mode_values"
             )
 
         return conversion[self]
@@ -74,9 +111,9 @@ class Mode(enum.Enum):
 
         if len(mode_vals) > 1:
             raise ValueError(
-                "Mode %s has more than one mode value. If you want to return "
-                "multiple mode values, use Mode.get_mode_values() instead."
-                % self.value
+                f"Mode {self.value} has more than one mode value. "
+                f"If you want to return multiple mode values, use "
+                f"Mode.get_mode_values() instead."
             )
 
         # Must somehow have returned nothing?
@@ -91,7 +128,8 @@ class Mode(enum.Enum):
 
 
 @enum.unique
-class Scenario(enum.Enum):
+class Scenario(IsValidEnum):
+    """Collection of valid Scenario names"""
     NTEM = 'NTEM'
     SC01_JAM = 'SC01_JAM'
     SC02_PP = 'SC02_PP'
@@ -112,7 +150,8 @@ class Scenario(enum.Enum):
 
 
 @enum.unique
-class TripOrigin(enum.Enum):
+class TripOrigin(IsValidEnum):
+    """Collection of valid trip origins"""
     HB = 'hb'
     NHB = 'nhb'
 
@@ -123,11 +162,10 @@ class TripOrigin(enum.Enum):
         """Returns a list of purposes for this TripOrigin"""
         p_dict = TripOrigin.get_purpose_dict()
 
-        if self not in p_dict.keys():
+        if self not in p_dict:
             raise ValueError(
-                "Internal error. There doesn't seem to be a purpose definition "
-                "for TripOrigin %s"
-                % self.value
+                f"Internal error. There doesn't seem to be a purpose "
+                f"definition for TripOrigin {self.value}"
             )
 
         return p_dict[self]
@@ -150,6 +188,15 @@ class TripOrigin(enum.Enum):
                 return to
 
         raise ValueError(
-            "No TripOrigin exists with the value '%s'. Expected one of: %s"
-            % (val, valid_values)
+            f"No TripOrigin exists with the value '{val}'. "
+            f"Expected one of: {valid_values}"
         )
+
+
+@enum.unique
+class MatrixFormat(IsValidEnum):
+    """Collection of valid matrix formats"""
+    PA = 'pa'
+    OD = 'od'
+    OD_TO = 'od_to'
+    OD_FROM = 'od_from'

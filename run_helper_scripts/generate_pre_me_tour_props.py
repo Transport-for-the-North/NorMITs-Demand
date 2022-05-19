@@ -17,6 +17,7 @@ import pathlib
 import dataclasses
 
 from typing import List
+from typing import Union
 
 # Third Party
 import tqdm
@@ -28,6 +29,7 @@ sys.path.append("..")
 from normits_demand import core as nd_core
 from normits_demand.pathing import NoTEMExportPaths
 from normits_demand.tools import tour_proportions
+from normits_demand.utils import file_ops
 
 # pylint: enable=import-error,wrong-import-position
 
@@ -37,8 +39,9 @@ MODE = nd_core.Mode.CAR
 ZONING_NAME = "noham"
 YEAR = 2018
 IMPORT_DRIVE = "I:/"
+EXPORT_HOME = r"E:\temp\tour props"
+# EXPORT_PATH = r"I:\NorMITs Demand\import\modal"
 NOTEM_SCENARIO = nd_core.Scenario.SC01_JAM
-
 
 NOTEM_ITER = "9.10"
 RETURN_HOME_VERSION = "v3.0"
@@ -49,10 +52,13 @@ class IOPaths:
     """Build and store IO paths for script"""
 
     year: int
-    import_drive: pathlib.Path
+    mode: nd_core.Mode
+    import_drive: Union[pathlib.Path, str]
+    export_home: Union[pathlib.Path, str]
     return_home_version_name: str
     notem_scenario: nd_core.Scenario
     notem_iteration_name: str
+    zoning_system_name: nd_core.ZoningSystem
 
     # Optional arguments - probably don't want changing
     nd_dir_name: str = "NorMITs Demand"
@@ -60,6 +66,8 @@ class IOPaths:
     return_home_dir_name: str = "phi_factors"
     import_dir_name: str = "import"
     return_home_file_name: str = "phi_factors_m{mode}.csv"
+    tour_prop_dir_name: str = "pre_me_tour_proportions"
+    fh_th_dir_name: str = "fh_th_factors"
 
     def __post_init__(self):
         # Set up useful dir paths
@@ -79,6 +87,14 @@ class IOPaths:
 
         proxy = notem_paths.hb_production.export_paths
         self.hb_productions_path = proxy.notem_segmented[self.year]
+
+        # Build the export paths
+        iter_name = f"v{self.notem_iteration_name}"
+        temp = self.export_home / self.mode.value / self.tour_prop_dir_name
+        self.tour_props_export_dir = temp / iter_name / self.zoning_system_name
+        self.fh_th_factor_export_dir = self.tour_props_export_dir / self.fh_th_dir_name
+        file_ops.create_folder(self.tour_props_export_dir)
+        file_ops.create_folder(self.fh_th_factor_export_dir)
 
     def get_return_home_factor_path(self, mode: nd_core.Mode) -> pathlib.Path:
         """Build the path to the return_home factors for `mode`"""
@@ -107,10 +123,13 @@ def main():
     """Set up a run, then run"""
     io_paths = IOPaths(
         year=YEAR,
+        mode=MODE,
         import_drive=pathlib.Path(IMPORT_DRIVE),
+        export_home=pathlib.Path(EXPORT_HOME),
         return_home_version_name=RETURN_HOME_VERSION,
         notem_iteration_name=NOTEM_ITER,
         notem_scenario=NOTEM_SCENARIO,
+        zoning_system_name=ZONING_NAME,
     )
 
     running_args = RunningArgs(mode=MODE, zoning_system_name=ZONING_NAME)
@@ -142,16 +161,19 @@ def main():
 
     desc = "Generating Tour Proportions"
     for segment_params in tqdm.tqdm(tp_splits.output_seg, desc=desc):
-        path = r"E:\temp\tour props"
-
         fname_kwargs = {"trip_origin": "hb", "year": str(YEAR), "ftype": ".pkl", "segment_params": segment_params}
 
         fname = tp_splits.output_seg.generate_file_name(file_desc='tour_proportions', **fname_kwargs)
-        ooo.write_tour_proportions(segment_params, os.path.join(path, fname))
+        path = os.path.join(io_paths.tour_props_export_dir, fname)
+        ooo.write_tour_proportions(segment_params, path)
+
         fname = tp_splits.output_seg.generate_file_name(file_desc='fh_factors', **fname_kwargs)
-        ooo.write_from_home_factors(segment_params, os.path.join(path, fname))
+        path = os.path.join(io_paths.fh_th_factor_export_dir, fname)
+        ooo.write_from_home_factors(segment_params, path)
+
         fname = tp_splits.output_seg.generate_file_name(file_desc='th_factors', **fname_kwargs)
-        ooo.write_to_home_factors(segment_params, os.path.join(path, fname))
+        path = os.path.join(io_paths.fh_th_factor_export_dir, fname)
+        ooo.write_to_home_factors(segment_params, path)
 
 
 if __name__ == "__main__":
