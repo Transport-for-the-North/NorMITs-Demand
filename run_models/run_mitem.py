@@ -24,9 +24,9 @@ from normits_demand.pathing import MiTEMImportPaths
 
 
 ##### CONSTANTS #####
-years = run_notem.years
-scenario = run_notem.scenario
-mitem_iter = "9.6b"
+years = [2018, 2019]
+scenario = nd.Scenario.NTEM
+mitem_iter = "9.6c"
 lu_drive = run_notem.lu_drive
 by_iteration = run_notem.by_iteration
 fy_iteration = run_notem.fy_iteration
@@ -59,7 +59,7 @@ def main():
     post_me_adjustments = TripEndAdjustmentFactors(
         file=pathlib.Path(
             r"T:\MidMITs Demand\MiHAM Assignments\Post ME Trip Rate Adjustments"
-            r"\iter9.3.3b\Adjustment Factors"
+            r"\iter9.6b.1\Adjustment Factors"
             r"\prior_post_comparison_productions_lad_2020-hb_p_m_tp_week-CAR-cutoff0_2.csv.bz2"
         ),
         segmentation=nd.get_segmentation_level("hb_p_m_tp_week"),
