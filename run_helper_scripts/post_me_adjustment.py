@@ -239,9 +239,10 @@ def iter_od_matrices(prior_folder: Path, post_folder: Path) -> Iterator[MatrixDe
     """
     suffixes = (".csv", ".csv.bz2", ".pbz2")
     for prior in prior_folder.iterdir():
-        if prior.is_dir() or prior.suffix.lower() not in suffixes:
+        suffix = "".join(prior.suffixes)
+        if prior.is_dir() or suffix.lower() not in suffixes:
             continue
-        stem = prior.name.removesuffix("".join(prior.suffixes))
+        stem = prior.name.removesuffix(suffix)
         stem = stem.replace("synthetic_", "")
 
         # Only use HB from home matrices
