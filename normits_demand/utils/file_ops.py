@@ -40,13 +40,36 @@ from normits_demand import constants as consts
 from normits_demand.utils import compress
 from normits_demand.utils import general as du
 
-from normits_demand.concurrency import multiprocessing as multiprocessing
+from normits_demand.concurrency import multiprocessing
+from normits_demand.concurrency import multithreading
 
 # Imports that need moving into here
 from normits_demand.utils.general import list_files
 
 # CONSTANTS
 PD_COMPRESSION = {'.zip', '.gzip', '.bz2', '.zstd', '.csv.bz2'}
+
+
+class WriteDfThread(multithreading.ReturnOrErrorThread):
+    """Simple Thread for writing to disk using a thread"""
+
+    def __init__(self, df: pd.DataFrame, path: nd.PathLike, **kwargs) -> None:
+        multithreading.ReturnOrErrorThread.__init__(self)
+        self.df = df
+        self.path = path
+        self.kwargs = kwargs
+
+    def run_target(self) -> None:
+        """Runs a furness once all data received, and passes data back
+
+        Runs forever - therefore needs to be a daemon.
+        Overrides parent to run this on thread start.
+
+        Returns
+        -------
+        None
+        """
+        write_df(self.df, self.path, **self.kwargs)
 
 
 def remove_suffixes(path: pathlib.Path) -> pathlib.Path:
@@ -314,7 +337,7 @@ def read_df(path: nd.PathLike,
         )
 
 
-def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
+def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> None:
     """
     Writes the dataframe at path. Decompresses the df if needed.
 
@@ -349,9 +372,34 @@ def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
 
     else:
         raise ValueError(
-            "Cannot determine the filetype of the given path. Expected "
-            "either '.csv' or '%s'" % consts.COMPRESSION_SUFFIX
+            f"Cannot determine the filetype of the given path. Expected "
+            f"either '.csv' or '{consts.COMPRESSION_SUFFIX}'"
         )
+
+
+def write_df_threaded(*args, **kwargs) -> WriteDfThread:
+    """
+    Writes the dataframe at path. Decompresses the df if needed.
+
+    Parameters
+    ----------
+    df:
+        The dataframe to write to disk
+
+    path:
+        The full path to the dataframe to read in
+
+    **kwargs:
+        Any arguments to pass to the underlying write function.
+
+    Returns
+    -------
+    df:
+        The read in df at path.
+    """
+    thread = WriteDfThread(*args, **kwargs)
+    thread.start()
+    return thread
 
 
 def filename_in_list(filename: nd.PathLike,

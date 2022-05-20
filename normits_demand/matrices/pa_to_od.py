@@ -36,6 +36,7 @@ from normits_demand import logging as nd_log
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
 from normits_demand.concurrency import multiprocessing
+from normits_demand.concurrency import multithreading
 
 from normits_demand.matrices import utils as mat_utils
 from normits_demand.utils import general as du
@@ -1341,6 +1342,7 @@ def _build_od_from_fh_th_factors_internal(
         (od_to, template_od_to_name),
     ]
 
+    writing_threads = list()
     for mat_dict, template in iterator:
         for tp, mat in mat_dict.items():
             mat = mat.round(8)
@@ -1350,7 +1352,11 @@ def _build_od_from_fh_th_factors_internal(
                 segment_params=segment_params,
             )
             fname = template.format(segment_params=segment_str)
-            file_ops.write_df(mat, od_export_dir / fname)
+            thread = file_ops.write_df_threaded(mat, od_export_dir / fname)
+            writing_threads.append(thread)
+
+    # Wait for all the threads to finish
+    multithreading.wait_for_thread_return_or_error(writing_threads)
 
 
 def build_od_from_fh_th_factors(

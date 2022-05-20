@@ -71,9 +71,7 @@ class ReturnOrErrorThread(threading.Thread):
         threading.Thread.__init__(
             self,
             *args,
-            name=name,
-            daemon=daemon,
-            **kwargs,
+            **dict(kwargs, name=name, daemon=daemon),
         )
 
         if error_event is None:
