@@ -57,22 +57,22 @@ class ReturnOrErrorThread(threading.Thread):
 
     def __init__(
         self,
+        *args,
         name: str = None,
         error_event: threading.Event = None,
         error_q: queue.Queue = None,
         daemon: bool = True,
-        *args,
         **kwargs,
     ):
         # Add Thread to name if given
         if name is not None and name.lower()[:6] != "thread":
-            name = "Thread-%s" % name
+            name = f"Thread-{name}"
 
         threading.Thread.__init__(
             self,
+            *args,
             name=name,
             daemon=daemon,
-            *args,
             **kwargs,
         )
 
@@ -87,15 +87,18 @@ class ReturnOrErrorThread(threading.Thread):
         self._return_val = None
 
     @property
-    def error_event(self):
+    def error_event(self) -> threading.Event:
+        """The Event that is triggered on an error in this thread"""
         return self._error_event
 
     @property
-    def error_q(self):
+    def error_q(self) -> queue.Queue:
+        """The Queue of errors triggered in this thread"""
         return self._error_q
 
     @property
-    def return_val(self):
+    def return_val(self) -> Any:
+        """The return value of the `self.run` of this thread"""
         return self._return_val
 
     def run(self) -> None:
@@ -125,9 +128,9 @@ class ReturnOrErrorThread(threading.Thread):
 
 def wait_for_thread_dict_return_or_error(
     return_threads: Dict[Any, ReturnOrErrorThread],
+    *args,
     error_threads: Dict[Any, ReturnOrErrorThread] = None,
     error_threads_list: List[ReturnOrErrorThread] = None,
-    *args,
     **kwargs,
 ) -> Dict[Any, Any]:
     """Wrapper around to allow a dictionary of threads instead.
@@ -162,9 +165,9 @@ def wait_for_thread_dict_return_or_error(
 
     # Call original function
     results_list = wait_for_thread_return_or_error(
+        *args,
         return_threads=return_thread_list,
         error_threads=list(error_threads.values()) + error_threads_list,
-        *args,
         **kwargs,
     )
 
@@ -284,7 +287,7 @@ def wait_for_thread_return_or_error(
 
                 # If here, thread must be finished. Check for errors
                 if thread.error_event.is_set():
-                    msg = "Error occurred in thread: %s" % thread.name
+                    msg = f"Error occurred in thread: {thread.name}"
                     raise MultithreadingError(msg) from thread.error_q.get()
 
             # Check if any results are ready
@@ -296,7 +299,7 @@ def wait_for_thread_return_or_error(
 
                 # If here, thread must be finished. Check for errors
                 if thread.error_event.is_set():
-                    msg = "Error occurred in thread: %s" % thread.name
+                    msg = f"Error occurred in thread: {thread.name}"
                     raise MultithreadingError(msg) from thread.error_q.get()
 
                 # Finally, get the return value. Mark as done
