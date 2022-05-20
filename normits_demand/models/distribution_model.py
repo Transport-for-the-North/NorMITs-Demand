@@ -552,7 +552,7 @@ class DistributionModel(DistributionModelExportPaths):
             csv=True
         )
         print(input_fname_template)
-        cost_matrices = self.arg_builder.build_pa_report_arguments(
+        cost_matrices = self.arg_builder.build_od_report_arguments(
             self.compile_zoning_system,
         )
 
@@ -560,14 +560,14 @@ class DistributionModel(DistributionModelExportPaths):
         #  the OD matrix reports too to get the same reports. Add all new code
         #  into this function.
         matrix_reports.generate_matrix_reports(
-            matrix_dir=pathlib.Path(self.export_paths.full_pa_dir),
-            report_dir=pathlib.Path(self.report_paths.pa_reports_dir),
+            matrix_dir=pathlib.Path(self.export_paths.full_od_dir),
+            report_dir=pathlib.Path(self.report_paths.od_reports_dir),
             matrix_segmentation=self.running_segmentation,
             matrix_zoning_system=self.compile_zoning_system,
             matrix_fname_template=input_fname_template,
             cost_matrices=cost_matrices,
-            row_name='productions',
-            col_name='attractions',
+            row_name='origins',
+            col_name='destinations',
         )
 
     def compile_to_assignment_format(self):

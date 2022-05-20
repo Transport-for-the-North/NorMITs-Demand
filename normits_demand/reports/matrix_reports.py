@@ -444,7 +444,6 @@ def generate_matrix_reports(
         val_col=val_col_name,
     )
 
-    # TODO: add ca, tp cols permanently
     tld_full = templates.DistributionModelReportTLDData(
         tld_data=pd.concat(tld_list, ignore_index=True),
         lower_col='lower',
