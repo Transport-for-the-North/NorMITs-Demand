@@ -1,6 +1,7 @@
 import pathlib
 from dataclasses import dataclass
 from functools import reduce
+import logging
 from os import path
 from typing import Optional
 
@@ -100,8 +101,8 @@ def read_tfn() -> dict:
     emp_base.columns = ["soc", f"{p.years['base year']}"]
     pop_base.columns = ["area type", f"{p.years['base year']}"]
     dict = {
-        "emp": [emp_base, ["soc", f"{p.years['base year']}"]],
-        "pop": [pop_base, ["area type", f"{p.years['base year']}"]],
+        "emp": [emp_base, ["msoa_zone_id","employment_cat","soc", f"{p.years['base year']}"]],
+        "pop": [pop_base, ["msoa_zone_id","tfn_traveller_type","area_type", f"{p.years['base year']}"]],
     }
     return dict
 
@@ -150,14 +151,15 @@ def int_year(
             path.join(p.data_source, p.NTEM_output_dir, f"{target_year}.csv")
         ).set_index("ZoneID")
     else:
-        if year_1 is None or year_2 is None:
-            raise ValueError("Please provide two NTEM years sandwiching your target year")
-        df_1 = pd.read_csv(
-            path.join(p.data_source, p.NTEM_output_dir, f"{year_1}.csv")
-        ).set_index("ZoneID")
-        df_2 = pd.read_csv(
-            path.join(p.data_source, p.NTEM_output_dir, f"{year_2}.csv")
-        ).set_index("ZoneID")
+        try:
+            df_1 = pd.read_csv(
+                path.join(p.data_source, p.NTEM_output_dir, f"{year_1}.csv")
+            ).set_index("ZoneID")
+            df_2 = pd.read_csv(
+                path.join(p.data_source, p.NTEM_output_dir, f"{year_2}.csv")
+            ).set_index("ZoneID")
+        except FileNotFoundError:
+            logging.warning("Check your file path to csvs and NTEM years provided.")
         diff = df_2 - df_1
         target_df = df_1 + ((target_year - year_1) / (year_2 - year_1)) * diff
         return target_df
@@ -355,7 +357,7 @@ def main():
         df = apply_abs(sector).reset_index()
         output = df[cols]
         output.set_index(
-            ["msoa_zone_id", "tfn_traveller_type", dic[sector][1][0]], inplace=True
+            dic[sector][1][0], inplace=True
         )
         output.to_csv(
             path.join(
