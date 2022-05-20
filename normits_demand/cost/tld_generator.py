@@ -97,7 +97,7 @@ class TripLengthDistributionGenerator:
                          'agg_tfn_at': [1, 1, 2, 2, 3, 3, 4, 4]}
 
     # Define weekdays
-    _weekdays = [1, 2, 3, 4, 5]
+    _weekday_tps = [1, 2, 3, 4]
 
     segment_treatment = {'trip_origin': 'trip_origin',
                          'p': 'int',
@@ -107,6 +107,7 @@ class TripLengthDistributionGenerator:
 
     segment_order = [key for key, value in segment_treatment.items()]
 
+    # Correspondences between segment names and NTS data names
     tld_to_nts_names = {'m': 'main_mode',
                         'p': 'p',
                         'tp': 'start_time',
@@ -150,8 +151,20 @@ class TripLengthDistributionGenerator:
         print('Loading processed NTS trip length data from %s' % self.tlb_import_path)
         self.nts_import = pd.read_csv(self.tlb_import_path)
         self.output_folder = output_folder
-        self.trip_miles_col = trip_miles_col
-        self.trip_distance_col = trip_distance_col
+
+        if trip_miles_col in list(self.nts_import):
+            self.trip_miles_col = trip_miles_col
+        else:
+            raise ValueError(
+                'Given trip miles col %s not in NTS data' % trip_miles_col
+            )
+
+        if trip_distance_col in list(self.nts_import):
+            self.trip_distance_col = trip_distance_col
+        else:
+            raise ValueError(
+                'Given trip distance col %s not in NTS data' % trip_distance_col
+            )
 
     def _apply_geo_filter(self,
                           output_dat: pd.DataFrame,
@@ -252,8 +265,8 @@ class TripLengthDistributionGenerator:
         Subset a NTS table to weekdays only using 'TravelWeekDay'
         Correct weekdays defined in class
         """
-        w_d = self.weekdays
-        output_dat = output_dat[output_dat['TravelWeekDay_B01ID'].isin(w_d)]
+        w_d = self._weekday_tps
+        output_dat = output_dat[output_dat['start_time'].isin(w_d)]
         output_dat = output_dat.reset_index(drop=True)
 
         return output_dat
@@ -279,18 +292,19 @@ class TripLengthDistributionGenerator:
 
         Returns
         ----------
-        bands:
+        out_frame:
             Import bands DataFrame with appended trip and distance totals
         """
 
         dist_constant = self.miles_to_other_distance[cost_units]
 
-        tlb_sub = seg_sub.copy()
+        loc_bands = bands.copy()
 
-        for line, thres in bands.iterrows():
+        for line, threshold in loc_bands.iterrows():
+            tlb_sub = seg_sub.copy()
 
-            lower = thres['lower']
-            upper = thres['upper']
+            lower = threshold['lower']
+            upper = threshold['upper']
 
             tlb_sub = tlb_sub[
                 tlb_sub[self.trip_miles_col] >= lower].reset_index(drop=True)
@@ -299,14 +313,20 @@ class TripLengthDistributionGenerator:
 
             total_miles = tlb_sub[self.trip_miles_col].sum()
             total_trips = tlb_sub[self.trip_distance_col].sum()
-            mean_miles = total_miles/total_trips
+
+            mean_miles = sum(tlb_sub[self.trip_miles_col]*tlb_sub[self.trip_distance_col])
+            mean_miles /= total_trips
             # Value adjusted for target distance
             mean_val = mean_miles * dist_constant
 
-            thres['mean_%s' % cost_units] = mean_val
-            thres['total_trips'] = total_trips
+            loc_bands.loc[line, ('mean_%s' % cost_units)] = mean_val
+            loc_bands.loc[line, 'total_trips'] = total_trips
 
-        return bands
+        loc_bands['dist'] = loc_bands['total_trips']/loc_bands['total_trips'].sum()
+        loc_bands['lower'] *= dist_constant
+        loc_bands['upper'] *= dist_constant
+
+        return loc_bands
 
     def _filter_segment(self,
                         seg_sub: pd.DataFrame,
@@ -379,12 +399,48 @@ class TripLengthDistributionGenerator:
 
         return nts_sub
 
-    def _build_tld_name(self,
-                        seg_descs,
-                        cost_units):
+    @staticmethod
+    def _append_segment_names(tld: pd.DataFrame,
+                              seg_descs: dict()):
+        """
+        Add the segment descriptions and names back into the distribution,
+        so they're readable in aggregate and auditable against what the
+        folder says they are
+
+        Parameters
+        ----------
+        tld:
+            Run dataframe of a distribution
+        seg_descs:
+            Dictionary of segment names and classifications
+
+        Returns
+        -------
+        tld: pd.DataFrame
+            input TLD with description columns
+        """
+
+        # Append segment sub-categories to tld matrix
+        # retain order
+        index_order = ['lower', 'upper']
+        end_cols = list(tld)[1:]
+        for segment, seg_val in seg_descs.items():
+            tld[segment] = seg_val
+            index_order.append(segment)
+
+        index_order += end_cols
+
+        tld = tld.reindex(index_order, axis=1)
+
+        return tld
+
+    def _build_single_tld_name(
+            self,
+            seg_descs,
+            cost_units):
 
         """
-        Build a single names for the distribution, using its definition
+        Build single names for the distribution, using its definition
         takes a standard order of construction from class
 
         Parameters
@@ -398,12 +454,9 @@ class TripLengthDistributionGenerator:
         -------
         tld_name: str
             Name of individual segment
-        seg_output_name: str
-            Name of distribution at large
         """
 
         tld_name = str()
-        seg_output_name = str()
 
         for valid_name in self.segment_order:
             if valid_name in list(seg_descs.keys()):
@@ -413,19 +466,61 @@ class TripLengthDistributionGenerator:
 
                 if method == 'trip_origin':
                     tld_name += seg_value
-                    seg_output_name += valid_name
 
                 elif method == 'tp':
                     if seg_value != 0:
                         tld_name += '_' + valid_name + seg_value
-                        seg_output_name += '_' + valid_name
                 else:
                     tld_name += '_' + valid_name + seg_value
-                    seg_output_name += valid_name
 
-        tld_name += cost_units
+        tld_name += '_' + cost_units
 
-        return tld_name, seg_output_name
+        return tld_name
+
+    def _build_set_tld_name(
+            self,
+            segments):
+        """
+        Build a set name for the distribution, using its definition
+        takes a standard order of construction from class
+
+        Parameters
+        ----------
+        seg_descs:
+            List of segment descriptions
+        cost_units:
+            Units used in totals to be appended to tld name
+
+        Returns
+        -------
+        seg_output_name: str
+            Name of distribution at large
+        """
+
+        seg_output_name = str()
+
+        seg_descs = list(segments)
+
+        for valid_name in self.segment_order:
+            if valid_name in seg_descs:
+
+                method = self.segment_treatment[str(valid_name)]
+
+                if method == 'trip_origin':
+                    # is there only 1 trip origin
+                    origin_types = segments[valid_name].unique()
+                    # if so append to names
+                    if len(origin_types == 1):
+                        seg_output_name += origin_types[0]
+
+                elif method == 'tp':
+                    # If all tps are 0, omit from name
+                    if bool(segments[valid_name].unique() == 0):
+                        seg_output_name += '_' + valid_name
+                else:
+                    seg_output_name += '_' + valid_name
+
+        return seg_output_name
 
     def _handle_sample_period(self,
                               input_dat,
@@ -434,7 +529,6 @@ class TripLengthDistributionGenerator:
         Function to subset whole dataset for time periods
         """
         # TODO: Needs to be expanded to work for other time periods
-        # Also needs to work with the new time period format in import data
 
         if sample_period == 'weekday':
             input_dat = self._filter_to_weekday(input_dat)
@@ -524,22 +618,30 @@ class TripLengthDistributionGenerator:
                     seg_descs.update({segment: seg_value})
 
             if verbose:
-                print(len(seg_sub))
+                print('Filtered for %s' % row)
+                print('Remaining records %d' % len(seg_sub))
 
             # build tld
             tld = self._build_band_subset(
                 seg_sub=seg_sub,
                 bands=bands,
-                cost_units=cost_units)
+                cost_units=cost_units
+            )
+
+
+            tld = self._append_segment_names(
+                tld,
+                seg_descs
+            )
 
             # build single tld name
-            tld_name, seg_output_name = self._build_tld_name(
+            tld_name = self._build_single_tld_name(
                 seg_descs,
                 cost_units=cost_units)
 
             tld_dict.update({tld_name: tld})
 
-        return tld_dict, seg_output_name
+        return tld_dict
 
     def tld_generator(self,
                       geo_area: str,
@@ -629,8 +731,8 @@ class TripLengthDistributionGenerator:
                                            )
         records.append(len(input_dat))
 
-        # Build tld
-        tld_dict, seg_output_name = self.build_tld(
+        # Build tld dictionary, return a proper name for the distributions
+        tld_dict = self.build_tld(
             input_dat=input_dat,
             trip_filter_type=trip_filter_type,
             bands=bands,
@@ -638,6 +740,8 @@ class TripLengthDistributionGenerator:
             cost_units=cost_units,
             verbose=verbose
         )
+
+        seg_output_name = self._build_set_tld_name(segments)
 
         # Build output path
         tld_out_path = os.path.join(
@@ -656,12 +760,15 @@ class TripLengthDistributionGenerator:
             # for csv in mat
             file_ops.create_folder(tld_out_path)
 
+            # TODO: Archive anything that's in this folder already, to ss
+            # Write final compiled tld
+            full_export.to_csv(
+                os.path.join(tld_out_path, 'full_export.csv'), index=False)
+
             # Write individual tlds
             for path, df in tld_dict.items():
                 csv_path = path + '.csv'
                 individual_file = os.path.join(tld_out_path, csv_path)
                 df.to_csv(individual_file, index=False)
-
-            full_export.to_csv(tld_out_path + 'full_export.csv', index=False)
 
         return tld_dict, full_export

@@ -19,12 +19,10 @@ from normits_demand.cost import tld_generator
 def main():
     _TLB_FOLDER = 'I:/NTS/outputs/tld'
     _TLB_VERSION = 'nts_tld_data_v3.1.csv'
-    _OUTPUT_FOLDER = r'I:\NorMITs Demand\import\trip_length_distributions\demand_imports'
-    run_version = 'v2.0'
-    target_folder = os.path.join(_OUTPUT_FOLDER, run_version)
-
+    _OUTPUT_FOLDER = r'I:\NorMITs Demand\import\trip_length_distributions'
     _TLD_HOME = r'I:\NorMITs Demand\import\trip_length_distributions\config'
     _BAND_FOLDER = os.path.join(_TLD_HOME, 'bands')
+
     available_bands = os.listdir(_BAND_FOLDER)
     available_bands = [x for x in available_bands if '.csv' in x]
 
@@ -38,7 +36,7 @@ def main():
     extract = tld_generator.TripLengthDistributionGenerator(
         tlb_folder=_TLB_FOLDER,
         tlb_version=_TLB_VERSION,
-        output_folder=target_folder,
+        output_folder=_OUTPUT_FOLDER,
     )
 
     extract.tld_generator(
@@ -47,7 +45,8 @@ def main():
         trip_filter_type='trip_OD',
         bands_path=bands_path,
         segmentation_path=segmentation_path,
-        cost_units='km'
+        cost_units='km',
+        verbose=True
     )
 
 
