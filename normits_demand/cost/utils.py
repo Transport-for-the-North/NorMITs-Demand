@@ -194,6 +194,75 @@ def calculate_cost_distribution(matrix: np.ndarray,
         return distribution / distribution.sum()
 
 
+def calculate_reporting_cost_distribution(matrix: np.ndarray,
+                                cost_matrix: np.ndarray,
+                                min_bounds: List[float] = None,
+                                max_bounds: List[float] = None,
+                                bin_edges: List[float] = None,
+                                ) -> np.ndarray:
+    """
+    Calculates the band share sum and distribution of matrix.
+
+    Parameters
+    ----------
+    matrix:
+        The matrix to calculate the cost distribution for. This matrix
+        should be the same shape as cost_matrix
+
+    cost_matrix:
+        A matrix of cost relating to matrix. This matrix
+        should be the same shape as matrix
+
+    min_bounds:
+        A list of minimum bounds for each edge of a distribution band.
+        Corresponds to max_bounds.
+
+    max_bounds:
+        A list of maximum bounds for each edge of a distribution band.
+        Corresponds to min_bounds.
+
+    bin_edges:
+        Defines a monotonically increasing array of bin edges, including the
+        rightmost edge, allowing for non-uniform bin widths. This argument
+        is passed straight into `numpy.histogram`
+
+    Returns
+    -------
+    distribution:
+        sum of trips by distance band
+
+    cost_distribution:
+        a numpy array of distributed costs, where the bands are equivalent
+        to min/max values in self.target_cost_distribution
+
+    See Also
+    --------
+    `numpy.histogram`
+    """
+    # Use bounds to calculate bin edges
+    if bin_edges is None:
+        if min_bounds is None or max_bounds is None:
+            raise ValueError(
+                "Either bin_edges needs to be set, or both min_bounds and "
+                "max_bounds needs to be set."
+            )
+
+        bin_edges = [min_bounds[0]] + max_bounds
+
+    # Sort into bins
+    distribution, _ = np.histogram(
+        a=cost_matrix,
+        bins=bin_edges,
+        weights=matrix,
+    )
+
+    # Normalise
+    if distribution.sum() == 0:
+        return np.zeros_like(distribution), np.zeros_like(distribution)
+    else:
+        return distribution, distribution / distribution.sum()
+
+
 def _get_cutoff_idx(lst: List[float], cutoff: float) -> int:
     """Get the index of the cutoff point in lst
 

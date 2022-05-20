@@ -21,6 +21,7 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 import tqdm
+import operator
 
 # Local Imports
 # pylint: disable=import-error
@@ -123,7 +124,8 @@ def write_trip_end_sector_reports(
     dvec = nd_core.DVector(
         import_data=trip_end,
         segmentation=segmentation,
-        zoning_system=zoning_system
+        zoning_system=zoning_system,
+        time_format='avg_day'
     )
 
     dvec.write_sector_reports(
@@ -140,7 +142,7 @@ def matrix_sector_summary(
     index_col_name: str = "sector_row",
     columns_col_name: str = "sector_column",
     val_col_name: str = "val",
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Generate sector summaries of given matrix
 
     Parameters
@@ -174,6 +176,10 @@ def matrix_sector_summary(
     long_sector_matrix:
         `sector_matrix`, converted to wide format, with `segment_params`
         attached as columns.
+
+    sector_df_intra:
+        The intrazonal trips of the given matrix summed into sector zoning
+        (output as tripends)
     """
     # Translate into sector zoning
     sector_zoning = nd_core.get_zoning_system("ca_sector_2020")
@@ -274,7 +280,7 @@ def generate_excel_sector_report(
 
     # Add Sector Intras to excel report
     pd_utils.append_df_to_excel(
-        df=sector_intras,
+        df=sector_intras.sector_data,
         path=output_path,
         sheet_name='sector_intra_data',
         index=False,
@@ -284,7 +290,7 @@ def generate_excel_sector_report(
 
     # Add TLDs to excel report
     pd_utils.append_df_to_excel(
-        df=tld_dist,
+        df=tld_dist.tld_data,
         path=output_path,
         sheet_name='tld_data',
         index=False,
@@ -371,33 +377,40 @@ def generate_matrix_reports(
         sector_matrix.to_csv(sector_matrix_dir / sector_fname)
 
         # ## GENERATE COST DISTRIBUTION CURVES ## #
-        # TODO(BT, PW): Pass in the right bands here
-        #  Pass this data into generate_excel_sector_report() below, and add
-        #  into the sector report
+        # TODO(BT, PW): TLD code works - to be tidied
+        #  ee masking is included by default - may wish to toggle this
+        external_mask = pd_utils.get_wide_mask(
+            df=matrix,
+            zones=matrix_zoning_system.external_zones,
+            join_fn=operator.and_
+        )
+        matrix_no_ee = matrix * ~external_mask
+
         segment_name = matrix_segmentation.get_segment_name(segment_params)
         bin_edges = np.array([0, 1, 2, 3, 5, 10, 15, 25, 35, 50, 100, 200, np.inf]) * 1.609344
-        achieved_distribution = cost_utils.calculate_cost_distribution(
-            matrix=matrix.values,
+        distribution, achieved_distribution = cost_utils.calculate_reporting_cost_distribution(
+            matrix=matrix_no_ee.values,
             cost_matrix=cost_matrices[segment_name],
             bin_edges=bin_edges
         )
 
         tld = pd.DataFrame(
-            {'lower (km)': bin_edges[:-1],
-             'upper (km)': bin_edges[1:],
-             'distribution %': achieved_distribution
+            {'lower': bin_edges[:-1],
+             'upper': bin_edges[1:],
+             'distribution': distribution,
+             'distribution_pct': achieved_distribution
              }
         )
         print(tld)
 
-        # Add in segment cols
+        # Add in segment cols before class fills defaults
         for key, val in segment_params.items():
             tld[key] = val
 
         # Re-order cols
         col_order = (
                 list(segment_params.keys())
-                + ['lower (km)', 'upper (km)', 'distribution %']
+                + ['lower', 'upper', 'distribution', 'distribution_pct']
         )
         tld = tld.reindex(columns=col_order)
 
@@ -425,8 +438,20 @@ def generate_matrix_reports(
     )
     print("sector intras full table")
     print(sector_intras_full)
-    sector_intras_full = pd.concat(sector_intras_full, ignore_index=True)
-    tld_full = pd.concat(tld_list, ignore_index=True)
+    sector_intras_full = templates.DistributionModelTripEndReportData(
+        sector_data=pd.concat(sector_intras_full, ignore_index=True),
+        from_zone_col=row_name,
+        val_col=val_col_name,
+    )
+
+    # TODO: add ca, tp cols permanently
+    tld_full = templates.DistributionModelReportTLDData(
+        tld_data=pd.concat(tld_list, ignore_index=True),
+        lower_col='lower',
+        upper_col='upper',
+        distribution_col='distribution',
+        distribution_pct_col='distribution_pct'
+    )
 
     generate_excel_sector_report(
         sector_report_data=sector_report_data,

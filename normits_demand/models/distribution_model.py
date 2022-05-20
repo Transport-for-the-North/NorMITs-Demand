@@ -540,17 +540,35 @@ class DistributionModel(DistributionModelExportPaths):
             )
 
     def run_od_matrix_reports(self):
-        # PA RUN REPORTS
-        # Matrix Trip ENd totals
-        #   Inter / Intra Report by segment?
-        #   Aggregate segments and report again too? (CBO)
-        # Sector Reports Dvec style
-        #   Output 24x24 square at 12 hours
-        # TLD curve
-        #   single mile bands - p/m (ca ) segments full matrix
-        #   NorMITs Vis
+        # Make sure we have full OD matrices before running
+        # self._maybe_recombine_pa_matrices()
 
-        pass
+        # TODO: OD to and OD from to add (for directional OD) OR just compile to OD?
+        #  OD report arguments
+        input_fname_template = self.running_segmentation.generate_template_file_name(
+            file_desc="synthetic_od",
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            csv=True
+        )
+        print(input_fname_template)
+        cost_matrices = self.arg_builder.build_pa_report_arguments(
+            self.compile_zoning_system,
+        )
+
+        # TODO(BT, PW): Moved all code into here - this can then be called by
+        #  the OD matrix reports too to get the same reports. Add all new code
+        #  into this function.
+        matrix_reports.generate_matrix_reports(
+            matrix_dir=pathlib.Path(self.export_paths.full_pa_dir),
+            report_dir=pathlib.Path(self.report_paths.pa_reports_dir),
+            matrix_segmentation=self.running_segmentation,
+            matrix_zoning_system=self.compile_zoning_system,
+            matrix_fname_template=input_fname_template,
+            cost_matrices=cost_matrices,
+            row_name='productions',
+            col_name='attractions',
+        )
 
     def compile_to_assignment_format(self):
         """TfN Specific helper function to compile outputs into assignment format

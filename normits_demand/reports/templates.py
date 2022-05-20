@@ -107,6 +107,10 @@ class DistributionModelMatrixReportSectorData:
     ca_col:
         The name of the column in `sector_data` which contains the purpose
         segment value.
+
+    tp_col:
+        The name of the column in `sector_data` which contains the time period
+        segment value.
     """
     sector_data: pd.DataFrame
     from_zone_col: str
@@ -116,11 +120,12 @@ class DistributionModelMatrixReportSectorData:
     p_col: Optional[str] = 'p'
     m_col: Optional[str] = 'm'
     ca_col: Optional[str] = 'ca'
+    tp_col: Optional[str] = 'tp'
     segment_default_value: InitVar[int] = -1
 
     def __post_init__(self, segment_default_value: int):
         # Add in any columns that don't exist
-        for col_name in [self.p_col, self.m_col, self.ca_col]:
+        for col_name in [self.p_col, self.m_col, self.ca_col, self.tp_col]:
             if col_name not in self.sector_data.columns:
                 self.sector_data[col_name] = segment_default_value
 
@@ -135,6 +140,7 @@ class DistributionModelMatrixReportSectorData:
             self.p_col,
             self.m_col,
             self.ca_col,
+            self.tp_col,
             self.val_col,
         ]
 
@@ -144,4 +150,167 @@ class DistributionModelMatrixReportSectorData:
             self.from_zone_col,
             self.to_zone_col,
             self.val_col,
+        ]
+
+
+@dataclasses.dataclass
+class DistributionModelTripEndReportData:
+    """Helper class to store and manipulate sector output cols
+
+    To be used in conjunction with
+    ReportTemplates.DISTRIBUTION_MODEL_MATRIX
+
+    Attributes
+    ----------
+    sector_data:
+        A pandas DataFrame containing all the trip end sector data.
+        Must contain the required columns, as defined in
+        `self.required_cols()`
+
+    from_zone_col:
+        The name of the column in `sector_data` which contains the from zone
+        name.
+
+    val_col:
+        The name of the column in `sector_data` which contains the data values.
+
+    p_col:
+        The name of the column in `sector_data` which contains the purpose
+        segment value.
+
+    m_col:
+        The name of the column in `sector_data` which contains the purpose
+        segment value.
+
+    ca_col:
+        The name of the column in `sector_data` which contains the purpose
+        segment value.
+
+    tp_col:
+        The name of the column in `sector_data` which contains the time period
+        segment value.
+    """
+    sector_data: pd.DataFrame
+    from_zone_col: str
+    val_col: str
+
+    p_col: Optional[str] = 'p'
+    m_col: Optional[str] = 'm'
+    ca_col: Optional[str] = 'ca'
+    tp_col: Optional[str] = 'tp'
+    segment_default_value: InitVar[int] = -1
+
+    def __post_init__(self, segment_default_value: int):
+        # Add in any columns that don't exist
+        for col_name in [self.p_col, self.m_col, self.ca_col, self.tp_col]:
+            if col_name not in self.sector_data.columns:
+                self.sector_data[col_name] = segment_default_value
+
+        # Force sector data into the right order
+        self.sector_data = self.sector_data.reindex(columns=self.col_order())
+
+    def col_order(self):
+        """Get a list of the columns in their required output order"""
+        return [
+            self.from_zone_col,
+            self.p_col,
+            self.m_col,
+            self.ca_col,
+            self.tp_col,
+            self.val_col,
+        ]
+
+    def required_cols(self):
+        """Get a list of the required columns for the sector report"""
+        return [
+            self.from_zone_col,
+            self.val_col,
+        ]
+
+
+@dataclasses.dataclass
+class DistributionModelReportTLDData:
+    """Helper class to store and manipulate sector output cols
+
+    To be used in conjunction with
+    ReportTemplates.DISTRIBUTION_MODEL_MATRIX
+
+    Attributes
+    ----------
+    tld_data:
+        A pandas DataFrame containing the distance bands, trip total and distribution.
+        Must contain the required columns, as defined in
+        `self.required_cols()`
+
+    distribution_col:
+        The name of the column in `tld_data` which contains the data totals.
+
+    distribution_pct_col:
+        The name of the column in `tld_data` which contains the band percentages.
+
+    lower_col:
+        The name of the column in `tld_data` which contains the lower boundary of
+        the distance band.
+
+    upper_col:
+        The name of the column in `tld_data` which contains the upper boundary of
+        the distance band.
+
+    p_col:
+        The name of the column in `sector_data` which contains the purpose
+        segment value.
+
+    m_col:
+        The name of the column in `sector_data` which contains the purpose
+        segment value.
+
+    ca_col:
+        The name of the column in `sector_data` which contains the purpose
+        segment value.
+
+    tp_col:
+        The name of the column in `sector_data` which contains the time period
+        segment value.
+    """
+    tld_data: pd.DataFrame
+    lower_col: str
+    upper_col: str
+    distribution_col: str
+    distribution_pct_col: str
+
+    p_col: Optional[str] = 'p'
+    m_col: Optional[str] = 'm'
+    ca_col: Optional[str] = 'ca'
+    tp_col: Optional[str] = 'tp'
+    segment_default_value: InitVar[int] = -1
+
+    def __post_init__(self, segment_default_value: int):
+        # Add in any columns that don't exist
+        for col_name in [self.p_col, self.m_col, self.ca_col, self.tp_col]:
+            if col_name not in self.tld_data.columns:
+                self.tld_data[col_name] = segment_default_value
+
+        # Force sector data into the right order
+        self.tld_data = self.tld_data.reindex(columns=self.col_order())
+
+    def col_order(self):
+        """Get a list of the columns in their required output order"""
+        return [
+            self.p_col,
+            self.m_col,
+            self.ca_col,
+            self.tp_col,
+            self.lower_col,
+            self.upper_col,
+            self.distribution_col,
+            self.distribution_pct_col,
+        ]
+
+    def required_cols(self):
+        """Get a list of the required columns for the tld report"""
+        return [
+            self.lower_col,
+            self.upper_col,
+            self.distribution_col,
+            self.distribution_pct_col,
         ]

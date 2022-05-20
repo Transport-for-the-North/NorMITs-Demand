@@ -59,14 +59,17 @@ def main():
     # mode = nd.Mode.TRAIN
     # mode = nd.Mode.TRAM
 
+    # Reporting name
+    report_name_toggle = False
+
     # Running params
     use_tram = True
     memory_optimised_multi_area_grav = True
 
     calibrate_params = True
 
-    run_hb = True
-    run_nhb = False
+    run_hb = False
+    run_nhb = True
 
     run_all = False
     run_upper_model = False
@@ -75,6 +78,15 @@ def main():
     run_pa_to_od = False
     run_od_matrix_reports = False
     compile_to_assignment = False
+
+    # TODO: Pass report_name through to generate_matrix_reports
+    #  line 328 sector_report_path
+    #  Add exclude ee toggle for TLD (default = exclude)
+    if report_name_toggle:
+        report_name = '_v' + DM_ITERATION_NAME + '_' + SCENARIO.name
+    else:
+        report_name = ''
+    print(report_name)
 
     if mode == nd.Mode.CAR:
         # Define zoning systems
