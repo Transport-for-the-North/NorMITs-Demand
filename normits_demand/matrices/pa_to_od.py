@@ -16,6 +16,7 @@ from __future__ import annotations
 
 # Built-Ins
 import pathlib
+import operator
 import functools
 
 from typing import Any
@@ -828,6 +829,7 @@ def to_od_via_fh_th_factors(
     fh_factor_dict: Dict[int, np.ndarray],
     th_factor_dict: Dict[int, np.ndarray],
     tp_needed: List[int] = None,
+    validate_tidality: bool = True,
 ) -> Tuple[Dict[int, pd.DataFrame], Dict[int, pd.DataFrame]]:
     """Convert 24hr PA matrix into tp split OD-to and OD-from
 
@@ -866,6 +868,13 @@ def to_od_via_fh_th_factors(
         `fh_factor_dict` and `th_factor_dict` provided are the source of truth
         for which tps should be output.
 
+    validate_tidality:
+        Whether to validate the tidality of the generated from-home and
+        to-home matrices. That is, every trip which leaves a cell (from-home)
+        must also return back to that cell (to-home) over all the time periods.
+        We don't need to worry about non-home-based trips here as they're
+        not used in this conversion.
+
     Returns
     -------
     od_from_matrices:
@@ -875,6 +884,17 @@ def to_od_via_fh_th_factors(
     od_to_matrices:
         A dictionary in the same format as th_factor_dict, but the values
         will be pandas DataFrames of each from home matrix at a time period.
+
+    Raises
+    ------
+    NormitsDemandError:
+        If any of the following three checks fail:
+        - The total of the from-home and the to-home matrices are not similar
+          enough
+        - The total of the from-home and the to-home matrices do not sum
+          together the total twice the sum of the given `pa_24` matrix
+        - If `validate_tidality` is `True` and the check described above does
+          not pass.
     """
     # Make sure we have a square matrix
     if len(pa_24.index) != len(pa_24.columns):
@@ -930,7 +950,25 @@ def to_od_via_fh_th_factors(
             f"OD total: {float(od_total):.2f}\n"
         )
 
-    # BACKLOG: Add a tidality check into the PA to OD process
+    # Check the tidality. I.E. Everyone who leaves a place, must return there
+    # over the course of all the time periods.
+    fh_24 = functools.reduce(operator.add, fh_mats.values())
+    th_24 = functools.reduce(operator.add, th_mats.values())
+    total_error = (fh_24.values - th_24.values.T).sum()
+
+    # Write out the message depending on the errors
+    if not total_error < 1:
+        msg = (
+            "The generated od-to and od-from matrices did not pass the "
+            "tidality check. Please perform a manual check. Perhaps the "
+            "given splitting factors are incorrect.\n"
+            f"Total Error: {total_error:.4f}"
+        )
+
+        if not validate_tidality:
+            LOG.warning(msg)
+        else:
+            raise nd.NormitsDemandError(msg)
 
     return fh_mats, th_mats
 
@@ -1297,8 +1335,6 @@ def _build_od_from_fh_th_factors_internal(
         th_factor_dict=file_ops.read_pickle(th_factor_path),
     )
 
-    # TODO(BT): Add in total checks and tidality checks!
-
     # Write out to disk
     iterator = [
         (od_from, template_od_from_name),
@@ -1329,24 +1365,79 @@ def build_od_from_fh_th_factors(
     template_th_factor_name: str,
     process_count: int = consts.PROCESS_COUNT,
 ) -> None:
-    """
+    """Generate and write out the od_from and od_to matrices
+
+    Loops through all the segments in `segmentation`, converting the pa
+    matrices into od-to and od-from matrices. The od-from matrices are simply
+    `od_from_in_tp = pa_24 * fh_factors[tp]`
+
+    and the to-home matrices are:
+    `od_to_in_tp = (pa_24 * th_factors[tp]).T`
 
     Parameters
     ----------
     pa_import_dir
-    od_export_dir
-    factor_dir
-    segmentation
-    template_pa_name
-    template_od_from_name
-    template_od_to_name
-    template_fh_factor_name
-    template_th_factor_name
-    process_count
+        The directory containing the pa matrices to import and convert to
+        OD. The matrix names in this folder will be generated from
+        `template_pa_name`.
+
+    od_export_dir:
+        The directory to write out the generated od matrices. The matrix names
+        for writing out will be generated from `template_od_from_name`
+        and `template_od_to_name`.
+
+    factor_dir:
+        The directory containing all of the from-home and to-home factors to
+        use to generate the od-to and od-from matrices. This directory should
+        contain and individual pickle file from each segmentation. Each file
+        should then contain a dictionary where the keys are the time periods
+        for each factor, and the values are matrices of the same shape as the
+        24hr PA matrix.
+
+    segmentation:
+        The segmentation to iterate over and to use to generate the
+        segment_params to use with the template names. This segmentation
+        defines which matrices in `pa_import_dir` will be used.
+
+    template_pa_name:
+        A template string to use as the filename for all of the PA matrices
+        in `pa_import_dir`. This string should contain `"{segment_params}"` so
+        it can be formatted with
+        `template_pa_name.format(segment_params=segment_params)`.
+
+    template_od_from_name:
+        A template string to use as the filename for all of the OD from
+        matrices that will be written out to `od_export_dir`. This string
+        should contain `"{segment_params}"` so it can be formatted with
+        `template_od_from_name.format(segment_params=segment_params)`.
+
+    template_od_to_name:
+        A template string to use as the filename for all of the OD to
+        matrices that will be written out to `od_export_dir`. This string
+        should contain `"{segment_params}"` so it can be formatted with
+        `template_od_to_name.format(segment_params=segment_params)`.
+
+    template_fh_factor_name:
+        A template string to use as the filename for all of the from-home
+        factor pickle files in `factor_dir`.This string should contain
+        `"{segment_params}"` so it can be formatted with
+        `template_fh_factor_name.format(segment_params=segment_params)`.
+
+    template_th_factor_name:
+        A template string to use as the filename for all of the to-home
+        factor pickle files in `factor_dir`.This string should contain
+        `"{segment_params}"` so it can be formatted with
+        `template_th_factor_name.format(segment_params=segment_params)`.
+
+    process_count:
+        The number of processes to use when converting the matrices.
+        Passed straight to the multiprocessing function.
+        See `normits_demand.concurrency.multiprocessing.multiprocess()`
+        to see how this parameter is used.
 
     Returns
     -------
-
+    None
     """
     # Build a dictionary of the constant arguments across processes
     unchanging_kwargs = {
