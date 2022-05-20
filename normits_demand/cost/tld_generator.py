@@ -600,8 +600,9 @@ class TripLengthDistributionGenerator:
         for row_num, row in segments.iterrows():
             # Clone data for sub-setting
             seg_sub = input_dat.copy()
+            # Open dictionary for segments with values
             seg_descs = dict()
-            # Iterate
+            # Iterate over each row
             for segment, seg_value in row.items():
                 method = self.segment_treatment[str(segment)]
                 # filter based on method
@@ -628,7 +629,7 @@ class TripLengthDistributionGenerator:
                 cost_units=cost_units
             )
 
-
+            # Append segment names to output frame
             tld = self._append_segment_names(
                 tld,
                 seg_descs
