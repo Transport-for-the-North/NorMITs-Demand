@@ -126,6 +126,23 @@ class TripLengthDistributionGenerator:
                  trip_miles_col: str = 'trip_mile',
                  trip_distance_col: str = 'TripDisIncSW',
                  ):
+        """
+        Define the environment for a set of trip length distribution runs.
+
+        Parameters
+        ----------
+        tlb_folder: pd.DataFrame
+            Path to folder containing TLD specific output from
+            'NTS Processing' tool
+        tlb_version: str
+            Which version of the TLD export to pick up
+        output_folder:
+            NorMITs Demand config folder to export outputs to
+        trip_miles_col:
+            Which column to use as the trip miles in the import data
+        trip_distance_col:
+            Which column to use as the trip distance in the import data
+        """
 
         self.tlb_folder = tlb_folder
         self.tlb_version = tlb_version
@@ -137,15 +154,33 @@ class TripLengthDistributionGenerator:
         self.trip_distance_col = trip_distance_col
 
     def _apply_geo_filter(self,
-                          output_dat,
-                          trip_filter_type,
-                          geo_area):
+                          output_dat: pd.DataFrame,
+                          trip_filter_type: str,
+                          geo_area: str):
         """
-        output_dat: processed NTS data
+        This function defines how the origin and destination of trips are
+        derived and also defines regional subsets
+        If region filter is based on home, filters on a UA subset
+        If it's based on trip ends (gor) filters on trip O/D
 
-        if region filter is based on home, filters on a UA subset
-        if it's based on trip ends (gor) filters on trip O/D
+        Parameters
+        ----------
+        output_dat: pd.DataFrame
+            Processed NTS data
+        trip_filter_type: str
+            How to filter the origin/destination of trips.
+            this is defined here in the class, so improvement work here.
+        geo_area:
+            Target regional subset
+
+        Returns
+        ----------
+        output_dat:
+            Input dataframe modified to target geography
         """
+
+        # TODO: Work for household trip_filter_type properly
+
         # If region filters are home end, filter by LA
         filter_orig = False
         filter_dest = False
@@ -227,6 +262,26 @@ class TripLengthDistributionGenerator:
                            seg_sub: pd.DataFrame,
                            bands: pd.DataFrame,
                            cost_units: str = 'km'):
+        """
+        Take a set of NTS data and distribute it to a set of given bands,
+        counting trips per band and mean trip length per band.
+
+        Parameters
+        ----------
+        seg_sub: pd.DataFrame
+            DataFrame of NTS data, sub refers to the fact this should have
+            been filtered down by this point in the process
+        bands: pd.DataFrame
+            DataFrame of target bands
+        cost_units: str:
+            Units for outputs. Inputs always in miles so is used to fetch
+            a constant for conversion
+
+        Returns
+        ----------
+        bands:
+            Import bands DataFrame with appended trip and distance totals
+        """
 
         dist_constant = self.miles_to_other_distance[cost_units]
 
@@ -261,13 +316,38 @@ class TripLengthDistributionGenerator:
                         method: str = 'int'
                         ):
         """
-        seg_sub:
-        segment_name:
-        filter_value:
-        method:
+        Core of process, filters the NTS data down to include the target
+        segmentation only, one segment per call.
+        Takes its method from the class dictionary, this function will have
+        to be expanded to handle other bespoke segments as they arrive.
+        This function also transposes the return home leg if the user requests
+        PA costs by defining trip filter type as trip_OD.
 
-        return: seg_sub
+        Parameters
+        ----------
+        seg_sub: pd.DataFrame
+            NTS data in frame
+        trip_filter_type: str
+            Origin of trip definition
+        segment_name: str
+            The name of the segment in the TLD definition. Is translated to
+            the equivalent NTS name
+        filter_value:
+            The target value of the above segment
+        method:
+            How to filter, as some segments require bespoke handling
+            'tp' - if value is 0 ignore and don't label segments
+            'trip_origin' - if hb, filter trip types to from home but if 'trip_OD' is
+            requested, also reverse the origin/destination of to home trips and retain them
+
+        Returns
+        ----------
+        nts_sub:
+            Subset of NTS filtered to match a single value
+
         """
+        # TODO: Handle values differently by type for consistency
+        # TODO: Fix slice write warning - probably discrete function for transposition
 
         hb_types = ['hb_fr', 'hb_to']
 
@@ -304,11 +384,22 @@ class TripLengthDistributionGenerator:
                         cost_units):
 
         """
-        build a single names for the distribution, using its definition
+        Build a single names for the distribution, using its definition
         takes a standard order of construction from class
 
+        Parameters
+        ----------
         seg_descs:
-            dictionary of segment descriptions
+            Dictionary of segment descriptions
+        cost_units:
+            Units used in totals to be appended to tld name
+
+        Returns
+        -------
+        tld_name: str
+            Name of individual segment
+        seg_output_name: str
+            Name of distribution at large
         """
 
         tld_name = str()
@@ -343,6 +434,7 @@ class TripLengthDistributionGenerator:
         Function to subset whole dataset for time periods
         """
         # TODO: Needs to be expanded to work for other time periods
+        # Also needs to work with the new time period format in import data
 
         if sample_period == 'weekday':
             input_dat = self._filter_to_weekday(input_dat)
@@ -355,8 +447,14 @@ class TripLengthDistributionGenerator:
         Assume missing segment classifications from NTS are the same as the input label
         Append those labels to the dictionary to avoid key errors later on
 
+        Parameters
+        ----------
         segments:
             list of segments from target segmentation, as defined in input csv
+        Returns
+        ----------
+        defaults:
+            list of segments missing in current form
         """
 
         defaults = {x: x for x in list(segments.columns) if x not in self.tld_to_nts_names}
@@ -375,17 +473,28 @@ class TripLengthDistributionGenerator:
         """
         Build a set of trip length distributions
 
-        input_dat - dataframe of pre-processed trip length distribution data
+        Parameters
+        ----------
+        input_dat: pd.DataFrame:
+            Dataframe of pre-processed trip length distribution data
+        trip_filter_type: str:
+            Method of isolation for location, household or regional OD
+        bands: pd.DataFrame:
+            Dataframe of bands with headings lower, upper
+        segments: pd.DataFrame:
+            dataframe of segments by individual row
+        cost_units: str:
+            Units of distance, or in theory other cost
+        verbose: bool:
+          Echo or no
 
-        trip_filter_type - method of isolation for location, household or regional OD
-
-        bands - dataframe of bands with headings lower, upper
-
-        segments - dataframe of segments by individual row
-
-        cost_units - units of distance, or other cost
-
-        verbose - echo
+        Returns
+        ----------
+        tld_dict: dict
+            A dictionary with {description of tld: tld DataFrame}
+        seg_output_name: str
+            the name of the output segmentation as a whole.
+            derived from segments used
         """
 
         tld_dict = dict()
@@ -439,21 +548,51 @@ class TripLengthDistributionGenerator:
                       sample_period: str = 'week',
                       trip_filter_type: str = 'trip_OD',
                       cost_units: str = 'km',
+                      verbose: bool = True,
                       write=True):
 
         # TODO: Can most of these be defined as class types to limit inputs?
         """
         Generate a consistent set of trip length distributions
 
-        geo_area:
-            how to do regional subsets 'north', 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie'
+        Parameters
+        ----------
+        geo_area: str:
+            how to do regional subsets
+            'north', 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie'
+            should be limited by type in future
+        bands_path: nd.PathLike:
+            Path to a .csv describing bands to be used for tlds
+        segmentation_path: nd.PathLike:
+            Path to a .csv describing segmentation to be used
+            Where cols = segments and rows = segment values
         sample_period:
             'weekday', 'week', 'weekend' - time period filter for target tld
-        trip_filter_type = 'tripOD',
-        output_format: str = 'km',
-            'miles', 'm'
+            currently only handles week as import data build week
+        trip_filter_type: str = 'trip_OD':
+            How to define the start and end of trips. Currently only works
+            for trip_OD, i.e. filter on the start and end of trip, but will
+            work for household i.e where a house is with small modification
+        cost_units: str = 'km',
+            Units of distance to be output. Essentially picks a constant
+            to multiply the native NTS miles by
+            'miles', 'm', 'km'
+        verbose: bool = True,
+            Echo to terminal or not
         write: bool = True:
             Write export to class export folder
+
+        Returns
+        ----------
+        tld_dict: dict
+            A dictionary with {description of tld: tld DataFrame}
+        full_export: pd.DataFrame
+            A compiled, concatenated version of the DataFrames in tld_dict
+
+        Future Improvements
+        ----------
+        Add more functionality for time period handling.
+        Add better error control and type limiting for inputs.
         """
 
         input_dat = self.nts_import.copy()
@@ -496,7 +635,9 @@ class TripLengthDistributionGenerator:
             trip_filter_type=trip_filter_type,
             bands=bands,
             segments=segments,
-            cost_units=cost_units)
+            cost_units=cost_units,
+            verbose=verbose
+        )
 
         # Build output path
         tld_out_path = os.path.join(
