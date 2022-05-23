@@ -102,6 +102,7 @@ class TripLengthDistributionGenerator:
     segment_treatment = {'trip_origin': 'trip_origin',
                          'p': 'int',
                          'm': 'int',
+                         'ca': 'int',
                          'tp': 'tp'
                          }
 
@@ -274,7 +275,8 @@ class TripLengthDistributionGenerator:
     def _build_band_subset(self,
                            seg_sub: pd.DataFrame,
                            bands: pd.DataFrame,
-                           cost_units: str = 'km'):
+                           cost_units: str = 'km',
+                           band_rounding: int = 2):
         """
         Take a set of NTS data and distribute it to a set of given bands,
         counting trips per band and mean trip length per band.
@@ -289,6 +291,10 @@ class TripLengthDistributionGenerator:
         cost_units: str:
             Units for outputs. Inputs always in miles so is used to fetch
             a constant for conversion
+        band_rounding: int:
+            Number of decimal places to round bands to after conversion
+            Currently not handled outside of private function so essentially
+            hard coded with a toggle option for future
 
         Returns
         ----------
@@ -300,20 +306,24 @@ class TripLengthDistributionGenerator:
 
         loc_bands = bands.copy()
 
+        # TODO: Handle inline numpy warnings with 0 trip band div0s
+        # Iterate over lines in target bands copy (don't change master)
         for line, threshold in loc_bands.iterrows():
             tlb_sub = seg_sub.copy()
 
             lower = threshold['lower']
             upper = threshold['upper']
 
+            # Simple filter subset to get trip pots
             tlb_sub = tlb_sub[
                 tlb_sub[self.trip_miles_col] >= lower].reset_index(drop=True)
             tlb_sub = tlb_sub[
                 tlb_sub[self.trip_miles_col] < upper].reset_index(drop=True)
 
-            total_miles = tlb_sub[self.trip_miles_col].sum()
+            # total trips is row wise sum
             total_trips = tlb_sub[self.trip_distance_col].sum()
 
+            # mean miles is a sum product of trips * distance
             mean_miles = sum(tlb_sub[self.trip_miles_col]*tlb_sub[self.trip_distance_col])
             mean_miles /= total_trips
             # Value adjusted for target distance
@@ -322,9 +332,16 @@ class TripLengthDistributionGenerator:
             loc_bands.loc[line, ('mean_%s' % cost_units)] = mean_val
             loc_bands.loc[line, 'total_trips'] = total_trips
 
+        # Derive distibution factors
         loc_bands['dist'] = loc_bands['total_trips']/loc_bands['total_trips'].sum()
+
+        # Multiply bands by dist constant to get target units
         loc_bands['lower'] *= dist_constant
         loc_bands['upper'] *= dist_constant
+
+        # Round by target value
+        loc_bands['lower'] = loc_bands['lower'].round(decimals=band_rounding)
+        loc_bands['upper'] = loc_bands['upper'].round(decimals=band_rounding)
 
         return loc_bands
 
@@ -401,7 +418,7 @@ class TripLengthDistributionGenerator:
 
     @staticmethod
     def _append_segment_names(tld: pd.DataFrame,
-                              seg_descs: dict()):
+                              seg_descs):
         """
         Add the segment descriptions and names back into the distribution,
         so they're readable in aggregate and auditable against what the
@@ -468,8 +485,7 @@ class TripLengthDistributionGenerator:
                     tld_name += seg_value
 
                 elif method == 'tp':
-                    if seg_value != 0:
-                        tld_name += '_' + valid_name + seg_value
+                    tld_name += '_' + valid_name + seg_value
                 else:
                     tld_name += '_' + valid_name + seg_value
 
@@ -486,10 +502,8 @@ class TripLengthDistributionGenerator:
 
         Parameters
         ----------
-        seg_descs:
-            List of segment descriptions
-        cost_units:
-            Units used in totals to be appended to tld name
+        segments: pd.DataFrame
+            Dataframe of segments as defined for input
 
         Returns
         -------
@@ -515,7 +529,7 @@ class TripLengthDistributionGenerator:
 
                 elif method == 'tp':
                     # If all tps are 0, omit from name
-                    if bool(segments[valid_name].unique() == 0):
+                    if not bool(len(segments[valid_name].unique()) == 1):
                         seg_output_name += '_' + valid_name
                 else:
                     seg_output_name += '_' + valid_name
@@ -613,14 +627,15 @@ class TripLengthDistributionGenerator:
                     filter_value=seg_value,
                     method=method)
                 # Break loop if len is 0
-                if len(seg_sub) == 0:
-                    break
-                else:
-                    seg_descs.update({segment: seg_value})
+                seg_descs.update({segment: seg_value})
 
             if verbose:
                 print('Filtered for %s' % row)
                 print('Remaining records %d' % len(seg_sub))
+
+            if len(seg_sub) == 0:
+                print('No data returned to build tld')
+                break
 
             # build tld
             tld = self._build_band_subset(
@@ -704,6 +719,8 @@ class TripLengthDistributionGenerator:
 
         # Import bands
         bands = pd.read_csv(bands_path)
+        bands_name = os.path.basename(bands_path)
+        bands_name = bands_name.replace('.csv', '')
 
         # Import segments
         segments = pd.read_csv(segmentation_path)
@@ -748,20 +765,22 @@ class TripLengthDistributionGenerator:
         tld_out_path = os.path.join(
             self.output_folder,
             geo_area,
-            seg_output_name
+            trip_filter_type,
+            seg_output_name,
+            bands_name,
+            sample_period
         )
 
         # Build full export
         full_export = list()
         for desc, dat in tld_dict.items():
             full_export.append(dat)
-        full_export = pd.concat(full_export)
+        full_export = pd.concat(full_export, ignore_index=True)
 
         if write:
             # for csv in mat
             file_ops.create_folder(tld_out_path)
 
-            # TODO: Archive anything that's in this folder already, to ss
             # Write final compiled tld
             full_export.to_csv(
                 os.path.join(tld_out_path, 'full_export.csv'), index=False)

@@ -16,10 +16,10 @@ import os
 from normits_demand.cost import tld_generator
 
 
-def main():
+def main(iterator=False):
     _TLB_FOLDER = 'I:/NTS/outputs/tld'
     _TLB_VERSION = 'nts_tld_data_v3.1.csv'
-    _OUTPUT_FOLDER = r'I:\NorMITs Demand\import\trip_length_distributions'
+    _OUTPUT_FOLDER = r'I:\NorMITs Demand\import\trip_length_distributions\tld_tool_outputs'
     _TLD_HOME = r'I:\NorMITs Demand\import\trip_length_distributions\config'
     _BAND_FOLDER = os.path.join(_TLD_HOME, 'bands')
 
@@ -39,16 +39,30 @@ def main():
         output_folder=_OUTPUT_FOLDER,
     )
 
-    extract.tld_generator(
-        geo_area='north_incl_ie',
-        sample_period='week',
-        trip_filter_type='trip_OD',
-        bands_path=bands_path,
-        segmentation_path=segmentation_path,
-        cost_units='km',
-        verbose=True
-    )
+    if iterator:
+        for bsp in available_bands:
+            for asp in available_segmentations:
+                extract.tld_generator(
+                    geo_area='north_incl_ie',
+                    sample_period='week',
+                    trip_filter_type='trip_OD',
+                    bands_path=os.path.join(_BAND_FOLDER, bsp),
+                    segmentation_path=os.path.join(_SEGMENTATION_FOLDER, asp),
+                    cost_units='km',
+                    verbose=True
+                )
+
+    else:
+        extract.tld_generator(
+            geo_area='north_incl_ie',
+            sample_period='week',
+            trip_filter_type='trip_OD',
+            bands_path=bands_path,
+            segmentation_path=segmentation_path,
+            cost_units='km',
+            verbose=True
+        )
 
 
 if __name__ == '__main__':
-    main()
+    main(iterator=True)
