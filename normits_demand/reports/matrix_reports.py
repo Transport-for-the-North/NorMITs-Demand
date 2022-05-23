@@ -336,7 +336,7 @@ def generate_excel_sector_report(
 
     # Add sector data to the report
     pd_utils.append_df_to_excel(
-        df=sector_report_data.sector_data,
+        df=sector_report_data.data,
         path=output_path,
         sheet_name='sector_data',
         index=False,
@@ -346,7 +346,7 @@ def generate_excel_sector_report(
 
     # Add Sector Intras to excel report
     pd_utils.append_df_to_excel(
-        df=sector_intras.sector_data,
+        df=sector_intras.data,
         path=output_path,
         sheet_name='sector_intra_data',
         index=False,
@@ -356,7 +356,7 @@ def generate_excel_sector_report(
 
     # Add TLDs to excel report
     pd_utils.append_df_to_excel(
-        df=tld_dist.tld_data,
+        df=tld_dist.data,
         path=output_path,
         sheet_name='tld_data',
         index=False,
@@ -511,24 +511,23 @@ def generate_matrix_reports(
 
     # ## GENERATE EXCEL SECTOR REPORT ## #
     sector_report_data = templates.DistributionModelMatrixReportSectorData(
-        sector_data=pd.concat(long_sector_matrices, ignore_index=True),
+        data=pd.concat(long_sector_matrices, ignore_index=True),
         from_zone_col=row_name,
         to_zone_col=col_name,
-        val_col=val_col_name,
-    )
-    sector_intras_full = templates.DistributionModelTripEndReportData(
-        sector_data=pd.concat(sector_intras_full, ignore_index=True),
-        from_zone_col=row_name,
-        val_col=val_col_name,
+        val_cols=[val_col_name],
     )
 
-    # TODO(BT): RENAME MEs
-    tld_full = templates.DistributionModelReportTLDData(
-        tld_data=pd.concat(cost_dist_list, ignore_index=True),
+    sector_intras_full = templates.DistributionModelMatrixReportTripEndData(
+        data=pd.concat(sector_intras_full, ignore_index=True),
+        from_zone_col=row_name,
+        val_cols=[val_col_name],
+    )
+
+    tld_full = templates.DistributionModelMatrixReportCostDistributionData(
+        data=pd.concat(cost_dist_list, ignore_index=True),
         lower_col='lower',
         upper_col='upper',
-        distribution_col='distribution',
-        distribution_pct_col='distribution_pct'
+        val_cols=['distribution', 'distribution_pct'],
     )
 
     generate_excel_sector_report(
