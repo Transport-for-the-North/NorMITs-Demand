@@ -49,6 +49,7 @@ def main(iterator=False):
                     bands_path=os.path.join(_BAND_FOLDER, bsp),
                     segmentation_path=os.path.join(_SEGMENTATION_FOLDER, asp),
                     cost_units='km',
+                    sample_threshold=10,
                     verbose=True
                 )
 
@@ -60,6 +61,7 @@ def main(iterator=False):
             bands_path=bands_path,
             segmentation_path=segmentation_path,
             cost_units='km',
+            sample_threshold=10,
             verbose=True
         )
 

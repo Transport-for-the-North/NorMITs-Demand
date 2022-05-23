@@ -576,6 +576,7 @@ class TripLengthDistributionGenerator:
                   bands: pd.DataFrame,
                   segments: pd.DataFrame,
                   cost_units: str,
+                  sample_threshold: int = 10,
                   verbose: bool = True):
 
         """
@@ -593,6 +594,8 @@ class TripLengthDistributionGenerator:
             dataframe of segments by individual row
         cost_units: str:
             Units of distance, or in theory other cost
+        sample_threshold: int = 10:
+            Sample size below which skip allocation to bands and fail out
         verbose: bool:
           Echo or no
 
@@ -637,7 +640,7 @@ class TripLengthDistributionGenerator:
                 print('Filtered for %s' % row)
                 print('Remaining records %d' % seg_length)
 
-            if seg_length == 0:
+            if seg_length == sample_threshold:
                 print('No data returned to build tld')
                 loc_segs.loc[row_num, 'records'] = seg_length
                 loc_segs.loc[row_num, 'status'] = 'Failed'
@@ -675,6 +678,7 @@ class TripLengthDistributionGenerator:
                       sample_period: str = 'week',
                       trip_filter_type: str = 'trip_OD',
                       cost_units: str = 'km',
+                      sample_threshold: int = 10,
                       verbose: bool = True,
                       write=True):
 
@@ -704,6 +708,10 @@ class TripLengthDistributionGenerator:
             Units of distance to be output. Essentially picks a constant
             to multiply the native NTS miles by
             'miles', 'm', 'km'
+        sample_threshold: int = 10:
+            Sample below which to not bother running an application to bands
+            Smallest possible number you would consider representative
+            Failures captured in output report
         verbose: bool = True,
             Echo to terminal or not
         write: bool = True:
@@ -765,6 +773,7 @@ class TripLengthDistributionGenerator:
             bands=bands,
             segments=segments,
             cost_units=cost_units,
+            sample_threshold=sample_threshold,
             verbose=verbose
         )
 
@@ -787,6 +796,7 @@ class TripLengthDistributionGenerator:
         full_export = pd.concat(full_export, ignore_index=True)
 
         if write:
+            # TODO Smart writes, wait while writes etc
             # for csv in mat
             file_ops.create_folder(tld_out_path)
 
