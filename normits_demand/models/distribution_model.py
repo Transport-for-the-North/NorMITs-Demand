@@ -373,6 +373,7 @@ class DistributionModel(DistributionModelExportPaths):
             cost_matrices=cost_matrices,
             row_name='productions',
             col_name='attractions',
+            report_prefix=f"{self.trip_origin}_{self.iteration_name}",
         )
 
     def _maybe_recombine_pa_matrices(self):

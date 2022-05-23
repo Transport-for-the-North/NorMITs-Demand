@@ -94,7 +94,7 @@ class DistributionModelMatrixBase(abc.ABC):
 
     ca_col:
         The name of the column in `sector_data` which contains the
-        car availablity segment value.
+        car availability segment value.
 
     tp_col:
         The name of the column in `sector_data` which contains the time period

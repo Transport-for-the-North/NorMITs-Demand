@@ -310,17 +310,28 @@ def cost_distribution_table(
 
 def generate_excel_sector_report(
     sector_report_data: templates.DistributionModelMatrixReportSectorData,
+    sector_intra_data: templates.DistributionModelMatrixReportTripEndData,
+    cost_distribution_data: templates.DistributionModelMatrixReportCostDistributionData,
     output_path: pathlib.Path,
-    sector_intras,
-    tld_dist
 ) -> None:
-    """Generate a standard sector report
+    """Generates a standard sector report
 
     Parameters
     ----------
     sector_report_data:
         A DistributionModelMatrixReportSectorData object which defines
-        the sector data and how each columns links to the needed data.
+        the sector data and how each column links to the needed data in the
+        output spreadsheet.
+
+    sector_intra_data:
+        A DistributionModelMatrixReportTripEndData object which defines
+        the sector intra-zonal data and how each column links to the
+        needed data in the output spreadsheet.
+
+    cost_distribution_data:
+        A DistributionModelMatrixReportCostDistributionData object which defines
+        the cost distribution data and how each column links to the needed
+        data in the output spreadsheet.
 
     output_path:
         The full path, including filename, to output the completed report
@@ -346,7 +357,7 @@ def generate_excel_sector_report(
 
     # Add Sector Intras to excel report
     pd_utils.append_df_to_excel(
-        df=sector_intras.data,
+        df=sector_intra_data.data,
         path=output_path,
         sheet_name='sector_intra_data',
         index=False,
@@ -354,9 +365,9 @@ def generate_excel_sector_report(
         keep_data_validation=True,
     )
 
-    # Add TLDs to excel report
+    # Add cost_distributions to excel report
     pd_utils.append_df_to_excel(
-        df=tld_dist.data,
+        df=cost_distribution_data.data,
         path=output_path,
         sheet_name='tld_data',
         index=False,
@@ -374,6 +385,7 @@ def generate_matrix_reports(
     matrix_fname_template: str,
     row_name: str,
     col_name: str,
+    report_prefix: str = None,
 ) -> None:
     """Generates a standard set of matrix reports
 
@@ -427,6 +439,10 @@ def generate_matrix_reports(
         the columns of the read in matrices. Usually "attractions" or
         "destinations"
 
+    report_prefix:
+        A string to attach to the start of the report name. Useful for adding a
+        version name to the report.
+
     Returns
     -------
     None
@@ -434,10 +450,14 @@ def generate_matrix_reports(
     # Init
     val_col_name = "val"
 
+    sector_report_fname = "sector_report_summary.xlsx"
+    if report_prefix is not None:
+        sector_report_fname = f"{report_prefix}_{sector_report_fname}"
+
     # Build needed paths
     sector_matrix_dir = report_dir / 'sector_matrices'
     trip_end_report_dir = report_dir / 'trip_ends'
-    sector_report_path = report_dir / 'Sector_Report_Summary.xlsx'
+    sector_report_path = report_dir / sector_report_fname
 
     # Ensure paths exist
     file_ops.create_folder(sector_matrix_dir)
@@ -517,13 +537,13 @@ def generate_matrix_reports(
         val_cols=[val_col_name],
     )
 
-    sector_intras_full = templates.DistributionModelMatrixReportTripEndData(
+    sector_intra_data = templates.DistributionModelMatrixReportTripEndData(
         data=pd.concat(sector_intras_full, ignore_index=True),
         from_zone_col=row_name,
         val_cols=[val_col_name],
     )
 
-    tld_full = templates.DistributionModelMatrixReportCostDistributionData(
+    cost_distribution_data = templates.DistributionModelMatrixReportCostDistributionData(
         data=pd.concat(cost_dist_list, ignore_index=True),
         lower_col='lower',
         upper_col='upper',
@@ -532,7 +552,7 @@ def generate_matrix_reports(
 
     generate_excel_sector_report(
         sector_report_data=sector_report_data,
+        sector_intra_data=sector_intra_data,
+        cost_distribution_data=cost_distribution_data,
         output_path=sector_report_path,
-        sector_intras=sector_intras_full,
-        tld_dist=tld_full
     )
