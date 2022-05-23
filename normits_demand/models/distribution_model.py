@@ -349,23 +349,21 @@ class DistributionModel(DistributionModelExportPaths):
         self._logger.info("Lower Model Done!")
 
     def run_pa_matrix_reports(self):
+        """Generates a standard set of matrix reports on the PA matrices"""
         # Make sure we have full PA matrices before running
         self._maybe_recombine_pa_matrices()
 
+        # Generate needed arguments
         input_fname_template = self.running_segmentation.generate_template_file_name(
                 file_desc="synthetic_pa",
                 trip_origin=self.trip_origin,
                 year=str(self.year),
                 csv=True
             )
-        print(input_fname_template)
         cost_matrices = self.arg_builder.build_pa_report_arguments(
             self.compile_zoning_system,
         )
 
-        # TODO(BT, PW): Moved all code into here - this can then be called by
-        #  the OD matrix reports too to get the same reports. Add all new code
-        #  into this function.
         matrix_reports.generate_matrix_reports(
             matrix_dir=pathlib.Path(self.export_paths.full_pa_dir),
             report_dir=pathlib.Path(self.report_paths.pa_reports_dir),
@@ -540,6 +538,7 @@ class DistributionModel(DistributionModelExportPaths):
             )
 
     def run_od_matrix_reports(self):
+        """Generates a standard set of matrix reports on the OD matrices"""
         # Make sure we have full OD matrices before running
         # self._maybe_recombine_pa_matrices()
 
