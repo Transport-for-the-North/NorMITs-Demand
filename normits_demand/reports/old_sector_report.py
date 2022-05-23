@@ -15,7 +15,7 @@ import normits_demand as nd
 from normits_demand.matrices import translate_matrices
 import normits_demand.utils.file_ops as fo
 
-
+# BACKLOG: Remove old_sector_reporter. Replace with new Sector Reporting
 class SectorReporter:
     """
     Class to build sector reports from an output demand vector
