@@ -126,7 +126,7 @@ class TripLengthDistributionGenerator:
                  tlb_version: nd.PathLike,
                  output_folder: nd.PathLike,
                  trip_miles_col: str = 'trip_mile',
-                 trip_distance_col: str = 'TripDisIncSW',
+                 trip_count_col: str = 'trips',
                  ):
         """
         Define the environment for a set of trip length distribution runs.
@@ -142,8 +142,8 @@ class TripLengthDistributionGenerator:
             NorMITs Demand config folder to export outputs to
         trip_miles_col:
             Which column to use as the trip miles in the import data
-        trip_distance_col:
-            Which column to use as the trip distance in the import data
+        trip_count_col:
+            Which column to use as the count of trips in the import data
         """
 
         self.tlb_folder = tlb_folder
@@ -160,11 +160,11 @@ class TripLengthDistributionGenerator:
                 'Given trip miles col %s not in NTS data' % trip_miles_col
             )
 
-        if trip_distance_col in list(self.nts_import):
-            self.trip_distance_col = trip_distance_col
+        if trip_count_col in list(self.nts_import):
+            self.trip_count_col = trip_count_col
         else:
             raise ValueError(
-                'Given trip distance col %s not in NTS data' % trip_distance_col
+                'Given trip count col %s not in NTS data' % trip_count_col
             )
 
     def _apply_geo_filter(self,
@@ -202,6 +202,11 @@ class TripLengthDistributionGenerator:
         target_dest_gors = None
 
         if trip_filter_type == 'trip_OD':
+            # Transpose from and to for OD trip ends
+            to_orig = output_dat[output_dat['trip_direction'] == 'hb_to']['TripOrigGOR_B02ID'].copy()
+            to_dest = output_dat[output_dat['trip_direction'] == 'hb_to']['TripDestGOR_B02ID'].copy()
+            output_dat[output_dat['trip_direction'] == 'hb_to']['TripOrigGOR_B02ID'] = to_dest
+            output_dat[output_dat['trip_direction'] == 'hb_to']['TripDestGOR_B02ID'] = to_orig
 
             if geo_area == 'north':
                 filter_orig = True
@@ -321,10 +326,10 @@ class TripLengthDistributionGenerator:
                 tlb_sub[self.trip_miles_col] < upper].reset_index(drop=True)
 
             # total trips is row wise sum
-            total_trips = tlb_sub[self.trip_distance_col].sum()
+            total_trips = tlb_sub[self.trip_count_col].sum()
 
             # mean miles is a sum product of trips * distance
-            mean_miles = sum(tlb_sub[self.trip_miles_col]*tlb_sub[self.trip_distance_col])
+            mean_miles = sum(tlb_sub[self.trip_miles_col]*tlb_sub[self.trip_count_col])
             mean_miles /= total_trips
             # Value adjusted for target distance
             mean_val = mean_miles * dist_constant
@@ -405,11 +410,6 @@ class TripLengthDistributionGenerator:
             if filter_value == 'hb':
                 if trip_filter_type == 'trip_OD':
                     nts_sub = nts_sub[nts_sub[nts_seg].isin(hb_types)]
-                    # Transpose from and to for OD trip ends
-                    to_orig = nts_sub[nts_sub[nts_seg] == 'hb_to']['TripOrigGOR_B02ID'].copy()
-                    to_dest = nts_sub[nts_sub[nts_seg] == 'hb_to']['TripDestGOR_B02ID'].copy()
-                    nts_sub[nts_sub[nts_seg] == 'hb_to']['TripOrigGOR_B02ID'] = to_dest
-                    nts_sub[nts_sub[nts_seg] == 'hb_to']['TripDestGOR_B02ID'] = to_orig
 
         elif method == 'int':
             nts_sub = nts_sub[nts_sub[nts_seg] == filter_value]
@@ -440,7 +440,7 @@ class TripLengthDistributionGenerator:
         # Append segment sub-categories to tld matrix
         # retain order
         index_order = ['lower', 'upper']
-        end_cols = list(tld)[1:]
+        end_cols = list(tld)[2:]
         for segment, seg_val in seg_descs.items():
             tld[segment] = seg_val
             index_order.append(segment)
@@ -631,6 +631,7 @@ class TripLengthDistributionGenerator:
                     segment_name=str(segment),
                     filter_value=seg_value,
                     method=method)
+
                 # Break loop if len is 0
                 seg_descs.update({segment: seg_value})
 
@@ -750,21 +751,16 @@ class TripLengthDistributionGenerator:
                                    map_dict=self._household_type_to_ca,
                                    key='hh_type')
 
-        records.append(len(input_dat))
-
         # Filter to weekdays only
         input_dat = self._handle_sample_period(
             input_dat,
             sample_period=sample_period)
-
-        records.append(len(input_dat))
 
         # Geo filter on self.region_filter and self.geo_area
         input_dat = self._apply_geo_filter(input_dat,
                                            trip_filter_type,
                                            geo_area
                                            )
-        records.append(len(input_dat))
 
         # Build tld dictionary, return a proper name for the distributions
         tld_dict, report = self.build_tld(
