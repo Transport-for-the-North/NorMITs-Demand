@@ -600,9 +600,8 @@ class TripLengthDistributionGenerator:
         ----------
         tld_dict: dict
             A dictionary with {description of tld: tld DataFrame}
-        seg_output_name: str
-            the name of the output segmentation as a whole.
-            derived from segments used
+        loc_segs: str
+            input segments with reported number of records and status
         """
 
         tld_dict = dict()
@@ -610,8 +609,11 @@ class TripLengthDistributionGenerator:
         # Handle lookup exceptions
         self._correct_defaults(segments)
 
+        # create copy of master segments
+        loc_segs = segments.copy()
+
         # Iterate over each individual segment descriptions
-        for row_num, row in segments.iterrows():
+        for row_num, row in loc_segs.iterrows():
             # Clone data for sub-setting
             seg_sub = input_dat.copy()
             # Open dictionary for segments with values
@@ -629,13 +631,20 @@ class TripLengthDistributionGenerator:
                 # Break loop if len is 0
                 seg_descs.update({segment: seg_value})
 
+            seg_length = len(seg_sub)
+
             if verbose:
                 print('Filtered for %s' % row)
-                print('Remaining records %d' % len(seg_sub))
+                print('Remaining records %d' % seg_length)
 
-            if len(seg_sub) == 0:
+            if seg_length == 0:
                 print('No data returned to build tld')
+                loc_segs.loc[row_num, 'records'] = seg_length
+                loc_segs.loc[row_num, 'status'] = 'Failed'
                 break
+            else:
+                loc_segs.loc[row_num, 'records'] = seg_length
+                loc_segs.loc[row_num, 'status'] = 'Passed'
 
             # build tld
             tld = self._build_band_subset(
@@ -657,7 +666,7 @@ class TripLengthDistributionGenerator:
 
             tld_dict.update({tld_name: tld})
 
-        return tld_dict
+        return tld_dict, loc_segs
 
     def tld_generator(self,
                       geo_area: str,
@@ -750,7 +759,7 @@ class TripLengthDistributionGenerator:
         records.append(len(input_dat))
 
         # Build tld dictionary, return a proper name for the distributions
-        tld_dict = self.build_tld(
+        tld_dict, report = self.build_tld(
             input_dat=input_dat,
             trip_filter_type=trip_filter_type,
             bands=bands,
@@ -780,6 +789,11 @@ class TripLengthDistributionGenerator:
         if write:
             # for csv in mat
             file_ops.create_folder(tld_out_path)
+
+            # Write report
+            report.to_csv(
+                os.path.join(tld_out_path, seg_output_name + 'report.csv'),
+                index=False)
 
             # Write final compiled tld
             full_export.to_csv(
