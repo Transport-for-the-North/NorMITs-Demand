@@ -796,23 +796,30 @@ class TripLengthDistributionGenerator:
         full_export = pd.concat(full_export, ignore_index=True)
 
         if write:
-            # TODO Smart writes, wait while writes etc
             # for csv in mat
             file_ops.create_folder(tld_out_path)
 
             # Write report
-            report.to_csv(
-                os.path.join(tld_out_path, seg_output_name + 'report.csv'),
+            report_path = os.path.join(tld_out_path, seg_output_name + '_report.csv')
+            file_ops.safe_dataframe_to_csv(
+                report,
+                report_path,
                 index=False)
 
             # Write final compiled tld
-            full_export.to_csv(
-                os.path.join(tld_out_path, 'full_export.csv'), index=False)
+            full_export_path = os.path.join(tld_out_path, 'full_export.csv')
+            file_ops.safe_dataframe_to_csv(
+                full_export,
+                full_export_path,
+                index=False)
 
             # Write individual tlds
             for path, df in tld_dict.items():
                 csv_path = path + '.csv'
                 individual_file = os.path.join(tld_out_path, csv_path)
-                df.to_csv(individual_file, index=False)
+                file_ops.safe_dataframe_to_csv(
+                    df,
+                    individual_file,
+                    index=False)
 
         return tld_dict, full_export
