@@ -204,8 +204,6 @@ def matrix_sector_summary(
         index=matrix_zoning_system.unique_zones,
         columns=['val']
     )
-    print(df_intra)
-    print(df_intra.sum())
 
     # Build sector intrazonal totals
     sector_df_intra = translation.translate_vector_zoning(
@@ -213,33 +211,101 @@ def matrix_sector_summary(
         from_zoning_system=matrix_zoning_system,
         to_zoning_system=sector_zoning
     )
+    
+    # Check for MyPy
+    assert isinstance(sector_df_intra, pd.DataFrame)
 
     # Add in segment cols
     for key, val in segment_params.items():
         long_sector_matrix[key] = val
         sector_df_intra[key] = val
 
-    sector_df_intra = sector_df_intra.reset_index().rename(
-        columns={'index': index_col_name})
-    print(sector_df_intra.head())
+    sector_df_intra.index.name = index_col_name
+    sector_df_intra = sector_df_intra.reset_index()
+
+    # Re-order cols
+    final_cols = list(segment_params.keys()) + [val_col_name]
+    col_order = [index_col_name, columns_col_name] + final_cols
+    long_sector_matrix = long_sector_matrix.reindex(columns=col_order)
+
+    col_order = [index_col_name] + final_cols
+    sector_df_intra = sector_df_intra.reindex(columns=col_order)
+
+    return sector_matrix, long_sector_matrix, sector_df_intra
+
+
+def cost_distribution_table(
+    distribution_matrix: pd.DataFrame,
+    cost_matrix: np.ndarray,
+    segment_params: Dict[str, Any],
+    matrix_zoning_system: nd_core.ZoningSystem,
+) -> pd.DataFrame:
+    """Generates a table of cost distribution for this segment
+
+    Generates a table of cost distribution, including the segment names in
+    `segment_params`, to be output as a long table into the report.
+
+    Parameters
+    ----------
+    distribution_matrix:
+        The matrix of actual demand, showing the distribution of demand across
+        the zones.
+
+    cost_matrix:
+        The matrix showing the cost of every zone to zone trip in
+        `matrix_zoning_system`.
+
+    segment_params:
+        A dictionary of segment params from iterating over a
+        `nd_core.SegmentationLevel`. To be added to the generated cost
+        distribution table.
+
+    matrix_zoning_system:
+        The zoning system being used by both the `distribution_matrix` and the
+        `cost_matrix`.
+
+    Returns
+    -------
+    cost_distribution_table:
+        A pandas dataframe with the following columns:
+        list(segment_params.keys())
+        + ['lower', 'upper', 'distribution', 'distribution_pct']
+    """
+    # Init
+    bin_edges = np.array([0, 1, 2, 3, 5, 10, 15, 25, 35, 50, 100, 200, np.inf]) * 1.609344
+
+    # Remove the external to external demand
+    external_mask = pd_utils.get_wide_mask(
+        df=distribution_matrix,
+        zones=matrix_zoning_system.external_zones,
+        join_fn=operator.and_
+    )
+    matrix_no_ee = distribution_matrix * ~external_mask
+
+    # Calculate the achieved distribution
+    distribution, norm_distribution = cost_utils.normalised_cost_distribution(
+        matrix=matrix_no_ee.values,
+        cost_matrix=cost_matrix,
+        bin_edges=bin_edges
+    )
+
+    tld = pd.DataFrame({
+        'lower': bin_edges[:-1],
+        'upper': bin_edges[1:],
+        'distribution': distribution,
+        'distribution_pct': norm_distribution
+    })
+
+    # Add in segment cols before class fills defaults
+    for key, val in segment_params.items():
+        tld[key] = val
 
     # Re-order cols
     col_order = (
-        [index_col_name, columns_col_name]
-        + list(segment_params.keys())
-        + [val_col_name]
+        list(segment_params.keys())
+        + ['lower', 'upper', 'distribution', 'distribution_pct']
     )
-    long_sector_matrix = long_sector_matrix.reindex(columns=col_order)
-
-    col_order = (
-        [index_col_name]
-        + list(segment_params.keys())
-        + [val_col_name]
-    )
-    sector_df_intra = sector_df_intra.reindex(columns=col_order)
-    print(sector_df_intra.head())
-
-    return sector_matrix, long_sector_matrix, sector_df_intra
+    return tld.reindex(columns=col_order)
 
 
 def generate_excel_sector_report(
@@ -365,12 +431,6 @@ def generate_matrix_reports(
     -------
     None
     """
-
-
-    # TODO(PW, BT): Add constants such as this to the report on the fly in
-    #  one of the reference sheets
-    nd_constants.USER_CLASS_PURPOSES
-
     # Init
     val_col_name = "val"
 
@@ -388,7 +448,7 @@ def generate_matrix_reports(
     trip_end_cols = list()
     long_sector_matrices = list()
     sector_intras_full = list()
-    tld_list = list()
+    cost_dist_list = list()
 
     desc = "Generating PA Reports"
     for segment_params in tqdm.tqdm(matrix_segmentation, desc=desc):
@@ -401,7 +461,7 @@ def generate_matrix_reports(
         matrix = file_ops.read_df(path, find_similar=True, index_col=0)
 
         # Summarise into trip ends
-        # TODO Add ie to excel template
+        # TODO(PW): Add ie to excel template
         row_summary, col_summary = matrix_to_trip_ends(
             matrix=matrix,
             segment_params=segment_params,
@@ -418,7 +478,6 @@ def generate_matrix_reports(
             columns_col_name=col_name,
             val_col_name=val_col_name,
         )
-
         long_sector_matrices.append(long_sector_matrix)
         sector_intras_full.append(sector_df_intra)
 
@@ -427,44 +486,15 @@ def generate_matrix_reports(
         sector_matrix.to_csv(sector_matrix_dir / sector_fname)
 
         # ## GENERATE COST DISTRIBUTION CURVES ## #
-        # TODO(BT, PW): TLD code works - to be tidied
-        #  ee masking is included by default - may wish to toggle this
-        external_mask = pd_utils.get_wide_mask(
-            df=matrix,
-            zones=matrix_zoning_system.external_zones,
-            join_fn=operator.and_
-        )
-        matrix_no_ee = matrix * ~external_mask
-
         segment_name = matrix_segmentation.get_segment_name(segment_params)
-        bin_edges = np.array([0, 1, 2, 3, 5, 10, 15, 25, 35, 50, 100, 200, np.inf]) * 1.609344
-        distribution, achieved_distribution = cost_utils.calculate_reporting_cost_distribution(
-            matrix=matrix_no_ee.values,
+        cost_dist = cost_distribution_table(
+            distribution_matrix=matrix,
             cost_matrix=cost_matrices[segment_name],
-            bin_edges=bin_edges
+            segment_params=segment_params,
+            matrix_zoning_system=matrix_zoning_system,
         )
 
-        tld = pd.DataFrame(
-            {'lower': bin_edges[:-1],
-             'upper': bin_edges[1:],
-             'distribution': distribution,
-             'distribution_pct': achieved_distribution
-             }
-        )
-        print(tld)
-
-        # Add in segment cols before class fills defaults
-        for key, val in segment_params.items():
-            tld[key] = val
-
-        # Re-order cols
-        col_order = (
-                list(segment_params.keys())
-                + ['lower', 'upper', 'distribution', 'distribution_pct']
-        )
-        tld = tld.reindex(columns=col_order)
-
-        tld_list.append(tld)
+        cost_dist_list.append(cost_dist)
 
     # ## GENERATE TRIP END REPORTS ## #
     kwargs = {
@@ -486,16 +516,15 @@ def generate_matrix_reports(
         to_zone_col=col_name,
         val_col=val_col_name,
     )
-    print("sector intras full table")
-    print(sector_intras_full)
     sector_intras_full = templates.DistributionModelTripEndReportData(
         sector_data=pd.concat(sector_intras_full, ignore_index=True),
         from_zone_col=row_name,
         val_col=val_col_name,
     )
 
+    # TODO(BT): RENAME MEs
     tld_full = templates.DistributionModelReportTLDData(
-        tld_data=pd.concat(tld_list, ignore_index=True),
+        tld_data=pd.concat(cost_dist_list, ignore_index=True),
         lower_col='lower',
         upper_col='upper',
         distribution_col='distribution',
