@@ -23,6 +23,7 @@ SEGS = {'hb':{'p_tp':HB_P_TP_WEEK,'p_m_tp':HB_P_M_TP_WEEK},
 }
 FILE_PATH = pathlib.Path(r"C:\Projects\MidMITS\Python\outputs\ApplyMND")
 CONVERGENCE = 100
+MAX_ITER = 15
 
 def mnd_factors(org_dest: str, hb_nhb: str) -> nd.DVector:
     """_summary_
@@ -63,7 +64,6 @@ def mnd_factors(org_dest: str, hb_nhb: str) -> nd.DVector:
 def loop(
     factored: nd.data_structures.DVector,
     base: nd.data_structures.DVector,
-    convergence: int,
     dft_vec: nd.data_structures.DVector,
     mnd_vec: nd.data_structures.DVector,
     hb_nhb: str
@@ -86,8 +86,9 @@ def loop(
     dvec = factored
     dft_base = base.aggregate(M_TP_WEEK)
     mnd_base = base.aggregate(SEGS[hb_nhb]['p_tp'])
-    i = convergence + 1
-    while i > convergence:
+    i = CONVERGENCE + 1
+    j = 1
+    while i > CONVERGENCE and j > MAX_ITER:
         dvec_agg = dvec.aggregate(M_TP_WEEK)
         mnd_res = dvec_agg / dft_base
         adj_dft = dft_vec / mnd_res
@@ -101,6 +102,7 @@ def loop(
         dvec = final_dft * adj_mnd
         logging.info("Adjusted to MND.")
         i = abs(dvec.aggregate(M_TP_WEEK) - dvec_ss).sum()
+        j += 1
         logging.info(f"DVector is {i} trips out from the previous iteration.")
     logging.info("Convergence criteria met, writing DVector to pickle file.")
     return dvec
@@ -128,7 +130,7 @@ def main(orig_dest,hb_nhb):
     adj = (mnd / dft_res).translate_zoning(MSOA, weighting="no_weight")
     final = dft_21 * adj
     logging.info("About to begin looping.")
-    export = loop(final, trips_19, CONVERGENCE, dft_dvec, mnd, hb_nhb)
+    export = loop(final, trips_19, dft_dvec, mnd, hb_nhb)
     return export
 
 
