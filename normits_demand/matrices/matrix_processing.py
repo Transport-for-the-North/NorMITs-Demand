@@ -1683,7 +1683,7 @@ def build_compile_params(import_dir: str,
     tp_needed = [None] if tp_needed is None else tp_needed
     to_needed = [None] if not split_hb_nhb else ['hb', 'nhb']
     od_from_to = [None] if not split_od_from_to else ['od_from', 'od_to']
-    all_od_matrices = du.list_files(import_dir)
+    all_od_matrices = du.list_files(import_dir, consts.VALID_MAT_FTYPES)
     out_paths = list()
 
     if output_headers is None:

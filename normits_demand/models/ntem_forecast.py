@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-    Module for producing forecast demand constrained to NTEM.
-"""
+"""Module for producing forecast demand constrained to NTEM."""
 
 ##### IMPORTS #####
 # Standard imports
@@ -66,13 +64,13 @@ class NTEMImportMatrices:
             name=self.model_name
         )
         file_ops.check_path_exists(self.matrix_folder)
-        self.mode = efs_consts.MODEL_MODES[self.model_name]
-        if len(self.mode) == 1:
-            self.mode = self.mode[0]
+        mode = efs_consts.MODEL_MODES[self.model_name]
+        if len(mode) == 1:
+            self.mode: int = mode[0]
         else:
             raise NotImplementedError(
                 "cannot handle models with more than one mode, "
-                f"this model ({self.model_name}) has {len(self.mode)} modes"
+                f"this model ({self.model_name}) has {len(mode)} modes"
             )
         self.segmentation = {
             k: nd_core.get_segmentation_level(s)
@@ -110,7 +108,7 @@ class NTEMImportMatrices:
             segment_params,
             file_desc="pa",
             trip_origin=hb,
-            year=self.year,
+            year=str(self.year),
         )
         path = self.matrix_folder / name
         file_ops.check_file_exists(path, find_similar=True)
@@ -217,7 +215,7 @@ class NTEMImportMatrices:
             },
             file_desc="pa",
             trip_origin=trip_origin,
-            year=year,
+            year=str(year),
             compressed=compressed,
             **kwargs,
         )
@@ -228,6 +226,7 @@ def trip_end_growth(
     tempro_vectors: Dict[int, nd_core.DVector],
     model_zone_system: str,
     zone_weighting: str,
+    base_year: int,
 ) -> Dict[int, nd_core.DVector]:
     """Calculate growth at LAD level and return it a `model_zone_system`.
 
@@ -248,6 +247,8 @@ def trip_end_growth(
     zone_weighting : str
         Name of the weighting to use when translating
         to `model_zone_system`.
+    base_year : int
+        Base model year.
 
     Returns
     -------
@@ -262,15 +263,13 @@ def trip_end_growth(
         If `normits_demand.efs_constants.BASE_YEAR` is not
         in `tempro_vectors`.
     """
-    if efs_consts.BASE_YEAR not in tempro_vectors:
-        raise NTEMForecastError(
-            f"base year ({efs_consts.BASE_YEAR}) data not given"
-        )
+    if base_year not in tempro_vectors:
+        raise NTEMForecastError(f"base year ({base_year}) data not given")
     growth_zone = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
     model_zoning = nd_core.get_zoning_system(model_zone_system)
     # Split data into internal and external DVectors
     # for different growth calculations
-    base = tempro_vectors[efs_consts.BASE_YEAR]
+    base = tempro_vectors[base_year]
     base_data = {
         "internal":
             base.translate_zoning(growth_zone),
@@ -290,7 +289,7 @@ def trip_end_growth(
     # Ignore divide by zero warnings and fill with zeros
     with np.errstate(divide="ignore", invalid="ignore"):
         for yr, data in tempro_vectors.items():
-            if yr == efs_consts.BASE_YEAR:
+            if yr == base_year:
                 continue
             forecast = {}
             for area, base in base_data.items():
@@ -319,6 +318,7 @@ def trip_end_growth(
 def tempro_growth(
     tempro_data: TEMProTripEnds,
     model_zone_system: str,
+    base_year: int,
 ) -> TEMProTripEnds:
     """Calculate LAD growth factors and return at original zone system.
 
@@ -332,6 +332,8 @@ def tempro_growth(
     model_zone_system : str
         Name of the zone system to convert the
         TEMPro growth factors to.
+    base_year : int
+        Model base year.
 
     Returns
     -------
@@ -359,6 +361,7 @@ def tempro_growth(
             getattr(tempro_data, segment.name),
             model_zone_system,
             zone_translation_weights[segment.name],
+            base_year,
         )
     return TEMProTripEnds(**grown)
 
@@ -550,7 +553,9 @@ def grow_matrix(
             "productions": growth["row_targets"]
         },
         internals,
-        output_path.with_name(output_path.stem + "-growth_comparison.xlsx"),
+        output_path.with_name(
+            file_ops.remove_suffixes(output_path).stem + "-growth_comparison.xlsx"
+        ),
     )
     return combined_future
 

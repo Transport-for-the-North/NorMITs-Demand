@@ -12,6 +12,7 @@ import os
 
 from typing import List
 from typing import Tuple
+import warnings
 
 # Third Party
 import pyodbc
@@ -1203,13 +1204,11 @@ class TemproParser:
         
         return query_dat, zones
 
-    def _select_years_and_interpolate(self,
-                                      query_dat,
-                                      verbose=False):
+    def _select_years_and_interpolate(self, query_dat: pd.DataFrame) -> pd.DataFrame:
         """
         Pick years from the run defined years
         Interpolate from them if you have to.
-        
+
         Parameters
         ----------
         query_dat : pd.DataFrame
@@ -1221,51 +1220,34 @@ class TemproParser:
             Same but with years added and/or taken away
 
         """
+        av_years = sorted(int(x) for x in list(query_dat) if x.isdigit())
+        if av_years[0] < 0:
+            raise ValueError("negative year found in query data")
 
-        av_years = [int(x) for x in list(query_dat) if x.isdigit()]
-        year_index = list()
-        year_dicts = list()
-        for year in self.output_years:
+        for target_year in self.output_years:
+            if target_year in av_years:
+                continue # Year already exists and doesn't need creating
 
-            if year > 2051:
-                print('Impossible to interpolate past 2051')
-                break
+            if target_year > av_years[-1]:
+                # Extrapolating past largest year, using growth from last 2 years
+                warnings.warn(
+                    f"Extrapolating TEMPro data past largest year ({av_years[-1]})",
+                    RuntimeWarning
+                )
+                lower, upper = av_years[-2:]
+                start_year = upper
+            elif target_year < av_years[0]:
+                raise ValueError("target year is less than the minimum TEMPro year available")
             else:
-                year_index.append(str(year))
-                if year in av_years:
-                    year_dicts.append({'t_year': year,
-                                       'start_year': year,
-                                       'end_year': year})
-                else:
-                    year_diff = np.array([year - x for x in av_years])
-                    # Get lower than
-                    ly = np.argmin(np.where(year_diff > 0, year_diff, 100))
-                    ly = av_years[ly]
-                    # Get greater than
-                    hy = np.argmax(np.where(year_diff < 0, year_diff, -100))
-                    hy = av_years[hy]
-    
-                    year_dicts.append({'t_year': year,
-                                       'start_year': ly,
-                                       'end_year': hy})
-    
-        # Interpolate mid point years if needed
-        for year in year_dicts:
-            period_diff = year['end_year'] - year['start_year']
-            target_diff = year['t_year'] - year['start_year']
-            if target_diff > 0:
-                query_dat['annual_growth'] = (
-                    (
-                        query_dat[str(year['end_year'])]
-                        - query_dat[str(year['start_year'])]
-                    )
-                    / period_diff
-                )
-    
-                query_dat[str(year['t_year'])] = (
-                    query_dat[str(year['start_year'])]
-                    + (target_diff * query_dat['annual_growth'])
-                )
-                query_dat = query_dat.drop('annual_growth', axis=1)
-                
+                # Interpolating between one year either side
+                lower = max(i for i in av_years if i < target_year)
+                upper = min(i for i in av_years if i > target_year)
+                start_year = lower
+
+            annual_growth = (query_dat[str(upper)] - query_dat[str(lower)]) / (upper - lower)
+            year_diff = target_year - start_year
+            query_dat[str(target_year)] = query_dat[str(start_year)] + (
+                year_diff * annual_growth
+            )
+
         return query_dat
