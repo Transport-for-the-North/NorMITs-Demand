@@ -843,11 +843,21 @@ class DVector:
                 zoning_system_zones = set(self.zoning_system.unique_zones)
                 extra_zones = seg_zones_set - zoning_system_zones
                 if len(extra_zones) > 0:
+                    # Shortern the error message if long
+                    if len(extra_zones) > 10:
+                        extra_zones = list(extra_zones)
+                        extra_zones_str = (
+                            f"{extra_zones[:10]} plus {len(extra_zones - 10)} more"
+                        )
+                    else:
+                        extra_zones_str = f"{extra_zones}"
+
                     raise ValueError(
-                        "Found zones that don't exist in %s zoning in the "
-                        "given DataFrame. For segment %s, the following "
-                        "zones do not belong to this zoning system:\n%s"
-                        % (self.zoning_system.name, segment, extra_zones)
+                        f"Found zones that don't exist in {self.zoning_system.name} "
+                        f"zoning in the given DataFrame.\n"
+                        f"For segment {segment}, the following zones do not "
+                        f"belong to this zoning system:\n"
+                        f"{extra_zones_str}"
                     )
 
                 # Filter down to just data as values, and zoning system as the index

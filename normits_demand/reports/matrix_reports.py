@@ -479,6 +479,7 @@ def generate_matrix_reports(
         )
         path = matrix_dir / segment_fname
         matrix = file_ops.read_df(path, find_similar=True, index_col=0)
+        matrix.columns = matrix.columns.astype(matrix.index.dtype)
 
         # Summarise into trip ends
         # TODO(PW): Add ie to excel template
