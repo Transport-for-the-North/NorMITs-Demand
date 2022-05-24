@@ -74,9 +74,9 @@ def main():
     run_all = False
     run_upper_model = False
     run_lower_model = False
-    run_pa_matrix_reports = True
+    run_pa_matrix_reports = False
     run_pa_to_od = False
-    run_od_matrix_reports = False
+    run_od_matrix_reports = True
     compile_to_assignment = False
 
     if mode == nd.Mode.CAR:

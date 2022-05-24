@@ -13,6 +13,7 @@ Home of the NorMITs Distribution Model
 # Built-Ins
 import os
 import pathlib
+import functools
 
 from typing import Any
 from typing import List
@@ -33,6 +34,7 @@ from normits_demand.utils import translation
 from normits_demand.utils import vehicle_occupancy
 from normits_demand.matrices import matrix_processing
 from normits_demand.matrices import pa_to_od
+from normits_demand.matrices import utils as mat_utils
 from normits_demand.reports import matrix_reports
 
 from normits_demand.pathing.distribution_model import DistributionModelExportPaths
@@ -376,7 +378,36 @@ class DistributionModel(DistributionModelExportPaths):
             report_prefix=f"{self.trip_origin}_{self.iteration_name}",
         )
 
-    def _maybe_recombine_pa_matrices(self):
+    def _maybe_recombine_od_matrices(self) -> None:
+        """Combine od-to and od-from matrices if needed"""
+        if self.trip_origin == 'nhb':
+            # TODO(BT): Make sure the expected OD matrices exist
+            return
+
+        # TODO(BT): Doesn't currently work as need tp segments
+        in_path = pathlib.Path(self.export_paths.full_od_dir)
+        out_path = pathlib.Path(self.export_paths.combined_od_dir)
+
+        if file_ops.is_cache_older(original=in_path, cache=out_path):
+            # Generate fname templates
+            template = self.running_segmentation.generate_template_file_name(
+                file_desc="{matrix_format}",
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                compressed=True,
+            )
+            template_fn = functools.partial(template.format, segment_params="{segment_params}")
+
+            mat_utils.combine_od_to_from_matrices(
+                import_dir=in_path,
+                export_dir=out_path,
+                segmentation=self.running_segmentation,
+                od_fname_template=template_fn(matrix_format=self._od_matrix_desc),
+                od_from_fname_template=template_fn(matrix_format=self._od_from_matrix_desc),
+                od_to_fname_template=template_fn(matrix_format=self._od_to_matrix_desc),
+            )
+
+    def _maybe_recombine_pa_matrices(self) -> None:
         """Combine pa matrices if it hasn't been done yet"""
         # Build the I/O paths
         in_paths = [
@@ -534,14 +565,17 @@ class DistributionModel(DistributionModelExportPaths):
 
         else:
             raise ValueError(
-                "Don't know how to compile PA matrices to OD for trip origin"
-                "'%s'." % self.trip_origin
+                f"Don't know how to compile PA matrices to OD for trip "
+                f"origin'{self.trip_origin}'."
             )
 
     def run_od_matrix_reports(self):
         """Generates a standard set of matrix reports on the OD matrices"""
         # Make sure we have full OD matrices before running
-        # self._maybe_recombine_pa_matrices()
+        self._maybe_recombine_od_matrices()
+
+        print("Combined")
+        exit()
 
         # TODO: OD to and OD from to add (for directional OD) OR just compile to OD?
         #  OD report arguments
@@ -556,11 +590,8 @@ class DistributionModel(DistributionModelExportPaths):
             self.compile_zoning_system,
         )
 
-        # TODO(BT, PW): Moved all code into here - this can then be called by
-        #  the OD matrix reports too to get the same reports. Add all new code
-        #  into this function.
         matrix_reports.generate_matrix_reports(
-            matrix_dir=pathlib.Path(self.export_paths.full_od_dir),
+            matrix_dir=pathlib.Path(self.export_paths.combined_od_dir),
             report_dir=pathlib.Path(self.report_paths.od_reports_dir),
             matrix_segmentation=self.running_segmentation,
             matrix_zoning_system=self.compile_zoning_system,

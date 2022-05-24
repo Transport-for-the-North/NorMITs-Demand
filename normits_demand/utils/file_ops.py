@@ -244,7 +244,7 @@ def is_index_set(df: pd.DataFrame):
     return False
 
 
-def read_df(path: nd.PathLike,
+def read_df(path: os.PathLike,
             index_col: int = None,
             find_similar: bool = False,
             **kwargs,
@@ -277,8 +277,7 @@ def read_df(path: nd.PathLike,
     if not os.path.exists(path):
         if not find_similar:
             raise FileNotFoundError(
-                "No such file or directory: '%s'" % path
-            )
+                f"No such file or directory: '{path}'")
         path = find_filename(path)
 
     # Determine how to read in df
@@ -297,19 +296,17 @@ def read_df(path: nd.PathLike,
         df.columns.name = None
         return df
 
-    elif pathlib.Path(path).suffix == '.csv':
+    if pathlib.Path(path).suffix == '.csv':
         return pd.read_csv(path, index_col=index_col, **kwargs)
 
-    elif pathlib.Path(path).suffix in PD_COMPRESSION:
+    if pathlib.Path(path).suffix in PD_COMPRESSION:
         return pd.read_csv(path, index_col=index_col, **kwargs)
 
-    else:
-        raise ValueError(
-            "Cannot determine the filetype of the given path. Expected "
-            "either '.csv' or '%s'\n"
-            "Got path: %s"
-            % (consts.COMPRESSION_SUFFIX, path)
-        )
+    raise ValueError(
+        f"Cannot determine the filetype of the given path. "
+        f"Expected either '.csv' or '{consts.COMPRESSION_SUFFIX}'\n"
+        f"Got path: {path}"
+    )
 
 
 def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:

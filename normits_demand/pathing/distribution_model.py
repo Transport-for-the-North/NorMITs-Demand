@@ -56,6 +56,7 @@ _DM_ExportPaths_NT = collections.namedtuple(
         'full_pa_dir',
         'compiled_pa_dir',
         'full_od_dir',
+        'combined_od_dir',
         'compiled_od_dir',
         'compiled_od_dir_pcu',
     ]
@@ -1236,6 +1237,7 @@ class DistributionModelExportPaths:
     _full_pa_out_dir = 'Full PA Matrices'
     _compiled_pa_out_dir = 'Compiled PA Matrices'
     _full_od_out_dir = 'Full OD Matrices'
+    _combined_od_out_dir = 'Combined OD Matrices'
     _compiled_od_out_dir = 'Compiled OD Matrices'
     _compiled_od_out_dir_pcu = 'PCU'
 
@@ -1331,7 +1333,10 @@ class DistributionModelExportPaths:
         compiled_pa_dir = os.path.join(export_home, self._compiled_pa_out_dir)
         full_od_dir = os.path.join(export_home, self._full_od_out_dir)
         compiled_od_dir = os.path.join(export_home, self._compiled_od_out_dir)
+
+        # Nested paths
         compiled_od_dir_pcu = os.path.join(compiled_od_dir, self._compiled_od_out_dir_pcu)
+        combined_od_dir = os.path.join(full_od_dir, self._combined_od_out_dir)
 
         # Create the export_paths class
         self.export_paths = _DM_ExportPaths_NT(
@@ -1340,6 +1345,7 @@ class DistributionModelExportPaths:
             full_pa_dir=full_pa_dir,
             compiled_pa_dir=compiled_pa_dir,
             full_od_dir=full_od_dir,
+            combined_od_dir=combined_od_dir,
             compiled_od_dir=compiled_od_dir,
             compiled_od_dir_pcu=compiled_od_dir_pcu,
         )
@@ -1350,6 +1356,7 @@ class DistributionModelExportPaths:
             full_pa_dir,
             compiled_pa_dir,
             full_od_dir,
+            combined_od_dir,
             compiled_od_dir,
             compiled_od_dir_pcu,
         ]
