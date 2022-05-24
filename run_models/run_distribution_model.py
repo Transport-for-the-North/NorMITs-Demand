@@ -74,19 +74,10 @@ def main():
     run_all = False
     run_upper_model = False
     run_lower_model = False
-    run_pa_matrix_reports = False
+    run_pa_matrix_reports = True
     run_pa_to_od = False
-    run_od_matrix_reports = True
+    run_od_matrix_reports = False
     compile_to_assignment = False
-
-    # TODO: Pass report_name through to generate_matrix_reports
-    #  line 328 sector_report_path
-    #  Add exclude ee toggle for TLD (default = exclude)
-    if report_name_toggle:
-        report_name = '_v' + DM_ITERATION_NAME + '_' + SCENARIO.name
-    else:
-        report_name = ''
-    print(report_name)
 
     if mode == nd.Mode.CAR:
         # Define zoning systems
