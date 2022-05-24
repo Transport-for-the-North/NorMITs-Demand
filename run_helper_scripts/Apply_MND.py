@@ -14,12 +14,17 @@ import normits_demand as nd
 MSOA = nd.get_zoning_system("msoa")
 LAD = nd.get_zoning_system("lad_2020")
 HB_P_TP_WEEK = nd.get_segmentation_level("hb_p_tp_week")
+NHB_P_TP_WEEK = nd.get_segmentation_level("nhb_p_tp_week")
 M_TP_WEEK = nd.get_segmentation_level("m_tp_week")
 HB_P_M_TP_WEEK = nd.get_segmentation_level("hb_p_m_tp_week")
+NHB_P_M_TP_WEEK = nd.get_segmentation_level("nhb_p_m_tp_week")
+SEGS = {'hb':{'p_tp':HB_P_TP_WEEK,'p_m_tp':HB_P_M_TP_WEEK},
+'nhb':{'p_tp':NHB_P_TP_WEEK,'p_m_tp':NHB_P_M_TP_WEEK}
+}
 FILE_PATH = pathlib.Path(r"C:\Projects\MidMITS\Python\outputs\ApplyMND")
+CONVERGENCE = 100
 
-
-def mnd_factors(org_dest: str) -> nd.DVector:
+def mnd_factors(org_dest: str, hb_nhb: str) -> nd.DVector:
     """_summary_
    Reads in a csv of MND data and returns a dataframe of factors from 2019-November 2021
    Args:
@@ -32,6 +37,10 @@ def mnd_factors(org_dest: str) -> nd.DVector:
         .groupby(["LAD", "tp", "p"])
         .sum()
     )
+    if hb_nhb == 'nhb':
+        df.drop(7,level=2,axis=0,inplace=True)
+        update = {i:i+10 for i in df.index.get_level_values('p')}
+        df.rename(index=update,level=2,inplace=True)
     df.rename(
         index={"AM": 1, "IP": 2, "PM": 3, "OP": 4, "Saturday": 5, "Sunday": 6}, inplace=True
     )
@@ -41,7 +50,7 @@ def mnd_factors(org_dest: str) -> nd.DVector:
     df.reset_index(inplace=True)
     unstacked = df[["LAD", "p", "tp", "factor"]]
     dvec = nd.DVector(
-        segmentation=HB_P_TP_WEEK,
+        segmentation=SEGS[hb_nhb]['p_tp'],
         import_data=unstacked,
         zoning_system=LAD,
         zone_col="LAD",
@@ -57,6 +66,7 @@ def loop(
     convergence: int,
     dft_vec: nd.data_structures.DVector,
     mnd_vec: nd.data_structures.DVector,
+    hb_nhb: str
 ):
     """
     Matches the target year numbers to sets of factors iteratively, such that
@@ -75,7 +85,7 @@ def loop(
     """
     dvec = factored
     dft_base = base.aggregate(M_TP_WEEK)
-    mnd_base = base.aggregate(HB_P_TP_WEEK)
+    mnd_base = base.aggregate(SEGS[hb_nhb]['p_tp'])
     i = convergence + 1
     while i > convergence:
         dvec_agg = dvec.aggregate(M_TP_WEEK)
@@ -83,7 +93,7 @@ def loop(
         adj_dft = dft_vec / mnd_res
         final_dft = dvec * adj_dft
         logging.info("Adjusted to DfT.")
-        dft_res = final_dft.aggregate(HB_P_TP_WEEK).translate_zoning(
+        dft_res = final_dft.aggregate(SEGS[hb_nhb]['p_tp']).translate_zoning(
             LAD
         ) / mnd_base.translate_zoning(LAD)
         adj_mnd = (mnd_vec / dft_res).translate_zoning(MSOA, weighting="no_weight")
@@ -96,10 +106,10 @@ def loop(
     return dvec
 
 
-def main():
+def main(orig_dest,hb_nhb):
     logging.info("Beginning initial factoring.")
     trips_19 = nd.DVector.load(
-        os.path.join(FILE_PATH,r"hb_msoa_notem_segmented_2018_dvec.pkl")
+        os.path.join(FILE_PATH,orig_dest,f"{hb_nhb}_msoa_notem_segmented_2018_dvec.pkl")
     )
     dft_factors = pd.read_csv(os.path.join(FILE_PATH,r"dft_factors.csv"))
     dft_dvec = nd.DVector(
@@ -111,24 +121,26 @@ def main():
         time_format="avg_week",
     )
     dft_21 = trips_19 * dft_dvec
-    mnd = mnd_factors("origin")
-    agg_19 = trips_19.aggregate(HB_P_TP_WEEK).translate_zoning(LAD)
-    agg_21 = dft_21.aggregate(HB_P_TP_WEEK).translate_zoning(LAD)
+    mnd = mnd_factors(orig_dest,hb_nhb)
+    agg_19 = trips_19.aggregate(SEGS[hb_nhb]['p_tp']).translate_zoning(LAD)
+    agg_21 = dft_21.aggregate(SEGS[hb_nhb]['p_tp']).translate_zoning(LAD)
     dft_res = agg_21 / agg_19
     adj = (mnd / dft_res).translate_zoning(MSOA, weighting="no_weight")
     final = dft_21 * adj
     logging.info("About to begin looping.")
-    export = loop(final, trips_19, 5, dft_dvec, mnd)
+    export = loop(final, trips_19, CONVERGENCE, dft_dvec, mnd, hb_nhb)
     return export
 
 
 if __name__ == "__main__":
-    DVEC = main()
-    DVEC.save(os.path.join(FILE_PATH,r"test_4.pkl"))
-    DVEC.write_sector_reports(
-        os.path.join(FILE_PATH, "final_seg.csv"),
-        os.path.join(FILE_PATH, "ca.csv"),
-        os.path.join(FILE_PATH, "ie.csv"),
-        os.path.join(FILE_PATH, "final_lad_2.csv"),
-        HB_P_M_TP_WEEK,
-    )
+    for i in ['origin','destination']:
+        for j in ['nhb','hb']:
+            DVEC = main(i,j)
+            DVEC.save(os.path.join(FILE_PATH,f"{i}_{j}.pkl"))
+    # DVEC.write_sector_reports(
+    #     os.path.join(FILE_PATH, "final_seg.csv"),
+    #     os.path.join(FILE_PATH, "ca.csv"),
+    #     os.path.join(FILE_PATH, "ie.csv"),
+    #     os.path.join(FILE_PATH, "final_lad_2.csv"),
+    #     HB_P_M_TP_WEEK,
+    # )

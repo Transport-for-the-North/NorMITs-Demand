@@ -52,7 +52,9 @@ class params:
     }
     data_source = pathlib.Path(r"C:\Projects\MidMITS\NTEM")
     lookup_dir = pathlib.Path(r"SHP/NTEM_land_use_growth_lookup.xlsx")
-    tfn_base_emp_dir = pathlib.Path(path.join("SHP", f"hb_non_resi_data_{years['base year']}_v2.3.csv"))
+    tfn_base_emp_dir = pathlib.Path(
+        path.join("SHP", f"hb_non_resi_data_{years['base year']}_v2.3.csv")
+    )
     tfn_base_pop_dir = pathlib.Path(path.join("SHP", f"land_use_{years['base year']}_pop.csv"))
     NTEM_output_dir = pathlib.Path(r"Temp storage")
     NTEM_input_dir = pathlib.Path(r"NTEM")
@@ -100,8 +102,18 @@ def read_tfn() -> dict:
     emp_base.columns = ["people"]
     pop_base.columns = ["area_type", f"{p.years['base year']}"]
     dict = {
-        "emp": {'df':emp_base, 'cols':["msoa_zone_id","sic_code"], 'base col':"people",'NTEM col':"NTEM_cat"},
-        "pop": {'df':pop_base, 'cols':["msoa_zone_id","area_type","tfn_traveller_type"],'base col':str(p.years['base year']),'NTEM col':"NTEM_traveller_type"}
+        "emp": {
+            "df": emp_base,
+            "cols": ["msoa_zone_id", "sic_code"],
+            "base col": "people",
+            "NTEM col": "NTEM_cat",
+        },
+        "pop": {
+            "df": pop_base,
+            "cols": ["msoa_zone_id", "area_type", "tfn_traveller_type"],
+            "base col": str(p.years["base year"]),
+            "NTEM col": "NTEM_traveller_type",
+        },
     }
     return dict
 
@@ -291,7 +303,7 @@ def final(sector: str):
     p = params
     growth_df = process_df(sector).drop(["pct", "growth"], axis=1)
     tfn_dict = read_tfn()
-    tfn_data = tfn_dict[sector]['df']
+    tfn_data = tfn_dict[sector]["df"]
     tfn_data.index.rename(
         ["msoa_zone_id", "tfn_traveller_type", f"{sector} code"], inplace=True
     )
@@ -315,7 +327,7 @@ def apply_abs(sector: str) -> pd.DataFrame:
     """
     p = params
     tfn_dict = read_tfn()[sector]
-    tfn_data = tfn_dict['df']
+    tfn_data = tfn_dict["df"]
     # tfn_data.index.rename(
     #     tfn_dict['cols'], inplace=True
     # )
@@ -332,14 +344,14 @@ def apply_abs(sector: str) -> pd.DataFrame:
     )
     NTEM.index.rename(["msoa_zone_id", f"{tfn_dict['NTEM col']}"], inplace=True)
     NTEM["diff"] = NTEM[f"{p.years['target year']}"] - NTEM[f"{p.years['base year']}"]
-    grouped = tfn_data.groupby(['msoa_zone_id',tfn_dict['NTEM col']]).sum()[
+    grouped = tfn_data.groupby(["msoa_zone_id", tfn_dict["NTEM col"]]).sum()[
         f"{tfn_dict['base col']}"
     ]
     joined = tfn_data.join(grouped, how="inner", rsuffix="_grouped")
     joined["prop"] = (
         joined[f"{tfn_dict['base col']}"] / joined[f"{tfn_dict['base col']}_grouped"]
     )
-    joined['prop'].fillna(value=0, inplace=True)
+    joined["prop"].fillna(value=0, inplace=True)
     output = joined.join(NTEM["diff"], how="inner")
     output.to_csv(r"C:\Projects\MidMITS\NTEM\testing\with_neg" + sector + ".csv")
     output[f"{p.years['target year']}"] = (
@@ -353,17 +365,15 @@ def apply_abs(sector: str) -> pd.DataFrame:
 
 def main():
     p = params
-    for sector in ['emp','pop']:
+    for sector in ["emp", "pop"]:
         dic = read_tfn()[sector]
-        #cols = ["msoa_zone_id", "tfn_traveller_type", str(p.years['target year'])]
-        cols = dic['cols'].copy()
-        cols.append(str(p.years['target year']))
+        # cols = ["msoa_zone_id", "tfn_traveller_type", str(p.years['target year'])]
+        cols = dic["cols"].copy()
+        cols.append(str(p.years["target year"]))
         df = apply_abs(sector).reset_index()
         output = df[cols]
-        output.set_index(
-            dic['cols'], inplace=True
-        )
-        output.columns = ['people']
+        output.set_index(dic["cols"], inplace=True)
+        output.columns = ["people"]
         output.to_csv(
             path.join(
                 p.data_source, "SHP", sector, f"landuse_{p.years['target year']}_{sector}.csv"
@@ -373,3 +383,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
