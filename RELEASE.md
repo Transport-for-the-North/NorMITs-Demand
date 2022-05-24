@@ -45,6 +45,8 @@ Below, a brief summary of patches made since the previous version can be found.
       lower model.
     - Updated the gravity model reports output format. More standardised.
     - Added optional cost naming to make reports more flexible in names.
+    - Added Sector reports to the PA outputs, based on an Excel spreadsheet
+      template included in the codebase.
   - Multi-Area Gravity Model
     - Initial implementation of a multi-area gravity model. Each area calibrates
       its own cost params, and aims for its own target cost distribution. All
