@@ -468,6 +468,37 @@ def find_filename(path: nd.PathLike,
         % str(attempted_paths)
     )
 
+def similar_file_exists(
+    path: nd.PathLike,
+    alt_types: List[str] = None,
+) -> bool:
+    """Checks if the file at path exists under a different file extension.
+
+    If this function return `True`, `file_ops.read_df()` can be called with
+    `find_similar=True` without fail.
+
+    Parameters
+    ----------
+    path:
+        The path to the file to try and find
+
+    alt_types:
+        A list of alternate filetypes to consider. By default, will be:
+        ['.pbz2', '.csv']
+
+    Returns
+    -------
+    bool:
+        True if the file exists, else False.
+
+    """
+    does_file_exist = True
+    try:
+        find_filename(path=path, alt_types=alt_types)
+    except FileNotFoundError:
+        does_file_exist = False
+    return does_file_exist
+
 
 def _copy_all_files_internal(import_dir: nd.PathLike,
                              export_dir: nd.PathLike,
