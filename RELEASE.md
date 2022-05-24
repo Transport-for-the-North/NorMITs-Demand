@@ -45,6 +45,8 @@ Below, a brief summary of patches made since the previous version can be found.
       lower model.
     - Updated the gravity model reports output format. More standardised.
     - Added optional cost naming to make reports more flexible in names.
+    - Added Sector reports to the PA outputs, based on an Excel spreadsheet
+      template included in the codebase.
   - Multi-Area Gravity Model
     - Initial implementation of a multi-area gravity model. Each area calibrates
       its own cost params, and aims for its own target cost distribution. All
@@ -53,6 +55,10 @@ Below, a brief summary of patches made since the previous version can be found.
   - If the gravity model fails to converge, and option has now been added
     to allow it to run again using default parameters. This often solves
     most problems.
+  - Added functionality to allow the DistributionModel to run at weekly 
+    (instead of week-day) trip ends.
+  - Added functionality to convert either weekly or weekday PA matrices into
+    OD matrices
 - NTEM Forecasting
   - Added plotting module for the NTEM forecasting, which produces:
     - Trip end growth heatmaps for all forecast years

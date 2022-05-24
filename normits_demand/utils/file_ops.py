@@ -20,15 +20,18 @@ import time
 import pickle
 import pathlib
 import warnings
+import itertools
 
 from os import PathLike
 
 from typing import Any
 from typing import List
 from typing import Tuple
+from typing import Union
 from typing import Iterable
 
 # Third Party
+import numpy as np
 import pandas as pd
 
 # Local imports
@@ -37,13 +40,36 @@ from normits_demand import constants as consts
 from normits_demand.utils import compress
 from normits_demand.utils import general as du
 
-from normits_demand.concurrency import multiprocessing as multiprocessing
+from normits_demand.concurrency import multiprocessing
+from normits_demand.concurrency import multithreading
 
 # Imports that need moving into here
 from normits_demand.utils.general import list_files
 
 # CONSTANTS
 PD_COMPRESSION = {'.zip', '.gzip', '.bz2', '.zstd', '.csv.bz2'}
+
+
+class WriteDfThread(multithreading.ReturnOrErrorThread):
+    """Simple Thread for writing to disk using a thread"""
+
+    def __init__(self, df: pd.DataFrame, path: nd.PathLike, **kwargs) -> None:
+        multithreading.ReturnOrErrorThread.__init__(self)
+        self.df = df
+        self.path = path
+        self.kwargs = kwargs
+
+    def run_target(self) -> None:
+        """Runs a furness once all data received, and passes data back
+
+        Runs forever - therefore needs to be a daemon.
+        Overrides parent to run this on thread start.
+
+        Returns
+        -------
+        None
+        """
+        write_df(self.df, self.path, **self.kwargs)
 
 
 def remove_suffixes(path: pathlib.Path) -> pathlib.Path:
@@ -243,7 +269,7 @@ def is_index_set(df: pd.DataFrame):
     return False
 
 
-def read_df(path: nd.PathLike,
+def read_df(path: os.PathLike,
             index_col: int = None,
             find_similar: bool = False,
             **kwargs,
@@ -276,8 +302,7 @@ def read_df(path: nd.PathLike,
     if not os.path.exists(path):
         if not find_similar:
             raise FileNotFoundError(
-                "No such file or directory: '%s'" % path
-            )
+                f"No such file or directory: '{path}'")
         path = find_filename(path)
 
     # Determine how to read in df
@@ -296,22 +321,20 @@ def read_df(path: nd.PathLike,
         df.columns.name = None
         return df
 
-    elif pathlib.Path(path).suffix == '.csv':
+    if pathlib.Path(path).suffix == '.csv':
         return pd.read_csv(path, index_col=index_col, **kwargs)
 
-    elif pathlib.Path(path).suffix in PD_COMPRESSION:
+    if pathlib.Path(path).suffix in PD_COMPRESSION:
         return pd.read_csv(path, index_col=index_col, **kwargs)
 
-    else:
-        raise ValueError(
-            "Cannot determine the filetype of the given path. Expected "
-            "either '.csv' or '%s'\n"
-            "Got path: %s"
-            % (consts.COMPRESSION_SUFFIX, path)
-        )
+    raise ValueError(
+        f"Cannot determine the filetype of the given path. "
+        f"Expected either '.csv' or '{consts.COMPRESSION_SUFFIX}'\n"
+        f"Got path: {path}"
+    )
 
 
-def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
+def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> None:
     """
     Writes the dataframe at path. Decompresses the df if needed.
 
@@ -346,9 +369,34 @@ def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> pd.DataFrame:
 
     else:
         raise ValueError(
-            "Cannot determine the filetype of the given path. Expected "
-            "either '.csv' or '%s'" % consts.COMPRESSION_SUFFIX
+            f"Cannot determine the filetype of the given path. Expected "
+            f"either '.csv' or '{consts.COMPRESSION_SUFFIX}'"
         )
+
+
+def write_df_threaded(*args, **kwargs) -> WriteDfThread:
+    """
+    Writes the dataframe at path. Decompresses the df if needed.
+
+    Parameters
+    ----------
+    df:
+        The dataframe to write to disk
+
+    path:
+        The full path to the dataframe to read in
+
+    **kwargs:
+        Any arguments to pass to the underlying write function.
+
+    Returns
+    -------
+    df:
+        The read in df at path.
+    """
+    thread = WriteDfThread(*args, **kwargs)
+    thread.start()
+    return thread
 
 
 def filename_in_list(filename: nd.PathLike,
@@ -466,6 +514,37 @@ def find_filename(path: nd.PathLike,
         "Cannot find any similar files. Tried all of the following paths: %s"
         % str(attempted_paths)
     )
+
+def similar_file_exists(
+    path: nd.PathLike,
+    alt_types: List[str] = None,
+) -> bool:
+    """Checks if the file at path exists under a different file extension.
+
+    If this function return `True`, `file_ops.read_df()` can be called with
+    `find_similar=True` without fail.
+
+    Parameters
+    ----------
+    path:
+        The path to the file to try and find
+
+    alt_types:
+        A list of alternate filetypes to consider. By default, will be:
+        ['.pbz2', '.csv']
+
+    Returns
+    -------
+    bool:
+        True if the file exists, else False.
+
+    """
+    does_file_exist = True
+    try:
+        find_filename(path=path, alt_types=alt_types)
+    except FileNotFoundError:
+        does_file_exist = False
+    return does_file_exist
 
 
 def _copy_all_files_internal(import_dir: nd.PathLike,
@@ -724,7 +803,7 @@ def copy_segment_files(src_dir: nd.PathLike,
             segment_params=segment_params,
             **filename_kwargs,
         ))
-        
+
     copy_files(
         src_dir=src_dir,
         dst_dir=dst_dir,
@@ -738,22 +817,30 @@ def copy_files(src_dir: nd.PathLike,
                filenames: List[str],
                process_count: int = consts.PROCESS_COUNT,
                ) -> None:
-    """Copy filenames from src_dir to dst_dir
+    """Copy files from src_dir to dst_dir
 
-    # TODO(BT): Write this documentation for copy_files()
+    Copies all files in `filenames` from `src_dir` into `dst_dir`. Internally
+    uses multiprocessing to do the copy to make it really fast.
 
     Parameters
     ----------
-    src_dir
-    dst_dir
-    filenames
-    process_count
+    src_dir:
+        The directory to copy `filenames` from.
+
+    dst_dir:
+        The directory to copy `filenames` to.
+
+    filenames:
+        A list of the filenames to copy.
+
+    process_count:
+        The number of processes to use when copying files. By default, uses
+        the module default process count.
 
     Returns
     -------
-
+    None
     """
-
     # Setup kwargs
     kwarg_list = list()
     for fname in filenames:
@@ -775,7 +862,8 @@ def create_folder(folder_path: nd.PathLike,
                   verbose_exists: bool = False,
                   ) -> None:
     """
-    Creates the folder at folder_path
+    Create a new folder at desired location
+
     Parameters
     ----------
     folder_path:
@@ -825,8 +913,8 @@ def write_pickle(obj: object,
     -------
     None
     """
-    with open(path, 'wb') as f:
-        pickle.dump(obj, f, protocol=protocol, **kwargs)
+    with open(path, 'wb') as file:
+        pickle.dump(obj, file, protocol=protocol, **kwargs)
 
 
 def read_pickle(path: nd.PathLike) -> Any:
@@ -844,14 +932,11 @@ def read_pickle(path: nd.PathLike) -> Any:
     """
     # Validate path
     if not os.path.isfile(path):
-        raise FileNotFoundError(
-            "No file to read in found at %s"
-            % path
-        )
+        raise FileNotFoundError(f"No file to read in found at {path}")
 
     # Read in
-    with open(path, 'rb') as f:
-        obj = pickle.load(f)
+    with open(path, 'rb') as file:
+        obj = pickle.load(file)
 
     # If its a DVector, reset the process count
     if isinstance(obj, nd.core.data_structures.DVector):
@@ -864,22 +949,20 @@ def read_pickle(path: nd.PathLike) -> Any:
     # Check if class definition has a version (should do!)
     if not hasattr(obj.__class__, '__version__'):
         warn_msg = (
-            "The object loaded from '%s' has a version, but the class "
+            f"The object loaded from '{path}' has a version, but the class "
             "definition in the code does not. Aborting version check!\n"
-            "Loaded object is version %s"
-            % (path, obj.__version__)
+            f"Loaded object is version {obj.__version__}"
         )
         warnings.warn(warn_msg, UserWarning, stacklevel=2)
 
     # Throw warning if versions don't match
     if obj.__version__ != obj.__class__.__version__:
         warn_msg = (
-            "The object loaded from '%s' is not the same version as the "
+            f"The object loaded from '{path}' is not the same version as the "
             "class definition in the code. This might cause some unexpected "
             "problems.\n"
-            "Object Version: %s\n"
-            "Class Version: %s"
-            % (path, obj.__version__, obj.__class__.__version__)
+            f"Object Version: {obj.__version__}\n"
+            f"Class Version: {obj.__class__.__version__}"
         )
         warnings.warn(warn_msg, UserWarning, stacklevel=2)
 
@@ -913,15 +996,17 @@ def safe_dataframe_to_csv(df, out_path, **to_csv_kwargs):
             written_to_file = True
         except PermissionError:
             if not waiting:
-                print("Cannot write to file at %s.\n" % out_path +
-                      "Please ensure it is not open anywhere.\n" +
-                      "Waiting for permission to write...\n")
+                print(
+                    f"Cannot write to file at {out_path}.\n"
+                    "Please ensure it is not open anywhere.\n"
+                    "Waiting for permission to write...\n"
+                )
                 waiting = True
             time.sleep(1)
 
 
 def get_latest_modified_time(paths: Iterable[PathLike]) -> float:
-    """Gets the latest modified time of all files in paths
+    """Get the latest modified time of all files
 
     Parameters
     ----------
@@ -945,3 +1030,112 @@ def get_latest_modified_time(paths: Iterable[PathLike]) -> float:
             latest_time = modified_time
 
     return latest_time
+
+
+def get_oldest_modified_time(paths: Iterable[PathLike]) -> float:
+    """Get the oldest modified time of all files
+
+    Parameters
+    ----------
+    paths:
+        An iterable of paths to check.
+
+    Returns
+    -------
+    oldest_modified_time:
+        The oldest modified time of all paths.
+        If paths is an empty iterable, np.inf is returned.
+    """
+    # init
+    oldest_time = np.inf
+
+    # Check the latest time of all paths
+    for path in paths:
+        # Keep the latest time
+        modified_time = os.path.getmtime(path)
+        if modified_time < oldest_time:
+            oldest_time = modified_time
+
+    return oldest_time
+
+
+def _convert_to_path_list(
+    to_convert: Union[pathlib.Path, Iterable[pathlib.Path]],
+) -> List[pathlib.Path]:
+    """Convert the input into a list of paths
+
+    Takes either a directory, file path, or list of file paths and converts
+    into a list of file paths. If a list of file paths is given, this is
+    returned. If a list of directories is given, all files in all directories
+    are returned as a list. If a single file path is given, it is converted into a list
+    with a single item. If a directory is given, all files in the directory
+    are returned as a list.
+
+    Parameters
+    ----------
+    to_convert:
+        The directory, file path, or list of file paths to convert.
+
+    Returns
+    -------
+    file_path_list:
+        A list of file paths.
+    """
+    # If list, try convert each item
+    if isinstance(to_convert, list):
+        path_lists = [_convert_to_path_list(x) for x in to_convert]
+        return list(itertools.chain.from_iterable(path_lists))
+
+    # Otherwise, should be a Path
+    if not isinstance(to_convert, pathlib.Path):
+        raise ValueError(f"Expected a pathlib.Path. Got {type(to_convert)}")
+
+    # If a file, convert to single item list
+    if to_convert.is_file():
+        return [to_convert]
+
+    # Must be a directory, get all filenames
+    return [x for x in to_convert.iterdir() if x.is_file()]
+
+
+def is_old_cache(
+    original: Union[pathlib.Path, Iterable[pathlib.Path]],
+    cache: Union[pathlib.Path, Iterable[pathlib.Path]],
+    ignore_cache: bool = False,
+) -> bool:
+    """Check if the newest original file is newer than the oldest cache.
+
+    Loops though all files in `original` files (checks with `Path.isfile()`)
+    and get the latest modified time of the newest file. Then gets the oldest
+    modified time of the oldest file in `cache`. Only returns True if
+    the oldest cache is still older than the newest original file.
+
+    Parameters
+    ----------
+    original:
+        The directory, file path, or list of file paths or directories of
+        the original files to check.
+
+    cache:
+        The directory, file path, or list of file paths or directories of
+        the cache files to check.
+
+    ignore_cache:
+        Whether to completely ignore the check and ignore the cache no
+         matter what. If set to True, this function is short circuited and
+         will immediately return False.
+
+    Returns
+    -------
+    is_cache_older:
+        A boolean stating whether the cache is older or not.
+    """
+    # Short circuit if ignoring the cache
+    if ignore_cache:
+        return False
+
+    # Make sure we've just got lists if paths
+    original = _convert_to_path_list(original)
+    cache = _convert_to_path_list(cache)
+
+    return get_oldest_modified_time(cache) < get_latest_modified_time(original)

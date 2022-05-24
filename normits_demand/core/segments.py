@@ -1877,16 +1877,11 @@ class SegmentationLevel:
 
         return tp_dict
 
-    def generate_file_name(self,
-                           segment_params: Dict[str, Any],
-                           file_desc: Optional[str] = None,
-                           trip_origin: Optional[str] = None,
-                           year: Optional[str] = None,
-                           suffix: Optional[str] = None,
-                           csv: Optional[bool] = False,
-                           compressed: Optional[bool] = False,
-                           ftype: Optional[str] = None,
-                           ) -> str:
+    def generate_file_name(
+        self,
+        segment_params: Dict[str, Any],
+        **kwargs,
+    ) -> str:
         """Generate a file name from segment_params
 
         Builds a underscore separated file name based on the segments
@@ -1897,14 +1892,14 @@ class SegmentationLevel:
 
         Parameters
         ----------
-        file_desc:
-            A string describing the file. For matrices, this is usually 'pa'
-            or 'od'. For other files it is a description of their contents.
-
         segment_params:
             A dictionary of {segment_name: segment_value}. All segment_names
             from this segmentation must be contained in segment_params. An
             error will be thrown if any are missing.
+
+        file_desc:
+            A string describing the file. For matrices, this is usually 'pa'
+            or 'od'. For other files it is a description of their contents.
 
         trip_origin:
             The trip origin to add to the filename. Usually 'hb' or 'nhb'.
@@ -1929,9 +1924,71 @@ class SegmentationLevel:
         file_name:
             The generated file_name for this segmentation.
         """
-        # Make sure all segments are in segment_params
-        self.validate_contains_all_segments(segment_params.keys())
+        template = self.generate_template_file_name(**kwargs)
+        return self.generate_file_name_from_template(
+            template=template,
+            segment_params=segment_params,
+        )
 
+    @staticmethod
+    def generate_template_file_name(
+        file_desc: Optional[str] = None,
+        trip_origin: Optional[str] = None,
+        year: Optional[str] = None,
+        suffix: Optional[str] = None,
+        csv: Optional[bool] = False,
+        compressed: Optional[bool] = False,
+        ftype: Optional[str] = None,
+    ) -> str:
+        """Generate a template filename
+
+        Does the same job as `self.generate_file_name`, however, it leaves out
+        the segment params to be added in later, using
+        `self.generate_file_name_from_template()`.
+        When this function is used with
+        `self.generate_file_name_from_template()`, the same output as
+        `self.generate_file_name()` will be produced.
+
+        Parameters
+        ----------
+        file_desc:
+            A string describing the file. For matrices, this is usually 'pa'
+            or 'od'. For other files it is a description of their contents.
+
+        trip_origin:
+            The trip origin to add to the filename. Usually 'hb' or 'nhb'.
+
+        year:
+            The year to add to the filename.
+
+        suffix:
+            An optional suffix to add to the end of the filename. Could be
+            something like 'internal' or 'external'. Optionally can be used
+            to add a custom filetype suffix. The dot would need to be passed
+            in too.
+
+        csv:
+            Whether the return should be a csv filetype or not.
+
+        compressed:
+            Whether the return should be a compressed filetype or not.
+
+        ftype:
+            A custom filetype to give to the generated filename. Only
+            considered if both `csv` and `compressed` is `False`.
+
+        Returns
+        -------
+        file_name:
+            The generated file_name for this segmentation. In place of the
+            segment params, the string "{segment_params}" will be written,
+            ready to be formatted later.
+
+        See Also
+        --------
+        `self.generate_file_name()`
+        `self.generate_file_name_from_template()`
+        """
         # Build the filename in order, and store in list
         name_parts = list()
         if trip_origin is not None:
@@ -1943,8 +2000,8 @@ class SegmentationLevel:
         if year is not None:
             name_parts += [f"yr{year}"]
 
-        for segment_name in self.naming_order:
-            name_parts += [f"{segment_name}{segment_params[segment_name]}"]
+        # Add in the placeholder for segment params
+        name_parts += ["{segment_params}"]
 
         if suffix is not None:
             name_parts += [suffix]
@@ -1958,9 +2015,95 @@ class SegmentationLevel:
         elif compressed:
             final_name += '.csv.bz2'
         elif ftype is not None:
+            # Add starting dot if not there
+            ftype = f".{ftype}" if ftype[0] != "." else ftype
             final_name += ftype
 
         return final_name
+
+    def generate_file_name_from_template(
+        self,
+        template: str,
+        segment_params: Dict[str, Any],
+    ) -> str:
+        """Generate a filename from a template
+
+        Does the same job as `self.generate_file_name` when given a template
+        generated using `self.generate_template_file_name()`.
+        The given template can be anything, but it MUST be able to be
+        formatted as `template.format(segment_params=segment_str)`.
+
+        Parameters
+        ----------
+        template:
+            The template to to add `segment_params` into. This string can be
+            generated using `self.generate_template_file_name()`.
+
+        segment_params:
+            A dictionary of {segment_name: segment_value}. All segment_names
+            from this segmentation must be contained in segment_params. An
+            error will be thrown if any are missing.
+
+        Returns
+        -------
+        filename:
+            The generated file_name for this segmentation.
+
+        See Also
+        --------
+        `self.generate_file_name()`
+        `self.generate_template_file_name()`
+        """
+        # Make sure all segments are in segment_params
+        self.validate_contains_all_segments(segment_params.keys())
+
+        # Generate the segment_params string
+        segment_parts = list()
+        for segment_name in self.naming_order:
+            segment_parts += [f"{segment_name}{segment_params[segment_name]}"]
+
+        return template.format(segment_params='_'.join(segment_parts))
+
+    @staticmethod
+    def generate_template_segment_str(
+        naming_order: List[str],
+        segment_params: Dict[str, Any],
+    ) -> str:
+        """Generate the string of segment params to use with a template
+
+        Does the same job as `self.generate_file_name` when used with a
+        template generated using `self.generate_template_file_name()`.
+        i.e.
+        `template = self.generate_template_file_name()`
+        `fname = template.format(segment_params=generate_template_segment_str())`
+
+        Parameters
+        ----------
+        naming_order:
+            The order to list the segment params in. Usually this would be
+            gotten from an instance of `SegmentationLevel.naming_order`.
+
+        segment_params:
+            A dictionary of {segment_name: segment_value}. All segment_names
+            from this segmentation must be contained in segment_params. An
+            error will be thrown if any are missing.
+
+        Returns
+        -------
+        filename:
+            The generated segment params string to use with a template.
+
+        See Also
+        --------
+        `self.generate_file_name()`
+        `self.generate_template_file_name()`
+        """
+        # Generate the segment_params string
+        segment_parts = list()
+        for segment_name in naming_order:
+            segment_parts += [f"{segment_name}{segment_params[segment_name]}"]
+
+        return '_'.join(segment_parts)
 
     def save(self, path: PathLike = None) -> Union[None, Dict[str, Any]]:
         """Converts SegmentationLevel into and instance dict and saves to disk

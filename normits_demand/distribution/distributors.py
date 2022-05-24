@@ -991,7 +991,8 @@ class GravityDistributor(AbstractDistributor):
                 f"{nan_report}"
             )
 
-        # # TODO(BT): Fix this problem at the cost source
+        # TODO(BT): Fix this problem at the cost source,
+        #  only do for upper model. cars, bus, active
         # # Fill any zero costs with 0.2
         # cost_matrix = cost_matrix.mask(cost_matrix == 0, 0.2)
 

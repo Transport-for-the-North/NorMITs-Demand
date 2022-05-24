@@ -52,6 +52,9 @@ NHB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
 # TODO(BT): KLUDGE. INPUTS SHOULDN'T NEED THIS!!
 TARGET_TLD_MULTIPLIER = constants.MILES_TO_KM
 
+# TODO(BT): If NHB segmentation isn't with tp, allow providing of NHB tp
+#  splits so tp split OD can be output still
+
 
 def main():
     mode = nd.Mode.CAR
@@ -70,7 +73,7 @@ def main():
     run_nhb = False
 
     run_all = False
-    run_upper_model = True
+    run_upper_model = False
     run_lower_model = True
     run_pa_matrix_reports = False
     run_pa_to_od = False
