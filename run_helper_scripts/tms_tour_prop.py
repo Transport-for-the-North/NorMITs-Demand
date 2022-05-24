@@ -29,15 +29,16 @@ import normits_demand as nd
 from normits_demand.utils import general as du
 
 # ## GLOBALS ## #
-MODES = [nd.Mode.TRAIN]
+MODES = [nd.Mode.CAR]
+SCENARIO = nd.Scenario.NTEM
 YEARS = [2018]
 TPS = [1, 2, 3, 4]
-ZONING_SYSTEM = "miranda"
-NOTEM_ITER = '9.6b'
+ZONING_SYSTEM = "miham"
+NOTEM_ITER = '9.6c'
 OUT_FOLDER_FMT = r"I:\NorMITs Demand\import\modal\{mode_name}\pre_me_tour_proportions\v{iter}\{zone_name}"
 
 phi_import_folder = r"I:\NorMITs Demand\import\phi_factors"
-notem_import_folder = r"T:\MidMITs Demand\MiTEM\iter%s\SC01_JAM\hb_productions" % NOTEM_ITER
+notem_import_folder = fr"T:\MidMITs Demand\MiTEM\iter{NOTEM_ITER}\{SCENARIO.get_name()}\hb_productions"
 phi_fname = "mode_%d_fhp_tp_pa_to_od.csv"
 prod_vec_fname = "hb_msoa_notem_segmented_%d_dvec.pkl"
 zone_translate_dir = r"I:\NorMITs Demand\import\zone_translation\one_to_one"
