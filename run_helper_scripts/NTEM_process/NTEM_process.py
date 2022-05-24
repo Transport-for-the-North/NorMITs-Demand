@@ -46,14 +46,14 @@ class params:
         "base year": 2018,
         "base year lower": 2016,
         "base year higher": 2021,
-        "target year": 2019,
-        "target year lower": 2016,
-        "target year higher": 2021,
+        "target year": 2021,
+        "target year lower": None,
+        "target year higher": None,
     }
     data_source = pathlib.Path(r"C:\Projects\MidMITS\NTEM")
     lookup_dir = pathlib.Path(r"SHP/NTEM_land_use_growth_lookup.xlsx")
+    tfn_base_emp_dir = pathlib.Path(path.join("SHP", f"hb_non_resi_data_{years['base year']}_v2.3.csv"))
     tfn_base_pop_dir = pathlib.Path(path.join("SHP", f"land_use_{years['base year']}_pop.csv"))
-    tfn_base_emp_dir = pathlib.Path(path.join("SHP", f"land_use_{years['base year']}_emp.csv"))
     NTEM_output_dir = pathlib.Path(r"Temp storage")
     NTEM_input_dir = pathlib.Path(r"NTEM")
     emp_corr_dir = pathlib.Path(r"SHP/emp/ntem_to_int_zone_correspondence.csv")
@@ -74,35 +74,34 @@ def read_tfn() -> dict:
         path.join(p.data_source, p.lookup_dir),
         sheet_name="TfN Traveller Types",
         skiprows=11,
-        usecols=["tfn_traveller_type", "ntem_traveller_type"],
+        usecols=["tfn_traveller_type", "NTEM_traveller_type"],
     ).set_index("tfn_traveller_type")
     lookup_emp = pd.read_excel(
         path.join(p.data_source, p.lookup_dir),
-        sheet_name="TfN Employment Types",
-        skiprows=11,
-        usecols=["employment_cat", "NTEM_cat"],
-    ).set_index("employment_cat")
+        sheet_name="sic_codes",
+        usecols=["sic_code", "NTEM_cat"],
+    ).set_index("sic_code")
     emp_base = (
         pd.read_csv(path.join(p.data_source, p.tfn_base_emp_dir))
-        .set_index(["msoa_zone_id", "employment_cat"])
+        .set_index(["msoa_zone_id", "sic_code"])
         .join(lookup_emp, how="inner")
         .reset_index()
-        .set_index(["msoa_zone_id", "employment_cat", "NTEM_cat"])
+        .set_index(["msoa_zone_id", "sic_code", "NTEM_cat"])
     )
     pop_base = (
         pd.read_csv(path.join(p.data_source, p.tfn_base_pop_dir))
         .set_index(["msoa_zone_id", "tfn_traveller_type"])
         .join(lookup_pop, how="inner")
         .reset_index()
-        .set_index(["msoa_zone_id", "tfn_traveller_type", "ntem_traveller_type"])
+        .set_index(["msoa_zone_id", "tfn_traveller_type", "NTEM_traveller_type"])
     )
-    emp_base.index.rename(["msoa_zone_id", "employment_cat", "emp code"])
+    emp_base.index.rename(["msoa_zone_id", "sic_code", "emp code"])
     pop_base.index.rename(["msoa_zone_id", "tfn_traveller_type", "pop code"])
-    emp_base.columns = ["soc", f"{p.years['base year']}"]
-    pop_base.columns = ["area type", f"{p.years['base year']}"]
+    emp_base.columns = ["people"]
+    pop_base.columns = ["area_type", f"{p.years['base year']}"]
     dict = {
-        "emp": [emp_base, ["msoa_zone_id","employment_cat","soc", f"{p.years['base year']}"]],
-        "pop": [pop_base, ["msoa_zone_id","tfn_traveller_type","area_type", f"{p.years['base year']}"]],
+        "emp": {'df':emp_base, 'cols':["msoa_zone_id","sic_code"], 'base col':"people",'NTEM col':"NTEM_cat"},
+        "pop": {'df':pop_base, 'cols':["msoa_zone_id","area_type","tfn_traveller_type"],'base col':str(p.years['base year']),'NTEM col':"NTEM_traveller_type"}
     }
     return dict
 
@@ -292,7 +291,7 @@ def final(sector: str):
     p = params
     growth_df = process_df(sector).drop(["pct", "growth"], axis=1)
     tfn_dict = read_tfn()
-    tfn_data = tfn_dict[sector][0]
+    tfn_data = tfn_dict[sector]['df']
     tfn_data.index.rename(
         ["msoa_zone_id", "tfn_traveller_type", f"{sector} code"], inplace=True
     )
@@ -315,11 +314,11 @@ def apply_abs(sector: str) -> pd.DataFrame:
         dataframe: returns a dataframe with more columns than necessary scaled to target year
     """
     p = params
-    tfn_dict = read_tfn()
-    tfn_data = tfn_dict[sector][0]
-    tfn_data.index.rename(
-        ["msoa_zone_id", "tfn_traveller_type", f"{sector} code"], inplace=True
-    )
+    tfn_dict = read_tfn()[sector]
+    tfn_data = tfn_dict['df']
+    # tfn_data.index.rename(
+    #     tfn_dict['cols'], inplace=True
+    # )
     NTEM = func(
         sector, p.years["base year"], p.years["base year lower"], p.years["base year higher"]
     ).join(
@@ -331,34 +330,40 @@ def apply_abs(sector: str) -> pd.DataFrame:
         ),
         how="inner",
     )
-    NTEM.index.rename(["msoa_zone_id", f"{sector} code"], inplace=True)
+    NTEM.index.rename(["msoa_zone_id", f"{tfn_dict['NTEM col']}"], inplace=True)
     NTEM["diff"] = NTEM[f"{p.years['target year']}"] - NTEM[f"{p.years['base year']}"]
-    grouped = tfn_data.groupby(["msoa_zone_id", f"{sector} code"]).sum()[
-        f"{p.years['base year']}"
+    grouped = tfn_data.groupby(['msoa_zone_id',tfn_dict['NTEM col']]).sum()[
+        f"{tfn_dict['base col']}"
     ]
     joined = tfn_data.join(grouped, how="inner", rsuffix="_grouped")
     joined["prop"] = (
-        joined[f"{p.years['base year']}"] / joined[f"{p.years['base year']}_grouped"]
+        joined[f"{tfn_dict['base col']}"] / joined[f"{tfn_dict['base col']}_grouped"]
     )
+    joined['prop'].fillna(value=0, inplace=True)
     output = joined.join(NTEM["diff"], how="inner")
+    output.to_csv(r"C:\Projects\MidMITS\NTEM\testing\with_neg" + sector + ".csv")
     output[f"{p.years['target year']}"] = (
-        output[f"{p.years['base year']}"] + output["diff"] * output["prop"]
+        output[f"{tfn_dict['base col']}"] + output["diff"] * output["prop"]
     )
+    output.to_csv(r"C:\Projects\MidMITS\NTEM\testing\with_neg_2" + sector + ".csv")
     output.loc[output[f"{p.years['target year']}"] < 0, f"{p.years['target year']}"] = 0
+    output.to_csv(r"C:\Projects\MidMITS\NTEM\testing\with_neg_3" + sector + ".csv")
     return output
 
 
 def main():
     p = params
-    for sector in ["emp", "pop"]:
-        dic = read_tfn()
-        cols = ["msoa_zone_id", "tfn_traveller_type", "2019"]
-        cols.append(dic[sector][1][0])
+    for sector in ['emp','pop']:
+        dic = read_tfn()[sector]
+        #cols = ["msoa_zone_id", "tfn_traveller_type", str(p.years['target year'])]
+        cols = dic['cols'].copy()
+        cols.append(str(p.years['target year']))
         df = apply_abs(sector).reset_index()
         output = df[cols]
         output.set_index(
-            dic[sector][1][0], inplace=True
+            dic['cols'], inplace=True
         )
+        output.columns = ['people']
         output.to_csv(
             path.join(
                 p.data_source, "SHP", sector, f"landuse_{p.years['target year']}_{sector}.csv"
