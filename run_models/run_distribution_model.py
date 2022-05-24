@@ -76,7 +76,7 @@ def main():
     run_upper_model = False
     run_lower_model = False
     run_pa_matrix_reports = False
-    run_pa_to_od = True
+    run_pa_to_od = False
     run_od_matrix_reports = False
     compile_to_assignment = False
 

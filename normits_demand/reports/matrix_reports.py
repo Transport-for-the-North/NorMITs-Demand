@@ -21,6 +21,7 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 import tqdm
+import operator
 
 # Local Imports
 # pylint: disable=import-error
@@ -123,7 +124,8 @@ def write_trip_end_sector_reports(
     dvec = nd_core.DVector(
         import_data=trip_end,
         segmentation=segmentation,
-        zoning_system=zoning_system
+        zoning_system=zoning_system,
+        time_format='avg_day'
     )
 
     dvec.write_sector_reports(
@@ -140,7 +142,7 @@ def matrix_sector_summary(
     index_col_name: str = "sector_row",
     columns_col_name: str = "sector_column",
     val_col_name: str = "val",
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Generate sector summaries of given matrix
 
     Parameters
@@ -174,6 +176,10 @@ def matrix_sector_summary(
     long_sector_matrix:
         `sector_matrix`, converted to wide format, with `segment_params`
         attached as columns.
+
+    sector_df_intra:
+        The intrazonal trips of the given matrix summed into sector zoning
+        (output as tripends)
     """
     # Translate into sector zoning
     sector_zoning = nd_core.get_zoning_system("ca_sector_2020")
@@ -198,8 +204,6 @@ def matrix_sector_summary(
         index=matrix_zoning_system.unique_zones,
         columns=['val']
     )
-    print(df_intra)
-    print(df_intra.sum())
 
     # Build sector intrazonal totals
     sector_df_intra = translation.translate_vector_zoning(
@@ -207,48 +211,127 @@ def matrix_sector_summary(
         from_zoning_system=matrix_zoning_system,
         to_zoning_system=sector_zoning
     )
+    
+    # Check for MyPy
+    assert isinstance(sector_df_intra, pd.DataFrame)
 
     # Add in segment cols
     for key, val in segment_params.items():
         long_sector_matrix[key] = val
         sector_df_intra[key] = val
 
-    sector_df_intra = sector_df_intra.reset_index().rename(
-        columns={'index': index_col_name})
-    print(sector_df_intra.head())
+    sector_df_intra.index.name = index_col_name
+    sector_df_intra = sector_df_intra.reset_index()
 
     # Re-order cols
-    col_order = (
-        [index_col_name, columns_col_name]
-        + list(segment_params.keys())
-        + [val_col_name]
-    )
+    final_cols = list(segment_params.keys()) + [val_col_name]
+    col_order = [index_col_name, columns_col_name] + final_cols
     long_sector_matrix = long_sector_matrix.reindex(columns=col_order)
 
-    col_order = (
-        [index_col_name]
-        + list(segment_params.keys())
-        + [val_col_name]
-    )
+    col_order = [index_col_name] + final_cols
     sector_df_intra = sector_df_intra.reindex(columns=col_order)
-    print(sector_df_intra.head())
 
     return sector_matrix, long_sector_matrix, sector_df_intra
 
 
+def cost_distribution_table(
+    distribution_matrix: pd.DataFrame,
+    cost_matrix: np.ndarray,
+    segment_params: Dict[str, Any],
+    matrix_zoning_system: nd_core.ZoningSystem,
+) -> pd.DataFrame:
+    """Generates a table of cost distribution for this segment
+
+    Generates a table of cost distribution, including the segment names in
+    `segment_params`, to be output as a long table into the report.
+
+    Parameters
+    ----------
+    distribution_matrix:
+        The matrix of actual demand, showing the distribution of demand across
+        the zones.
+
+    cost_matrix:
+        The matrix showing the cost of every zone to zone trip in
+        `matrix_zoning_system`.
+
+    segment_params:
+        A dictionary of segment params from iterating over a
+        `nd_core.SegmentationLevel`. To be added to the generated cost
+        distribution table.
+
+    matrix_zoning_system:
+        The zoning system being used by both the `distribution_matrix` and the
+        `cost_matrix`.
+
+    Returns
+    -------
+    cost_distribution_table:
+        A pandas dataframe with the following columns:
+        list(segment_params.keys())
+        + ['lower', 'upper', 'distribution', 'distribution_pct']
+    """
+    # Init
+    bin_edges = np.array([0, 1, 2, 3, 5, 10, 15, 25, 35, 50, 100, 200, np.inf]) * 1.609344
+
+    # Remove the external to external demand
+    external_mask = pd_utils.get_wide_mask(
+        df=distribution_matrix,
+        zones=matrix_zoning_system.external_zones,
+        join_fn=operator.and_
+    )
+    matrix_no_ee = distribution_matrix * ~external_mask
+
+    # Calculate the achieved distribution
+    distribution, norm_distribution = cost_utils.normalised_cost_distribution(
+        matrix=matrix_no_ee.values,
+        cost_matrix=cost_matrix,
+        bin_edges=bin_edges
+    )
+
+    tld = pd.DataFrame({
+        'lower': bin_edges[:-1],
+        'upper': bin_edges[1:],
+        'distribution': distribution,
+        'distribution_pct': norm_distribution
+    })
+
+    # Add in segment cols before class fills defaults
+    for key, val in segment_params.items():
+        tld[key] = val
+
+    # Re-order cols
+    col_order = (
+        list(segment_params.keys())
+        + ['lower', 'upper', 'distribution', 'distribution_pct']
+    )
+    return tld.reindex(columns=col_order)
+
+
 def generate_excel_sector_report(
     sector_report_data: templates.DistributionModelMatrixReportSectorData,
+    sector_intra_data: templates.DistributionModelMatrixReportTripEndData,
+    cost_distribution_data: templates.DistributionModelMatrixReportCostDistributionData,
     output_path: pathlib.Path,
-    sector_intras,
-    tld_dist
 ) -> None:
-    """Generate a standard sector report
+    """Generates a standard sector report
 
     Parameters
     ----------
     sector_report_data:
         A DistributionModelMatrixReportSectorData object which defines
-        the sector data and how each columns links to the needed data.
+        the sector data and how each column links to the needed data in the
+        output spreadsheet.
+
+    sector_intra_data:
+        A DistributionModelMatrixReportTripEndData object which defines
+        the sector intra-zonal data and how each column links to the
+        needed data in the output spreadsheet.
+
+    cost_distribution_data:
+        A DistributionModelMatrixReportCostDistributionData object which defines
+        the cost distribution data and how each column links to the needed
+        data in the output spreadsheet.
 
     output_path:
         The full path, including filename, to output the completed report
@@ -264,7 +347,7 @@ def generate_excel_sector_report(
 
     # Add sector data to the report
     pd_utils.append_df_to_excel(
-        df=sector_report_data.sector_data,
+        df=sector_report_data.data,
         path=output_path,
         sheet_name='sector_data',
         index=False,
@@ -274,7 +357,7 @@ def generate_excel_sector_report(
 
     # Add Sector Intras to excel report
     pd_utils.append_df_to_excel(
-        df=sector_intras,
+        df=sector_intra_data.data,
         path=output_path,
         sheet_name='sector_intra_data',
         index=False,
@@ -282,9 +365,9 @@ def generate_excel_sector_report(
         keep_data_validation=True,
     )
 
-    # Add TLDs to excel report
+    # Add cost_distributions to excel report
     pd_utils.append_df_to_excel(
-        df=tld_dist,
+        df=cost_distribution_data.data,
         path=output_path,
         sheet_name='tld_data',
         index=False,
@@ -302,26 +385,79 @@ def generate_matrix_reports(
     matrix_fname_template: str,
     row_name: str,
     col_name: str,
-):
-    # PA RUN REPORTS
-    # Matrix Trip ENd totals
-    #   Inter / Intra Report by segment?
-    #   Aggregate segments and report again too? (CBO)
-    # nd.constants.USER_CLASS_PURPOSES
-    # TLD curve
-    #   single mile bands - p/m (ca ) segments full matrix
+    report_prefix: str = None,
+) -> None:
+    """Generates a standard set of matrix reports
 
-    # TODO(PW, BT): Add constants such as this to the report on the fly in
-    #  one of the reference sheets
-    nd_constants.USER_CLASS_PURPOSES
+    Uses an excel template to generate a comprehensive report of matrices.
+    The report generates a standard Sector report that can be filtered at
+    different segmentation levels. The report includes:
+    - Sector Matrix (with or without intra-zonal trips)
+    - Purpose %age split
+    - Trip Length Distributions
+    - Sector Trip Ends
 
+    Parameters
+    ----------
+    matrix_dir:
+        The directory containing the matrices to generate the report on.
+        `matrix_fname_template` will be used to generate the matrix filenames
+        along with the segment_params from `matrix_segmentation`.
+
+    report_dir:
+        The directory to write the generated reports out to.
+
+    cost_matrices:
+        A dictionary of cost matrices to use when generating the cost
+        distributions. Keys should be segment names, as generated by
+        `matrix_segmentation.get_segment_name(segment_params)`, and values
+        are cost values of shape
+        `(len(matrix_zoning_system), len(matrix_zoning_system))`
+
+    matrix_segmentation:
+        The segmentation of the matrices to generate the reports for.
+        This is used to generate all the relevant filenames of the needed
+        matrices.
+
+    matrix_zoning_system:
+        The zoning system of the matrices to generate the reports for.
+        This is needed to translate the matrices from their starting zoning
+        system into the `2020_ca_sector` zoning system.
+
+    matrix_fname_template:
+        A template filename that can be used to generate the matrix filenames.
+        This is used with the `segment_params` generated by iterating over
+        `matrix_segmentation` to generate the filenames.
+        `matrix_segmentation.generate_file_name_from_template()`
+
+    row_name:
+        The name to give to the column in the long sector matrix that was
+        the index of the read in matrices. Usually "productions" or "origins"
+
+    col_name:
+        The name to give to the column in the long sector matrix that was
+        the columns of the read in matrices. Usually "attractions" or
+        "destinations"
+
+    report_prefix:
+        A string to attach to the start of the report name. Useful for adding a
+        version name to the report.
+
+    Returns
+    -------
+    None
+    """
     # Init
     val_col_name = "val"
+
+    sector_report_fname = "sector_report_summary.xlsx"
+    if report_prefix is not None:
+        sector_report_fname = f"{report_prefix}_{sector_report_fname}"
 
     # Build needed paths
     sector_matrix_dir = report_dir / 'sector_matrices'
     trip_end_report_dir = report_dir / 'trip_ends'
-    sector_report_path = report_dir / 'Sector_Report_Summary.xlsx'
+    sector_report_path = report_dir / sector_report_fname
 
     # Ensure paths exist
     file_ops.create_folder(sector_matrix_dir)
@@ -332,7 +468,7 @@ def generate_matrix_reports(
     trip_end_cols = list()
     long_sector_matrices = list()
     sector_intras_full = list()
-    tld_list = list()
+    cost_dist_list = list()
 
     desc = "Generating PA Reports"
     for segment_params in tqdm.tqdm(matrix_segmentation, desc=desc):
@@ -345,7 +481,7 @@ def generate_matrix_reports(
         matrix = file_ops.read_df(path, find_similar=True, index_col=0)
 
         # Summarise into trip ends
-        # TODO Add ie to excel template
+        # TODO(PW): Add ie to excel template
         row_summary, col_summary = matrix_to_trip_ends(
             matrix=matrix,
             segment_params=segment_params,
@@ -362,7 +498,6 @@ def generate_matrix_reports(
             columns_col_name=col_name,
             val_col_name=val_col_name,
         )
-
         long_sector_matrices.append(long_sector_matrix)
         sector_intras_full.append(sector_df_intra)
 
@@ -371,37 +506,15 @@ def generate_matrix_reports(
         sector_matrix.to_csv(sector_matrix_dir / sector_fname)
 
         # ## GENERATE COST DISTRIBUTION CURVES ## #
-        # TODO(BT, PW): Pass in the right bands here
-        #  Pass this data into generate_excel_sector_report() below, and add
-        #  into the sector report
         segment_name = matrix_segmentation.get_segment_name(segment_params)
-        bin_edges = np.array([0, 1, 2, 3, 5, 10, 15, 25, 35, 50, 100, 200, np.inf]) * 1.609344
-        achieved_distribution = cost_utils.calculate_cost_distribution(
-            matrix=matrix.values,
+        cost_dist = cost_distribution_table(
+            distribution_matrix=matrix,
             cost_matrix=cost_matrices[segment_name],
-            bin_edges=bin_edges
+            segment_params=segment_params,
+            matrix_zoning_system=matrix_zoning_system,
         )
 
-        tld = pd.DataFrame(
-            {'lower (km)': bin_edges[:-1],
-             'upper (km)': bin_edges[1:],
-             'distribution %': achieved_distribution
-             }
-        )
-        print(tld)
-
-        # Add in segment cols
-        for key, val in segment_params.items():
-            tld[key] = val
-
-        # Re-order cols
-        col_order = (
-                list(segment_params.keys())
-                + ['lower (km)', 'upper (km)', 'distribution %']
-        )
-        tld = tld.reindex(columns=col_order)
-
-        tld_list.append(tld)
+        cost_dist_list.append(cost_dist)
 
     # ## GENERATE TRIP END REPORTS ## #
     kwargs = {
@@ -418,22 +531,28 @@ def generate_matrix_reports(
 
     # ## GENERATE EXCEL SECTOR REPORT ## #
     sector_report_data = templates.DistributionModelMatrixReportSectorData(
-        sector_data=pd.concat(long_sector_matrices, ignore_index=True),
+        data=pd.concat(long_sector_matrices, ignore_index=True),
         from_zone_col=row_name,
         to_zone_col=col_name,
-        val_col=val_col_name,
+        val_cols=[val_col_name],
     )
-    print("sector intras full table")
-    print(sector_intras_full)
-    sector_intras_full = pd.concat(sector_intras_full, ignore_index=True)
-    tld_full = pd.concat(tld_list, ignore_index=True)
+
+    sector_intra_data = templates.DistributionModelMatrixReportTripEndData(
+        data=pd.concat(sector_intras_full, ignore_index=True),
+        from_zone_col=row_name,
+        val_cols=[val_col_name],
+    )
+
+    cost_distribution_data = templates.DistributionModelMatrixReportCostDistributionData(
+        data=pd.concat(cost_dist_list, ignore_index=True),
+        lower_col='lower',
+        upper_col='upper',
+        val_cols=['distribution', 'distribution_pct'],
+    )
 
     generate_excel_sector_report(
         sector_report_data=sector_report_data,
+        sector_intra_data=sector_intra_data,
+        cost_distribution_data=cost_distribution_data,
         output_path=sector_report_path,
-        sector_intras=sector_intras_full,
-        tld_dist=tld_full
     )
-
-
-    # TODO: Add TLD calculation and export

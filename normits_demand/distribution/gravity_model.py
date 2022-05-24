@@ -321,11 +321,12 @@ class GravityModelBase(abc.ABC):
                            tcd_bin_edges: List[float],
                            ) -> np.ndarray:
         """Returns the distribution of matrix across self.tcd_bin_edges"""
-        return cost_utils.calculate_cost_distribution(
+        _, normalised = cost_utils.normalised_cost_distribution(
             matrix=matrix,
             cost_matrix=self.cost_matrix,
             bin_edges=tcd_bin_edges,
         )
+        return normalised
 
     def _guess_init_params(self,
                            cost_args: List[float],
@@ -3015,7 +3016,7 @@ class MultiAreaGravityModelCalibrator:
             area_cost = self.cost_matrix * area_bool
 
             # Convert matrix into an achieved distribution curve
-            achieved_band_shares = cost_utils.calculate_cost_distribution(
+            _, achieved_band_shares = cost_utils.normalised_cost_distribution(
                 matrix=area_matrix,
                 cost_matrix=area_cost,
                 bin_edges=self.tcd_bin_edges[area_id],

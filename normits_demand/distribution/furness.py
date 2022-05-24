@@ -212,7 +212,7 @@ class Furness3D:
                 area_cost = self.cost_matrix * area_mask
 
                 # Calculate the convergence of this area
-                achieved_band_shares = cost_utils.calculate_cost_distribution(
+                _, achieved_band_shares = cost_utils.normalised_cost_distribution(
                     matrix=area_matrix_values,
                     cost_matrix=area_cost,
                     min_bounds=area_tcd['min'].tolist(),
