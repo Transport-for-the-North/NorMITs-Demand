@@ -39,7 +39,7 @@ def main() -> None:
     base_year = 2018
     mode = nd.Mode.CAR
     use_tram = False
-    scenario = nd.Scenario.SC01_JAM
+    scenario = nd.Scenario.NTEM
     # Distribution model paths
     paths = dist_params.DistributionModelPaths(
         import_home=r"I:\NorMITs Demand\import",
