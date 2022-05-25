@@ -34,9 +34,9 @@ from normits_demand.pathing.distribution_model import DistributionModelArgumentB
 def main() -> None:
     """Run MidMITs distribution model."""
     # Distribution running args
-    mitem_iteration_name = run_mitem.mitem_iter
+    mitem_iteration_name = "9.6c-COVID"
     dm_iteration_name = f"{mitem_iteration_name}.1"
-    base_year = 2018
+    base_year = 2021
     mode = nd.Mode.CAR
     use_tram = False
     scenario = nd.Scenario.NTEM
