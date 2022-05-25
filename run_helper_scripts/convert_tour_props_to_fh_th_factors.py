@@ -36,9 +36,9 @@ from normits_demand.utils import file_ops
 
 # ## GLOBALS ## #
 # Running variables
-MODEL_NAME = 'miranda'
-NOTEM_ITER = '9.6b'
-MODE = nd.Mode.TRAIN
+MODEL_NAME = 'miham'
+NOTEM_ITER = '9.6c'
+MODE = nd.Mode.CAR
 
 TOUR_PROP_DIR = (
     f'I:/NorMITs Demand/import/modal/{MODE.get_name()}'

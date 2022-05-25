@@ -239,9 +239,10 @@ def iter_od_matrices(prior_folder: Path, post_folder: Path) -> Iterator[MatrixDe
     """
     suffixes = (".csv", ".csv.bz2", ".pbz2")
     for prior in prior_folder.iterdir():
-        if prior.is_dir() or prior.suffix.lower() not in suffixes:
+        suffix = "".join(prior.suffixes)
+        if prior.is_dir() or suffix.lower() not in suffixes:
             continue
-        stem = prior.name.removesuffix("".join(prior.suffixes))
+        stem = prior.name.removesuffix(suffix)
         stem = stem.replace("synthetic_", "")
 
         # Only use HB from home matrices
@@ -687,16 +688,14 @@ def main(params: PostMEAdjustmentParameters, init_logger: bool = True) -> None:
 ##### MAIN #####
 if __name__ == "__main__":
     # Setup parameters, TODO replace this with a config
-    # post_me_folder = Path(r"T:\MidMITs Demand\MiHAM Assignments\iter9.3.3\ME")
-    post_me_folder = Path(
-        r"C:\WSP_Projects\MidMITs\02 MidMITs\Outputs\MiHAM Assignments\iter9.3.3\ME"
-    )
+    iteration = "9.6b.1"
+    post_me_folder = Path(fr"T:\MidMITs Demand\MiHAM Assignments\iter{iteration}\ME")
     post_me_files = [
         post_me_folder / f"{t}_MELoop6/miham_stacked_TS{n}_I6.UFM"
         for n, t in TIME_PERIODS.items()
     ]
     compiled_od_folder = Path(
-        r"T:\MidMITs Demand\Distribution Model\iter9.3.3"
+        fr"T:\MidMITs Demand\Distribution Model\iter{iteration}"
         r"\car_and_passenger\Final Outputs\Compiled OD Matrices"
     )
 
@@ -705,7 +704,7 @@ if __name__ == "__main__":
         # saturn_folder=Path(r"C:\SATWIN\XEXES11312U"),
         saturn_folder=Path(r"C:\SATWIN\XEXES 11.5.05H MC N4"),
         synthetic_full_od_folder=Path(
-            r"T:\MidMITs Demand\Distribution Model\iter9.3.3"
+            fr"T:\MidMITs Demand\Distribution Model\iter{iteration}"
             r"\car_and_passenger\Final Outputs\Full OD Matrices"
         ),
         synthetic_compiled_od_folder=compiled_od_folder / "PCU",
@@ -715,8 +714,8 @@ if __name__ == "__main__":
         compile_factors=compiled_od_folder / "od_compilation_factors.pkl",
         post_me_matrices=SATURNMatrices(*post_me_files),
         output_folder=Path(
-            r"C:\WSP_Projects\MidMITs\02 MidMITs\Outputs"
-            r"\Post ME Trip Rate Adjustments\iter9.3.3b"
+            r"T:\MidMITs Demand\MiHAM Assignments"
+            fr"\Post ME Trip Rate Adjustments\iter{iteration}"
         ),
         model_name="miham",
         year=2018,
