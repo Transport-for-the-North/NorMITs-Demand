@@ -22,8 +22,8 @@ SEGS = {'hb':{'p_tp':HB_P_TP_WEEK,'p_m_tp':HB_P_M_TP_WEEK},
 'nhb':{'p_tp':NHB_P_TP_WEEK,'p_m_tp':NHB_P_M_TP_WEEK}
 }
 FILE_PATH = pathlib.Path(r"C:\Projects\MidMITS\Python\outputs\ApplyMND")
-CONVERGENCE = 100
-MAX_ITER = 15
+CONVERGENCE = 10
+MAX_ITER = 20
 
 def mnd_factors(org_dest: str, hb_nhb: str) -> nd.DVector:
     """_summary_
@@ -88,7 +88,7 @@ def loop(
     mnd_base = base.aggregate(SEGS[hb_nhb]['p_tp'])
     i = CONVERGENCE + 1
     j = 1
-    while i > CONVERGENCE and j > MAX_ITER:
+    while i > CONVERGENCE and j < MAX_ITER:
         dvec_agg = dvec.aggregate(M_TP_WEEK)
         mnd_res = dvec_agg / dft_base
         adj_dft = dft_vec / mnd_res
@@ -111,7 +111,7 @@ def loop(
 def main(orig_dest,hb_nhb):
     logging.info("Beginning initial factoring.")
     trips_19 = nd.DVector.load(
-        os.path.join(FILE_PATH,orig_dest,f"{hb_nhb}_msoa_notem_segmented_2018_dvec.pkl")
+        os.path.join(FILE_PATH,orig_dest,f"{hb_nhb}_msoa_notem_segmented_2021_dvec.pkl")
     )
     dft_factors = pd.read_csv(os.path.join(FILE_PATH,r"dft_factors.csv"))
     dft_dvec = nd.DVector(
