@@ -31,10 +31,10 @@ from normits_demand.utils import general as du
 # ## GLOBALS ## #
 MODES = [nd.Mode.CAR]
 SCENARIO = nd.Scenario.NTEM
-YEARS = [2018]
+YEARS = [2021]
 TPS = [1, 2, 3, 4]
 ZONING_SYSTEM = "miham"
-NOTEM_ITER = '9.6c'
+NOTEM_ITER = '9.6c-COVID'
 OUT_FOLDER_FMT = r"I:\NorMITs Demand\import\modal\{mode_name}\pre_me_tour_proportions\v{iter}\{zone_name}"
 
 phi_import_folder = r"I:\NorMITs Demand\import\phi_factors"
