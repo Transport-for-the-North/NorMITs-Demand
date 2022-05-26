@@ -5,6 +5,8 @@ import pathlib
 import logging
 import pandas as pd
 
+from normits_demand.core.data_structures import DVector
+
 logging.basicConfig(filename="log.log", level=logging.INFO)
 sys.path.append("..")
 sys.path.append(".")
@@ -133,12 +135,36 @@ def main(orig_dest,hb_nhb):
     export = loop(final, trips_19, dft_dvec, mnd, hb_nhb)
     return export
 
+def balance(production: DVector, attraction: DVector,hb_nhb: str) -> DVector:
+    """
+    Balances attractions to productions to fix furnessing issues, using DVector.balance_at_segments.
+
+    Args:
+        production (DVector): trip productions DVector
+        attraction (DVector): trip attractions DVector
+        hb_nhb (str): either "hb" or "nhb"
+    Returns:
+        DVector: The input attraction DVector balanced at segment level to the input production DVector
+    """
+    mode_balancing_zones = dict.fromkeys((1, 2, 5), nd.get_zoning_system("county"))
+    attraction_balance_zoning = nd.BalancingZones.build_single_segment_group(
+        nd.get_segmentation_level(f"notem_{hb_nhb}_output"),
+        nd.get_zoning_system("gor"),
+        "m",
+        mode_balancing_zones,
+    )
+    new = attraction.balance_at_segments(production,True,attraction_balance_zoning)
+    return new
 
 if __name__ == "__main__":
-    for i in ['origin','destination']:
-        for j in ['nhb','hb']:
+    for j in ['nhb','hb']:
+        output = {}
+        for i in ['origin','destination']:
             DVEC = main(i,j)
+            output[i] = DVEC
             DVEC.save(os.path.join(FILE_PATH,f"{i}_{j}.pkl"))
+        adjusted = balance(output['origin'],output['destination'],j)
+        adjusted.save(os.path.join(FILE_PATH,f"{j}_adjusted_attraction.pkl"))
     # DVEC.write_sector_reports(
     #     os.path.join(FILE_PATH, "final_seg.csv"),
     #     os.path.join(FILE_PATH, "ca.csv"),
