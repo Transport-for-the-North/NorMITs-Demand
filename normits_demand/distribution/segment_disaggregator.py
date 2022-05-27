@@ -71,7 +71,7 @@ def _build_enhanced_pa(tld_mat,
                                          calib_params,
                                          round_val = 3,
                                          value_var = df_value,
-                                         echo=False)
+                                         )
         te = nup.df_to_np(te,
                           v_heading = ia_name,
                           values = df_value,
