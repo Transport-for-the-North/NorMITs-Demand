@@ -14,19 +14,15 @@ from __future__ import annotations
 
 # Built-Ins
 import enum
-
-from typing import Dict
-from typing import List
+from typing import Dict, List, Set
 
 # Third Party
 
 # Local Imports
-
-
-# ## CLASSES ## #
 import normits_demand as nd
 
 
+# ## CLASSES ## #
 class AutoName(enum.Enum):
     """Enum class to automatically use the Enum name for it's value."""
 
@@ -35,16 +31,17 @@ class AutoName(enum.Enum):
         del start, count, last_values  # Unused
         return name
 
+
 @enum.unique
 class Mode(enum.Enum):
-    WALK = 'walk'
-    CYCLE = 'cycle'
-    ACTIVE = 'walk_and_cycle'
-    CAR = 'car_and_passenger'
-    BUS = 'bus'
-    RAIL = 'rail'
-    TRAIN = 'train'
-    TRAM = 'tram'
+    WALK = "walk"
+    CYCLE = "cycle"
+    ACTIVE = "walk_and_cycle"
+    CAR = "car_and_passenger"
+    BUS = "bus"
+    RAIL = "rail"
+    TRAIN = "train"
+    TRAM = "tram"
 
     def get_mode_values(self):
         """Conversion from enum to modes"""
@@ -61,10 +58,7 @@ class Mode(enum.Enum):
         }
 
         if self not in conversion:
-            raise nd.NormitsDemandError(
-                "No definition exists for %s mode_values"
-                % self
-            )
+            raise nd.NormitsDemandError("No definition exists for %s mode_values" % self)
 
         return conversion[self]
 
@@ -83,8 +77,7 @@ class Mode(enum.Enum):
         if len(mode_vals) > 1:
             raise ValueError(
                 "Mode %s has more than one mode value. If you want to return "
-                "multiple mode values, use Mode.get_mode_values() instead."
-                % self.value
+                "multiple mode values, use Mode.get_mode_values() instead." % self.value
             )
 
         # Must somehow have returned nothing?
@@ -100,11 +93,11 @@ class Mode(enum.Enum):
 
 @enum.unique
 class Scenario(enum.Enum):
-    NTEM = 'NTEM'
-    SC01_JAM = 'SC01_JAM'
-    SC02_PP = 'SC02_PP'
-    SC03_DD = 'SC03_DD'
-    SC04_UZC = 'SC04_UZC'
+    NTEM = "NTEM"
+    SC01_JAM = "SC01_JAM"
+    SC02_PP = "SC02_PP"
+    SC03_DD = "SC03_DD"
+    SC04_UZC = "SC04_UZC"
 
     def get_name(self):
         return self.value
@@ -121,8 +114,8 @@ class Scenario(enum.Enum):
 
 @enum.unique
 class TripOrigin(enum.Enum):
-    HB = 'hb'
-    NHB = 'nhb'
+    HB = "hb"
+    NHB = "nhb"
 
     def get_name(self):
         return self.value
@@ -134,8 +127,7 @@ class TripOrigin(enum.Enum):
         if self not in p_dict.keys():
             raise ValueError(
                 "Internal error. There doesn't seem to be a purpose definition "
-                "for TripOrigin %s"
-                % self.value
+                "for TripOrigin %s" % self.value
             )
 
         return p_dict[self]
@@ -161,3 +153,34 @@ class TripOrigin(enum.Enum):
             "No TripOrigin exists with the value '%s'. Expected one of: %s"
             % (val, valid_values)
         )
+
+
+@enum.unique
+class AssignmentModel(enum.Enum):
+    """Network assignment models NorMITs demand is used with."""
+
+    NOHAM = "NoHAM"
+    NORMS = "NoRMS"
+
+    def get_zoning_system(self) -> nd.ZoningSystem:
+        """Return the zone system for the assignment model."""
+        return nd.get_zoning_system(self.value.lower())
+
+    @property
+    @classmethod
+    def mode_lookup(cls) -> Dict[AssignmentModel, Mode]:
+        """Dictionary lookup for the assignment model modes."""
+        return {
+            cls.NOHAM: Mode.CAR,
+            cls.NORMS: Mode.RAIL,
+        }
+
+    def get_mode(self) -> Mode:
+        """Return the assignment model mode."""
+        return self.mode_lookup[self]
+
+    @property
+    @classmethod
+    def tfn_modes(cls) -> Set[AssignmentModel]:
+        """TfN's assignment models."""
+        return {cls.NOHAM, cls.NORMS}
