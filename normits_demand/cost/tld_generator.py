@@ -410,6 +410,9 @@ class TripLengthDistributionGenerator:
             if filter_value == 'hb':
                 if trip_filter_type == 'trip_OD':
                     nts_sub = nts_sub[nts_sub[nts_seg].isin(hb_types)]
+            elif filter_value == 'nhb':
+                if trip_filter_type == 'trip_OD':
+                    nts_sub = nts_sub[nts_sub[nts_seg] == 'nhb']
 
         elif method == 'int':
             nts_sub = nts_sub[nts_sub[nts_seg] == filter_value]
@@ -747,6 +750,7 @@ class TripLengthDistributionGenerator:
 
         # Map categories not classified in classified build
         # Car availability
+        # TODO: This should be handled upstream, in inputs
         input_dat = self._map_dict(output_dat=input_dat,
                                    map_dict=self._household_type_to_ca,
                                    key='hh_type')
