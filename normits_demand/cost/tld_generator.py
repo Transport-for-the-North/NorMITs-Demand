@@ -648,7 +648,7 @@ class TripLengthDistributionGenerator:
                 print('No data returned to build tld')
                 loc_segs.loc[row_num, 'records'] = seg_length
                 loc_segs.loc[row_num, 'status'] = 'Failed'
-                break
+                continue
             else:
                 loc_segs.loc[row_num, 'records'] = seg_length
                 loc_segs.loc[row_num, 'status'] = 'Passed'
