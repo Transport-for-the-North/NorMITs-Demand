@@ -644,7 +644,7 @@ class TripLengthDistributionGenerator:
                 print('Filtered for %s' % row)
                 print('Remaining records %d' % seg_length)
 
-            if seg_length == sample_threshold:
+            if seg_length <= sample_threshold:
                 print('No data returned to build tld')
                 loc_segs.loc[row_num, 'records'] = seg_length
                 loc_segs.loc[row_num, 'status'] = 'Failed'
