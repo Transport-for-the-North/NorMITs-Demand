@@ -15,7 +15,7 @@ import pandas as pd
 
 # Local imports
 import normits_demand
-from normits_demand.utils import file_ops
+from normits_demand.utils import file_ops, tempro_extractor
 from normits_demand import logging as nd_log
 from normits_demand import core as nd_core
 from normits_demand.utils import timing
@@ -32,10 +32,14 @@ class NTEMForecastError(normits_demand.NormitsDemandError):
 class TEMProData:
     """Class for reading and filtering TEMPro trip end data.
 
+    If a folder is passed for `data_path` then the
+    `TemproParser` class is used to get the TEMPro data.
+
     Parameters
     ----------
     data_path : Path
-        Path to the TEMPro data CSV.
+        Path to the TEMPro data CSV or to the folder
+        containing the TEMPro databases.
     years : List[int]
         List of year columns to read from data file.
 
@@ -46,6 +50,10 @@ class TEMProData:
     NTEMForecastError
         If `years` isn't (or cannot be converted to)
         a list of integers.
+
+    See Also
+    --------
+    `tempro_extractor.TemproParser`: extracts TEMPro data from the databases.
     """
 
     _columns = {
@@ -62,33 +70,34 @@ class TEMProData:
 
     def __init__(self, data_path: Path, years: List[int]) -> None:
         self.data_path = Path(data_path)
-        if not self.data_path.is_file():
+        self.use_tempro_extractor = False
+
+        # If data path is a folder then assumes this contains the TEMPro
+        # databases, otherwise assumes the file is a CSV containing the data
+        if self.data_path.is_dir():
+            self.use_tempro_extractor = True
+        elif not self.data_path.is_file():
             raise FileNotFoundError(f"cannot find TEMPro data: {self.data_path}")
+
         try:
             self._years = [int(i) for i in years]
         except (ValueError, TypeError) as err:
-            raise NTEMForecastError(
-                "years should be a list of integers"
-            ) from err
+            raise NTEMForecastError("years should be a list of integers") from err
         self._columns.update({str(y): float for y in self._years})
         self._data = None
         self._dvectors = None
-        if not self.data_path.exists():
-            raise FileNotFoundError(
-                f"TEMPro data file cannot be found: {self.data_path}"
-            )
-        # Read top 5 rows to check file format
-        try:
-            file_ops.read_df(
-                self.data_path,
-                usecols=self._columns.keys(),
-                dtype=self._columns,
-                nrows=5,
-            )
-        except ValueError as err:
-            raise NTEMForecastError(
-                f"error reading TEMPro data - {err}"
-            ) from err
+
+        if not self.use_tempro_extractor:
+            # Read top 5 rows to check file format
+            try:
+                file_ops.read_df(
+                    self.data_path,
+                    usecols=self._columns.keys(),
+                    dtype=self._columns,
+                    nrows=5,
+                )
+            except ValueError as err:
+                raise NTEMForecastError(f"error reading TEMPro data - {err}") from err
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}(years={self._years})"
@@ -96,29 +105,56 @@ class TEMProData:
     def __repr__(self) -> str:
         return f"{self.__module__}.{self!s}"
 
+    def _read_tempro_csv(self) -> pd.DataFrame:
+        LOG.info("Reading TEMPro data from CSV: %s", self.data_path)
+        return file_ops.read_df(
+            self.data_path,
+            usecols=self._columns.keys(),
+            dtype=self._columns,
+        )
+
+    def _extract_tempro_database(self) -> pd.DataFrame:
+        LOG.info("Extracting data from TEMPro databases in: %s", self.data_path)
+        parser = tempro_extractor.TemproParser(
+            output_years=self._years, data_source=str(self.data_path)
+        )
+        return parser.get_trip_ends(
+            trip_type="pa", all_commute_hb=True, aggregate_car=False, average_weekday=False
+        )
+
     @property
     def data(self) -> pd.DataFrame:
         """pd.DataFrame:
-            TEMPro data for all years selected, contains columns:
-            - msoa_zone_id
-            - trip_end_type
-            - purpose
-            - mode
-            - time_period
-            - {year}: separate column for each year selected
-              e.g. '2018', '2020'
+        TEMPro data for all years selected, contains columns:
+        - msoa_zone_id
+        - trip_end_type
+        - purpose
+        - mode
+        - time_period
+        - {year}: separate column for each year selected
+          e.g. '2018', '2020'
         """
         if self._data is None:
-            LOG.info("Reading TEMPro data: %s", self.data_path)
-            self._data = file_ops.read_df(
-                self.data_path,
-                usecols=self._columns.keys(),
-                dtype=self._columns,
+            if self.use_tempro_extractor:
+                data = self._extract_tempro_database()
+            else:
+                data = self._read_tempro_csv()
+
+            data.columns = data.columns.str.strip().str.lower()
+            data.rename(columns={"timeperiod": "time_period"}, inplace=True)
+
+            # Drop mode 4 and tp > 4 to match segmentation used for DVectors
+            mask = (data["mode"] != 4) & (data["time_period"] <= 4)
+            data = data.loc[mask]
+            LOG.debug(
+                "Dropping mode 4 and time periods > 4 from "
+                "TEMPro data, %s rows dropped (%s remaining)",
+                mask.sum(),
+                len(data),
             )
-            self._data.columns = self._data.columns.str.strip().str.lower()
-            self._data.rename(
-                columns={"timeperiod": "time_period"}, inplace=True
-            )
+
+            self._data = data
+
         return self._data.copy()
 
     def _segment_dvector(self, seg: str, pa: str, year: int) -> nd_core.DVector:
@@ -155,15 +191,12 @@ class TEMProData:
             purp_mask = self.data["purpose"] > 8
         else:
             raise NTEMForecastError(
-                "segmentation should be one of "
-                f"{self.SEGMENTATION.values()} not {seg!r}"
+                "segmentation should be one of " f"{self.SEGMENTATION.values()} not {seg!r}"
             )
         # Create boolean mask for productions/attractions
         pa_options = ["attractions", "productions"]
         if pa not in pa_options:
-            raise NTEMForecastError(
-                f"pa should be one of {pa_options} not {pa!r}"
-            )
+            raise NTEMForecastError(f"pa should be one of {pa_options} not {pa!r}")
         pa_mask = self.data["trip_end_type"] == pa
 
         cols = ["msoa_zone_id", *self.SEGMENTATION_COLUMNS.values(), str(year)]
@@ -214,7 +247,7 @@ class TEMProData:
         self,
         purposes: List[int] = None,
         modes: List[int] = None,
-        time_periods: List[int] = None
+        time_periods: List[int] = None,
     ) -> pd.DataFrame:
         """Returns filtered version of the TEMPro data for selected years.
 
@@ -247,9 +280,7 @@ class TEMProData:
                 try:
                     ls = [int(i) for i in ls]
                 except (ValueError, TypeError) as err:
-                    raise NTEMForecastError(
-                        f"{c} should be a list of integers"
-                    ) from err
+                    raise NTEMForecastError(f"{c} should be a list of integers") from err
                 filtered = filtered.loc[filtered[c].isin(ls)]
         return filtered
 
@@ -279,6 +310,7 @@ class TEMProTripEnds:
         If the dictionary keys in all of the attributes
         aren't the same.
     """
+
     hb_attractions: Dict[int, nd_core.DVector]
     hb_productions: Dict[int, nd_core.DVector]
     nhb_attractions: Dict[int, nd_core.DVector]
@@ -288,12 +320,10 @@ class TEMProTripEnds:
         """Check all attributes have the same keys."""
         for name, field in dataclasses.asdict(self).items():
             if field.keys() != self.hb_attractions.keys():
-                raise NTEMForecastError(
-                    f"years (keys) differ for attribute {name!r}"
-                )
+                raise NTEMForecastError(f"years (keys) differ for attribute {name!r}")
 
     def save(self, folder: Path):
-        """Saves all DVectors to `folder`.
+        """Save all DVectors to `folder`.
 
         Saved using `DVector.compress_out` method with name
         in the format "{nhb|hb}_{attractions|productions}-{year}".
@@ -306,9 +336,10 @@ class TEMProTripEnds:
         """
         folder.mkdir(exist_ok=True, parents=True)
         LOG.info("Writing TEMProForecasts to %s", folder)
+        years: Dict[int, nd_core.DVector]
         for name, years in dataclasses.asdict(self).items():
             for yr, dvec in years.items():
-                dvec.compress_out(folder / f"{name}-{yr}")
+                dvec.save(folder / f"{name}-{yr}.pkl")
 
     def translate_zoning(
         self,
@@ -383,15 +414,11 @@ class TEMProTripEnds:
         missing = []
         for field in dataclasses.fields(self):
             try:
-                segments[field.name] = nd_core.get_segmentation_level(
-                    segmentation[field.name]
-                )
+                segments[field.name] = nd_core.get_segmentation_level(segmentation[field.name])
             except KeyError:
                 missing.append(field.name)
         if missing:
-            raise NTEMForecastError(
-                f"trip end attributes expected, but not found: {missing}"
-            )
+            raise NTEMForecastError(f"trip end attributes expected, but not found: {missing}")
         return segments
 
     def aggregate(self, segmentation: Dict[str, str], **kwargs):

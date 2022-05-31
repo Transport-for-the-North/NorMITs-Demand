@@ -137,3 +137,6 @@ dmypy.json
 
 # Don't bring this with us - it's massive
 docs/systra_splitting_factors/Params
+
+# VS Code workspace settings
+.vscode

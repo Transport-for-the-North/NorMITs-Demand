@@ -212,7 +212,7 @@ class Furness3D:
                 area_cost = self.cost_matrix * area_mask
 
                 # Calculate the convergence of this area
-                achieved_band_shares = cost_utils.calculate_cost_distribution(
+                _, achieved_band_shares = cost_utils.normalised_cost_distribution(
                     matrix=area_matrix_values,
                     cost_matrix=area_cost,
                     min_bounds=area_tcd['min'].tolist(),
@@ -254,15 +254,17 @@ class Furness3D:
                 break
 
 
-def doubly_constrained_furness(seed_vals: np.array,
-                               row_targets: np.array,
-                               col_targets: np.array,
+def doubly_constrained_furness(seed_vals: np.ndarray,
+                               row_targets: np.ndarray,
+                               col_targets: np.ndarray,
                                tol: float = 1e-9,
                                max_iters: int = 5000,
                                warning: bool = True,
-                               ) -> Tuple[np.array, int, float]:
+                               ) -> Tuple[np.ndarray, int, float]:
     """
     Performs a doubly constrained furness for max_iters or until tol is met
+
+    Controls numpy warnings to warn of any overflow errors encountered
 
     Parameters
     ----------
@@ -289,7 +291,6 @@ def doubly_constrained_furness(seed_vals: np.array,
     warning:
         Whether to print a warning or not when the tol cannot be met before
         max_iters.
-
 
     Returns
     -------
@@ -322,54 +323,47 @@ def doubly_constrained_furness(seed_vals: np.array,
         warnings.warn("Furness given targets of 0. Returning all 0's")
         return np.zeros(seed_vals.shape), iter_num, cur_rmse
 
-    for iter_num in range(max_iters):
-        # ## COL CONSTRAIN ## #
-        # Calculate difference factor
-        col_ach = np.sum(furnessed_mat, axis=0)
-        diff_factor = np.divide(
-            col_targets,
-            col_ach,
-            where=col_ach != 0,
-            out=np.ones_like(col_targets, dtype=float),
-        )
+    # Set up numpy overflow errors
+    with np.errstate(over='raise'):
 
-        # adjust cols
-        furnessed_mat = np.multiply(
-            furnessed_mat,
-            diff_factor,
-            where=~np.isinf(diff_factor),
-            out=furnessed_mat.astype(float),
-        )
+        for iter_num in range(max_iters):
+            # ## COL CONSTRAIN ## #
+            # Calculate difference factor
+            col_ach = np.sum(furnessed_mat, axis=0)
+            diff_factor = np.divide(
+                col_targets,
+                col_ach,
+                where=col_ach != 0,
+                out=np.ones_like(col_targets, dtype=float),
+            )
 
-        # ## ROW CONSTRAIN ## #
-        # Calculate difference factor
-        row_ach = np.sum(furnessed_mat, axis=1)
-        diff_factor = np.divide(
-            row_targets,
-            row_ach,
-            where=row_ach != 0,
-            out=np.ones_like(row_targets, dtype=float),
-        )
+            # adjust cols
+            furnessed_mat *= diff_factor
 
-        # adjust rows
-        furnessed_mat = np.multiply(
-            furnessed_mat,
-            np.atleast_2d(diff_factor).T,
-            where=~np.isinf(diff_factor),
-            out=furnessed_mat.astype(float),
-        )
+            # ## ROW CONSTRAIN ## #
+            # Calculate difference factor
+            row_ach = np.sum(furnessed_mat, axis=1)
+            diff_factor = np.divide(
+                row_targets,
+                row_ach,
+                where=row_ach != 0,
+                out=np.ones_like(row_targets, dtype=float),
+            )
 
-        # Calculate the diff - leave early if met
-        row_diff = (row_targets - np.sum(furnessed_mat, axis=1)) ** 2
-        col_diff = (col_targets - np.sum(furnessed_mat, axis=0)) ** 2
-        cur_rmse = (np.sum(row_diff + col_diff) / n_vals) ** 0.5
-        if cur_rmse < tol:
-            early_exit = True
-            break
+            # adjust rows
+            furnessed_mat *= np.atleast_2d(diff_factor).T
 
-        # We got a NaN! Make sure to point out we didn't converge
-        if np.isnan(cur_rmse):
-            return np.zeros(furnessed_mat.shape), iter_num, np.inf
+            # Calculate the diff - leave early if met
+            row_diff = (row_targets - np.sum(furnessed_mat, axis=1)) ** 2
+            col_diff = (col_targets - np.sum(furnessed_mat, axis=0)) ** 2
+            cur_rmse = (np.sum(row_diff + col_diff) / n_vals) ** 0.5
+            if cur_rmse < tol:
+                early_exit = True
+                break
+
+            # We got a NaN! Make sure to point out we didn't converge
+            if np.isnan(cur_rmse):
+                return np.zeros(furnessed_mat.shape), iter_num, np.inf
 
     # Warn the user if we exhausted our number of loops
     if not early_exit and warning:

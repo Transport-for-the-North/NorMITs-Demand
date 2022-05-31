@@ -896,8 +896,8 @@ def get_vdm_dist_name(trip_origin: str,
     return compiled_name
 
 
-def get_dist_name(trip_origin: str,
-                  matrix_format: str,
+def get_dist_name(trip_origin: str = None,
+                  matrix_format: str = None,
                   year: str = None,
                   purpose: str = None,
                   mode: str = None,
@@ -912,30 +912,33 @@ def get_dist_name(trip_origin: str,
     Generates the distribution name
     """
     # Generate the base name
-    name_parts = [
-        trip_origin,
-        matrix_format,
-    ]
+    name_parts = list()
 
-    # Optionally add the extra segmentation
+    # optionally add segments
+    if not is_none_like(trip_origin):
+        name_parts += [trip_origin]
+
+    if not is_none_like(matrix_format):
+        name_parts += [matrix_format]
+
     if not is_none_like(year):
-        name_parts += ["yr" + year]
+        name_parts += [f"yr{year}"]
 
     if not is_none_like(purpose):
-        name_parts += ["p" + purpose]
+        name_parts += [f"p{purpose}"]
 
     if not is_none_like(mode):
-        name_parts += ["m" + mode]
+        name_parts += [f"m{mode}"]
 
     if not is_none_like(segment) and not is_none_like(purpose):
-        seg_name = "soc" if int(purpose) in efs_consts.SOC_P else "ns"
-        name_parts += [seg_name + segment]
+        seg_name = "soc{0}" if int(purpose) in efs_consts.SOC_P else "ns{0}"
+        name_parts += [seg_name.format(segment)]
 
     if not is_none_like(car_availability):
-        name_parts += ["ca" + car_availability]
+        name_parts += [f"ca{car_availability}"]
 
     if not is_none_like(tp):
-        name_parts += ["tp" + tp]
+        name_parts += [f"tp{tp}"]
 
     # Create name string
     final_name = '_'.join(name_parts)
@@ -2128,9 +2131,10 @@ def list_files(path: nd.PathLike,
 
     # Filter down to only the filetypes asked for
     keep_paths = list()
-    for file_type in ftypes:
-        temp = [x for x in paths if file_type in x]
-        keep_paths = list(set(temp + keep_paths))
+    for p in paths:
+        suffix = "".join(Path(p).suffixes)
+        if suffix in ftypes:
+            keep_paths.append(p)
 
     return keep_paths
 
@@ -3588,3 +3592,40 @@ def compare_sets(x1: set, x2: set) -> Tuple[bool, set, set]:
     equal = len(x1_not_in_x2) == 0 and len(x2_not_in_x1) == 0
 
     return equal, x1_not_in_x2, x2_not_in_x1
+
+
+def all_set_or_not(items: Iterable[Any], default: Iterable[Any] = None) -> bool:
+    """Check if all iterable items are set or none of them are set.
+
+    Return True if all `items` are set to `default` values. Also returns
+    True if all `items` are also not set to `default` values. If there is
+    a mix of default and non-default items then False is returned.
+
+    Parameters
+    ----------
+    items:
+        An iterable of items to check.
+
+    default:
+        An iterable of the default values to use for items
+
+    Returns
+    -------
+    all_set_or_not:
+        Boolean, as described in function description.
+    """
+    # Set default if not set
+    if default is None:
+        n_items = sum(1 for _ in items)
+        default = [None] * n_items
+
+    # Check if all items are default
+    if all(x is y for x, y in zip(items, default)):
+        return True
+
+    # Check if all items are not None
+    if all(x is not y for x, y in zip(items, default)):
+        return True
+
+    # Must be an unacceptable combination
+    return False

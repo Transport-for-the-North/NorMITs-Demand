@@ -29,7 +29,7 @@ from normits_demand import efs_constants as efs_consts
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
 COMPARISON_ZONE_SYSTEMS = {
-    "trip end": ntem_forecast.LAD_ZONE_SYSTEM,
+    "trip end": "lad_2020_internal_noham",
     "matrix 1": "3_sector",
     "matrix 2": "ca_sector_2020",
 }
@@ -303,22 +303,24 @@ def _find_matrices(folder: Path) -> pd.DataFrame:
         - `purpose`
     """
     files = []
-    file_types = (".pbz2", ".csv")
+    file_types = (".pbz2", ".csv", ".csv.bz2")
     for p in folder.iterdir():
-        if p.is_dir() or p.suffix.lower() not in file_types:
+        suffixes = "".join(p.suffixes)
+        if p.is_dir() or suffixes.lower() not in file_types:
             continue
         try:
-            file_data = _filename_contents(p.stem)
+            stem = p.name[:-len(suffixes)]
+            file_data = _filename_contents(stem)
         except ntem_forecast.NTEMForecastError as err:
             LOG.warning(err)
             continue
         file_data["path"] = p
         files.append(file_data)
-    files = pd.DataFrame(files)
-    files.to_csv(folder / "Matrices list.csv", index=False)
+    files_df = pd.DataFrame(files)
+    files_df.to_csv(folder / "Matrices list.csv", index=False)
     index_cols = ["matrix_type", "year", "mode", "purpose"]
-    files = files.loc[:, index_cols + ["path"]].set_index(index_cols)
-    return files
+    files_df = files_df.loc[:, index_cols + ["path"]].set_index(index_cols)
+    return files_df
 
 
 def _read_matrices(paths: Dict[int, Path]) -> Dict[int, pd.DataFrame]:
@@ -337,6 +339,7 @@ def pa_matrix_comparison(
     ntem_imports: ntem_forecast.NTEMImportMatrices,
     pa_folder: Path,
     tempro_data: tempro_trip_ends.TEMProTripEnds,
+    base_year: int,
 ):
     """Produce TEMPro comparisons for PA matrices.
 
@@ -348,6 +351,8 @@ def pa_matrix_comparison(
         Folder containing PA matrices.
     tempro_data : TEMProTripEnds
         TEMPro trip end data.
+    base_year : int
+        Base model year.
     """
     LOG.info("PA matrix trip ends comparison with TEMPro")
     output_folder = pa_folder / "TEMPro Comparisons"
@@ -397,9 +402,12 @@ def pa_matrix_comparison(
             base_trip_ends,
             forecast_trip_ends,
             tempro_data_comp,
-            (efs_consts.BASE_YEAR, yr),
+            (base_year, yr),
         )
-        out = output_folder / f"PA_TEMPro_comparisons-{yr}-LAD.csv"
+        out = (
+            output_folder
+            / f"PA_TEMPro_comparisons-{yr}-{COMPARISON_ZONE_SYSTEMS['trip end']}.csv"
+        )
         file_ops.write_df(comparison, out)
         LOG.info("Written: %s", out)
 
@@ -413,7 +421,7 @@ def pa_matrix_comparison(
                 ntem_imports.model_name,
                 tempro_data,
                 comp_zone,
-                (efs_consts.BASE_YEAR, yr),
+                (base_year, yr),
                 output_folder / f"PA_TEMPro_comparisons-{yr}-{comp_zone}",
             )
 
@@ -422,6 +430,7 @@ def translate_matrix(
     matrix: pd.DataFrame,
     matrix_zoning_name: str,
     new_zoning_name: str,
+    weighting: str = None,
     **kwargs,
 ) -> pd.DataFrame:
     """Tranlate square matrix into new zoning system.
@@ -437,6 +446,8 @@ def translate_matrix(
         Name of the current zone system.
     new_zoning_name : str
         Name of the zone system to translate to.
+    weighting : str, optional
+        Translation weighting to use.
 
     Returns
     -------
@@ -450,7 +461,7 @@ def translate_matrix(
     # Get correspondence DataFrame
     matrix_zoning = nd_core.get_zoning_system(matrix_zoning_name)
     new_zoning = nd_core.get_zoning_system(new_zoning_name)
-    lookup = matrix_zoning._get_translation_definition(new_zoning)
+    lookup = matrix_zoning._get_translation_definition(new_zoning, weighting)
     # Translate matrix
     return translation.pandas_matrix_zone_translation(
         matrix,
@@ -776,6 +787,7 @@ def od_matrix_comparison(
     forecast_folder: Path,
     matrix_zoning: str,
     comparison_zoning: str,
+    years: List[int],
 ):
     """Write spreadsheet summarising OD matrix growth.
 
@@ -789,6 +801,8 @@ def od_matrix_comparison(
         Name of the current matrix zoning system.
     comparison_zoning : str
         Name of the zoning system for the summaries.
+    years : List[int]
+        List of forecast years.
     """
     OD_MATRIX_NAMES = {
         "base": "od_m3_{purp}_tp{tp}_postME.csv",
@@ -826,7 +840,7 @@ def od_matrix_comparison(
                     "forecast"].format(purp=p, tp=t, yr=y)
                 forecast_paths = {
                     y: forecast_folder / forecast_name(purpose, tp, y)
-                    for y in efs_consts.FUTURE_YEARS
+                    for y in years
                 }
                 _compare_od_matrices(
                     writer,

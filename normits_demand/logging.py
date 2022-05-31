@@ -189,6 +189,17 @@ def check_child_logger(logger_name: str) -> None:
         )
 
 
+def _make_child_logger(logger_name: str) -> str:
+    """Create a valid child logger name if name isn't already valid"""
+    try:
+        check_child_logger(logger_name)
+        new_logger_name = logger_name
+    except ValueError:
+        new_logger_name = f"{get_package_logger_name()}.{logger_name}"
+    return new_logger_name
+
+
+
 def get_console_handler(ch_format: str = None,
                         datetime_format: str = None,
                         log_level: int = logging.INFO,

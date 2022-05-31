@@ -12,6 +12,11 @@ File purpose:
 """
 # Built-Ins
 import os
+import sys
+import shutil
+
+# Third Party
+
 # Local Imports
 from normits_demand.cost import tld_generator
 
@@ -25,6 +30,37 @@ def main(iterator=False):
     _BAND_FOLDER = os.path.join(_TLD_HOME, 'bands')
     _SEGMENTATION_FOLDER = os.path.join(_TLD_HOME, 'segmentations')
 
+    # A full DiMo run requires:
+    # ## run at north_and_mids, trip_OD ## #
+    #
+    #   dm_highway_bands
+    #       hb_p_m
+    #       nhb_p_m_tp_car
+    #       nhb_p_m     (These then need copying over across TPs)
+
+    #   dm_north_rail_bands
+    #       hb_p_m_ca
+    #       nhb_p_m_ca  (These then need copying across TPs)
+
+    # ## run at gb, trip_OD ## #
+
+    #   dm_highway_bands
+    #       hb_p_m
+    #       nhb_p_m_tp_car
+    #       nhb_p_m     (These then need copying over across TPs)
+
+    #   dm_gb_rail_bands
+    #       hb_p_m_ca
+    #       nhb_p_m_ca  (These then need copying across TPs)
+
+
+    run_another = True
+    while run_another:
+        extract = tld_builder.TripLengthDistributionBuilder(
+            tlb_folder=_TLB_FOLDER,
+            nts_import=_NTS_IMPORT,
+            output_home=output_home,
+        )
     available_bands = os.listdir(_BAND_FOLDER)
     available_bands = [x for x in available_bands if '.csv' in x]
 
@@ -69,6 +105,23 @@ def main(iterator=False):
             sample_threshold=10,
             verbose=True
         )
+
+
+def copy_across_tps():
+    in_dir = ''
+    out_dir = ''
+
+    for fname in os.listdir(in_dir):
+        if fname == 'full_export.csv':
+            continue
+
+        for tp in [1, 2, 3, 4]:
+            out_name = fname.replace('.csv', '_tp%s.csv' % tp)
+
+            shutil.copy(
+                src=os.path.join(in_dir, fname),
+                dst=os.path.join(out_dir, out_name),
+            )
 
 
 if __name__ == '__main__':
