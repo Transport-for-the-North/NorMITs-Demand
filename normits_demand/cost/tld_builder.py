@@ -14,19 +14,21 @@ File purpose:
 import os
 
 # Third Party
+import numpy as np
 import pandas as pd
 
 # Local Imports
 import normits_demand as nd
-from normits_demand import constants
 from normits_demand.utils import file_ops
 
 
 class TripLengthDistributionBuilder:
     # Class constants
 
-    _geo_areas = ['gb', 'north', 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie']
-    _region_filter_types = ['household', 'trip_OD']
+    _geo_areas = ['north', 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie', 'gb']
+    _trip_filter_types = ['trip_OD']
+    _sample_periods = ['weekday', 'week', 'weekend']
+    _cost_units = ['km', 'miles', 'm']
 
     # LA Definitions
     _north_las = [
@@ -81,407 +83,747 @@ class TripLengthDistributionBuilder:
     _hb_purposes = [1, 2, 3, 4, 5, 6, 7, 8]
     _nhb_purposes = [11, 12, 13, 14, 15, 16, 18]
 
+    # Maps for non-classified categories
+    _household_type_to_ca = {'hh_type': [1, 2, 3, 4, 5, 6, 7, 8],
+                             'ca': [1, 2, 1, 2, 2, 1, 2, 2]}
+
+    _a_gor_from = pd.DataFrame({'agg_gor_from': [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
+                                'TripOrigGOR_B02ID': [1, 2, 3, 4, 6,
+                                                      7, 8, 5, 9, 10, 11]})
+    _a_gor_to = pd.DataFrame({'agg_gor_to': [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
+                              'TripDestGOR_B02ID': [1, 2, 3, 4, 6,
+                                                    7, 8, 5, 9, 10, 11]})
+
+    _tfn_at_to_agg_at = {'tfn_at': [1, 2, 3, 4, 5, 6, 7, 8],
+                         'agg_tfn_at': [1, 1, 2, 2, 3, 3, 4, 4]}
+
+    # Define weekdays
+    _weekday_tps = [1, 2, 3, 4]
+
+    segment_treatment = {'trip_origin': 'trip_origin',
+                         'p': 'int',
+                         'm': 'int',
+                         'ca': 'int',
+                         'tp': 'tp'
+                         }
+
+    segment_order = [key for key, value in segment_treatment.items()]
+
+    # Correspondences between segment names and NTS data names
+    tld_to_nts_names = {'m': 'main_mode',
+                        'p': 'p',
+                        'tp': 'start_time',
+                        'trip_origin': 'trip_direction'}
+
+    # Miles to other units conversion factors
+    miles_to_other_distance = {
+        'miles': 1,
+        'km': 1.6093,
+        'm': 1609.34,
+    }
+
     def __init__(self,
                  tlb_folder: nd.PathLike,
-                 nts_import: nd.PathLike,
-                 output_home: nd.PathLike,
+                 tlb_version: nd.PathLike,
+                 output_folder: nd.PathLike,
+                 trip_miles_col: str = 'trip_mile',
+                 trip_count_col: str = 'trips',
                  ):
+        """
+        Define the environment for a set of trip length distribution runs.
 
-        # TODO: Would be good if the options were parsed by the class first,
-        #  then you could choose to run all instead of 1x1
+        Parameters
+        ----------
+        tlb_folder: pd.DataFrame
+            Path to folder containing TLD specific output from
+            'NTS Processing' tool
+        tlb_version: str
+            Which version of the TLD export to pick up
+        output_folder:
+            NorMITs Demand config folder to export outputs to
+        trip_miles_col:
+            Which column to use as the trip miles in the import data
+        trip_count_col:
+            Which column to use as the count of trips in the import data
+        """
 
         self.tlb_folder = tlb_folder
-        self.nts_import = nts_import
-        self.output_home = output_home
+        self.tlb_version = tlb_version
+        self.tlb_import_path = os.path.join(tlb_folder, tlb_version)
+        print('Loading processed NTS trip length data from %s' % self.tlb_import_path)
+        self.nts_import = pd.read_csv(self.tlb_import_path)
+        self.output_folder = output_folder
 
-        # ## USER SELECTS WHICH BANDS TO USE ## #
-        band_path = os.path.join(tlb_folder, 'config', 'bands')
-        band_options = os.listdir(band_path)
-        band_options = [x for x in band_options if '.csv' in x]
-        if len(band_options) == 0:
-            raise ValueError('no trip length bands in folder')
+        if trip_miles_col in list(self.nts_import):
+            self.trip_miles_col = trip_miles_col
+        else:
+            raise ValueError(
+                'Given trip miles col %s not in NTS data' % trip_miles_col
+            )
 
-        bands_confirmed = False
-        while not bands_confirmed:
-            for (i, option) in enumerate(band_options, 0):
-                print(i, option)
-            selection_b = input('Choose bands to aggregate by (index): ')
-            band_text = band_options[int(selection_b)]
-
-            bands = pd.read_csv(os.path.join(band_path, band_text))
-            print('%d bands in selected' % len(bands))
-            print(bands)
-
-            if input('Keep these bands y/n').lower() == 'y':
-                bands_confirmed = True
-
-        self.trip_length_bands = bands
-        seg_path = os.path.join(tlb_folder, 'config', 'segmentations')
-
-        # ## USER SELECTS SEGMENTATION TO USE ## #
-        seg_options = os.listdir(seg_path)
-        seg_options = [x for x in seg_options if '.csv' in x]
-        if len(seg_options) == 0:
-            raise ValueError('no target segmentations in folder')
-
-        segments_confirmed = False
-        while not segments_confirmed:
-            for (i, option) in enumerate(seg_options, 0):
-                print(i, option)
-            selection_s = input('Choose segments to aggregate by (index): ')
-            segments_text = seg_options[int(selection_s)]
-
-            segments = pd.read_csv(os.path.join(seg_path, segments_text))
-            print(segments)
-
-            if input('Keep these bands y/n') == 'y':
-                segments_confirmed = True
-
-        self.target_segmentation = segments
-
-        # ## USER SELECTS GEOGRAPHICAL AREA TO USE ## #
-        for (i, option) in enumerate(self._geo_areas, 0):
-            print(i, option)
-        selection_g = input('Choose geo-area (index): ')
-        self.geo_area = self._geo_areas[int(selection_g)]
-
-        # ## USER SELECTS TRIP SELECTION CONSTRAINT TO USE ## #
-        print('Constrain to geographical areas by location of:')
-        for (i, option) in enumerate(self._region_filter_types, 0):
-            print(i, option)
-        selection_r = input('How to apply region filter: ')
-        self.region_filter = self._region_filter_types[int(selection_r)]
-
-        # ## GENERATE OUTPUT PATH AND CONFIRM SELECTION ## #
-        band_label = band_text.replace(' ', '_')
-        segments_label = segments_text.replace(' ', '_')
-
-        for char_out in ['(', ')', '.csv']:
-            band_label = band_label.replace(char_out, '')
-            segments_label = segments_label.replace(char_out, '')
-
-        self.export = os.path.join(
-            self.output_home,
-            self.geo_area,
-            self.region_filter,
-            band_label,
-            segments_label,
-        )
-
-        print("\nOutput path generated: %s" % self.export)
-        if input('Output here? y/n\n').strip().lower() != 'y':
-            print("y/Y not detected. Exiting.")
-            exit()
-
-        file_ops.create_folder(self.export)
-
-        print('Loading processed NTS data from %s' % nts_import)
-        self.nts_import = pd.read_csv(nts_import)
-        self.nts_import['weighted_trip'] = self.nts_import['W1'] * self.nts_import['W5xHH'] * self.nts_import['W2']
+        if trip_count_col in list(self.nts_import):
+            self.trip_count_col = trip_count_col
+        else:
+            raise ValueError(
+                'Given trip count col %s not in NTS data' % trip_count_col
+            )
 
     def _apply_geo_filter(self,
-                          output_dat):
+                          output_dat: pd.DataFrame,
+                          trip_filter_type: str,
+                          geo_area: str):
         """
-        output_dat: processed NTS data
+        This function defines how the origin and destination of trips are
+        derived and also defines regional subsets
+        If region filter is based on home, filters on a UA subset
+        If it's based on trip ends (gor) filters on trip O/D
 
-        if region filter is based on home, filters on a UA subset
-        if it's based on trip ends (gor) filters on trip O/D
+        Parameters
+        ----------
+        output_dat: pd.DataFrame
+            Processed NTS data
+        trip_filter_type: str
+            How to filter the origin/destination of trips.
+            this is defined here in the class, so improvement work here.
+        geo_area:
+            Target regional subset
+
+        Returns
+        ----------
+        output_dat:
+            Input dataframe modified to target geography
         """
+
+        # TODO: Work for household trip_filter_type properly
+
         # If region filters are home end, filter by LA
-        if self.region_filter == 'household':
+        filter_orig = False
+        filter_dest = False
+        target_orig_gors = None
+        target_dest_gors = None
 
-            if self.geo_area == 'north':
-                output_dat = output_dat[
-                    output_dat['HHoldOSLAUA_B01ID'].isin(
-                        self._north_las)]
-                output_dat = output_dat.reset_index(drop=True)
-            elif self.geo_area == 'north_and_mids':
-                output_dat = output_dat[
-                    output_dat['HHoldOSLAUA_B01ID'].isin(
-                        self._north_and_mid_las)]
-                output_dat = output_dat.reset_index(drop=True)
-            elif self.geo_area == 'north_incl_ie':
-                raise ValueError('i/e filter not compatible with home end filter')
+        if trip_filter_type == 'trip_OD':
+            # Transpose from and to for OD trip ends
+            to_orig = output_dat[output_dat['trip_direction'] == 'hb_to']['TripOrigGOR_B02ID'].copy()
+            to_dest = output_dat[output_dat['trip_direction'] == 'hb_to']['TripDestGOR_B02ID'].copy()
+            output_dat[output_dat['trip_direction'] == 'hb_to']['TripOrigGOR_B02ID'] = to_dest
+            output_dat[output_dat['trip_direction'] == 'hb_to']['TripDestGOR_B02ID'] = to_orig
 
-        elif self.region_filter == 'trip_OD':
-
-            if self.geo_area == 'north':
+            if geo_area == 'north':
+                filter_orig = True
+                filter_dest = True
                 # From O/D filter
-                output_dat = output_dat[
-                    output_dat['TripOrigGOR_B02ID'].isin(
-                        self._north_gors)]
-                output_dat = output_dat.reset_index(drop=True)
+                target_orig_gors = self._north_gors
                 # To O/D filter
-                output_dat = output_dat[
-                    output_dat['TripDestGOR_B02ID'].isin(
-                        self._north_gors)]
-                output_dat = output_dat.reset_index(drop=True)
-            elif self.geo_area == 'north_incl_ie':
+                target_dest_gors = self._north_gors
+
+            elif geo_area == 'north_incl_ie':
                 # From filter only
-                output_dat = output_dat[
-                    output_dat['TripOrigGOR_B02ID'].isin(
-                        self._north_gors)]
-                output_dat = output_dat.reset_index(drop=True)
-            elif self.geo_area == 'north_and_mids':
-                output_dat = output_dat[
-                    output_dat['TripOrigGOR_B02ID'].isin(
-                        self._north_and_mid_gors)]
-                output_dat = output_dat.reset_index(drop=True)
-                # To O/D filter
-                output_dat = output_dat[
-                    output_dat['TripDestGOR_B02ID'].isin(
-                        self._north_and_mid_gors)]
-                output_dat = output_dat.reset_index(drop=True)
-            elif self.geo_area == 'north_and_mids_incl_ie':
-                output_dat = output_dat[
-                    output_dat['TripOrigGOR_B02ID'].isin(
-                        self._north_and_mid_gors)]
+                filter_orig = True
+                filter_dest = False
+                target_orig_gors = self._north_gors
+
+            elif geo_area == 'north_and_mids':
+                filter_orig = True
+                filter_dest = True
+                target_orig_gors = self._north_and_mid_gors
+                target_dest_gors = self._north_and_mid_gors
+
+            elif geo_area == 'north_and_mids_incl_ie':
+                filter_orig = True
+                target_orig_gors = self._north_and_mid_gors
+
+        if filter_orig:
+            output_dat = output_dat[
+                output_dat['TripOrigGOR_B02ID'].isin(
+                    target_orig_gors)]
+            output_dat = output_dat.reset_index(drop=True)
+        if filter_dest:
+            output_dat = output_dat[
+                output_dat['TripDestGOR_B02ID'].isin(
+                    target_dest_gors)]
+            output_dat = output_dat.reset_index(drop=True)
+
         return output_dat
 
+    @staticmethod
+    def _map_dict(output_dat: pd.DataFrame,
+                  map_dict: dict,
+                  key: str):
 
-    def run_tlb_lookups(self,
-                        weekdays=[1, 2, 3, 4, 5],
-                        agg_purp=list(), #[13, 14, 15, 18]
-                        write=True):
         """
-        weekdays: list of ints to consider default 1:5:
-
-        agg_purp: purposes to aggregate
-
-        region_filter: how to do regional subsets
+        Analogue of pd.map for filling out a category from a dictionary
+        output_dat: a DataFrame of NTS dataset
+        map: a dictionary in category: list format
+        key: string for join, existing category in output_dat
         """
-        # TODO: Need smart aggregation based on sample size threshold
 
-        # Set target cols
-        target_cols = ['SurveyYear', 'TravelWeekDay_B01ID', 'HHoldOSLAUA_B01ID', 'CarAccess_B01ID', 'soc_cat',
-                       'ns_sec', 'main_mode', 'hb_purpose', 'nhb_purpose', 'nhb_purpose_hb_leg', 'Sex_B01ID',
-                       'trip_origin', 'start_time', 'TripDisIncSW', 'TripOrigGOR_B02ID',
-                       'TripDestGOR_B02ID', 'tfn_area_type', 'weighted_trip']
+        map_frame = pd.DataFrame(map_dict)
 
-        output_dat = self.nts_import.reindex(target_cols, axis=1)
+        output_dat = output_dat.merge(map_frame,
+                                      how='left',
+                                      on=key)
 
-        # Build a list to record how many records
+        return output_dat
+
+    def _filter_to_weekday(self,
+                           output_dat):
+        """
+        Subset a NTS table to weekdays only using 'TravelWeekDay'
+        Correct weekdays defined in class
+        """
+        w_d = self._weekday_tps
+        output_dat = output_dat[output_dat['start_time'].isin(w_d)]
+        output_dat = output_dat.reset_index(drop=True)
+
+        return output_dat
+
+    def _build_band_subset(self,
+                           seg_sub: pd.DataFrame,
+                           bands: pd.DataFrame,
+                           cost_units: str = 'km',
+                           band_rounding: int = 2):
+        """
+        Take a set of NTS data and distribute it to a set of given bands,
+        counting trips per band and mean trip length per band.
+
+        Parameters
+        ----------
+        seg_sub: pd.DataFrame
+            DataFrame of NTS data, sub refers to the fact this should have
+            been filtered down by this point in the process
+        bands: pd.DataFrame
+            DataFrame of target bands
+        cost_units: str:
+            Units for outputs. Inputs always in miles so is used to fetch
+            a constant for conversion
+        band_rounding: int:
+            Number of decimal places to round bands to after conversion
+            Currently not handled outside of private function so essentially
+            hard coded with a toggle option for future
+
+        Returns
+        ----------
+        out_frame:
+            Import bands DataFrame with appended trip and distance totals
+        """
+
+        dist_constant = self.miles_to_other_distance[cost_units]
+
+        loc_bands = bands.copy()
+
+        # TODO: Handle inline numpy warnings with 0 trip band div0s
+        # Iterate over lines in target bands copy (don't change master)
+        for line, threshold in loc_bands.iterrows():
+            tlb_sub = seg_sub.copy()
+
+            lower = threshold['lower']
+            upper = threshold['upper']
+
+            # Simple filter subset to get trip pots
+            tlb_sub = tlb_sub[
+                tlb_sub[self.trip_miles_col] >= lower].reset_index(drop=True)
+            tlb_sub = tlb_sub[
+                tlb_sub[self.trip_miles_col] < upper].reset_index(drop=True)
+
+            # total trips is row wise sum
+            total_trips = tlb_sub[self.trip_count_col].sum()
+
+            # mean miles is a sum product of trips * distance
+            mean_miles = sum(tlb_sub[self.trip_miles_col]*tlb_sub[self.trip_count_col])
+            if total_trips <= 0:
+                mean_miles = np.mean([lower, upper])
+            else:
+                mean_miles /= total_trips
+            # Value adjusted for target distance
+            mean_val = mean_miles * dist_constant
+
+            loc_bands.loc[line, f'mean_{cost_units}'] = mean_val
+            loc_bands.loc[line, 'total_trips'] = total_trips
+
+        # Derive distibution factors
+        loc_bands['dist'] = loc_bands['total_trips']/loc_bands['total_trips'].sum()
+
+        # Multiply bands by dist constant to get target units
+        loc_bands['lower'] *= dist_constant
+        loc_bands['upper'] *= dist_constant
+
+        # Round by target value
+        loc_bands['lower'] = loc_bands['lower'].round(decimals=band_rounding)
+        loc_bands['upper'] = loc_bands['upper'].round(decimals=band_rounding)
+
+        return loc_bands
+
+    def _filter_segment(self,
+                        seg_sub: pd.DataFrame,
+                        trip_filter_type: str,
+                        segment_name: str,
+                        filter_value,
+                        method: str = 'int'
+                        ):
+        """
+        Core of process, filters the NTS data down to include the target
+        segmentation only, one segment per call.
+        Takes its method from the class dictionary, this function will have
+        to be expanded to handle other bespoke segments as they arrive.
+        This function also transposes the return home leg if the user requests
+        PA costs by defining trip filter type as trip_OD.
+
+        Parameters
+        ----------
+        seg_sub: pd.DataFrame
+            NTS data in frame
+        trip_filter_type: str
+            Origin of trip definition
+        segment_name: str
+            The name of the segment in the TLD definition. Is translated to
+            the equivalent NTS name
+        filter_value:
+            The target value of the above segment
+        method:
+            How to filter, as some segments require bespoke handling
+            'tp' - if value is 0 ignore and don't label segments
+            'trip_origin' - if hb, filter trip types to from home but if 'trip_OD' is
+            requested, also reverse the origin/destination of to home trips and retain them
+
+        Returns
+        ----------
+        nts_sub:
+            Subset of NTS filtered to match a single value
+
+        """
+        # TODO: Handle values differently by type for consistency
+        # TODO: Fix slice write warning - probably discrete function for transposition
+
+        hb_types = ['hb_fr', 'hb_to']
+
+        nts_sub = seg_sub.copy()
+
+        nts_seg = self.tld_to_nts_names[segment_name]
+
+        if method == 'tp':
+            if filter_value != 0:
+                nts_sub = self._filter_segment(
+                    seg_sub=nts_sub,
+                    trip_filter_type=trip_filter_type,
+                    segment_name=segment_name,
+                    filter_value=filter_value,
+                    method='int')
+
+        elif method == 'trip_origin':
+            if filter_value == 'hb':
+                if trip_filter_type == 'trip_OD':
+                    nts_sub = nts_sub[nts_sub[nts_seg].isin(hb_types)]
+            elif filter_value == 'nhb':
+                if trip_filter_type == 'trip_OD':
+                    nts_sub = nts_sub[nts_sub[nts_seg] == 'nhb']
+
+        elif method == 'int':
+            nts_sub = nts_sub[nts_sub[nts_seg] == filter_value]
+
+        return nts_sub
+
+    @staticmethod
+    def _append_segment_names(tld: pd.DataFrame,
+                              seg_descs):
+        """
+        Add the segment descriptions and names back into the distribution,
+        so they're readable in aggregate and auditable against what the
+        folder says they are
+
+        Parameters
+        ----------
+        tld:
+            Run dataframe of a distribution
+        seg_descs:
+            Dictionary of segment names and classifications
+
+        Returns
+        -------
+        tld: pd.DataFrame
+            input TLD with description columns
+        """
+
+        # Append segment sub-categories to tld matrix
+        # retain order
+        index_order = ['lower', 'upper']
+        end_cols = list(tld)[2:]
+        for segment, seg_val in seg_descs.items():
+            tld[segment] = seg_val
+            index_order.append(segment)
+
+        index_order += end_cols
+
+        tld = tld.reindex(index_order, axis=1)
+
+        return tld
+
+    def _build_single_tld_name(
+            self,
+            seg_descs,
+            cost_units):
+
+        """
+        Build single names for the distribution, using its definition
+        takes a standard order of construction from class
+
+        Parameters
+        ----------
+        seg_descs:
+            Dictionary of segment descriptions
+        cost_units:
+            Units used in totals to be appended to tld name
+
+        Returns
+        -------
+        tld_name: str
+            Name of individual segment
+        """
+
+        tld_name = str()
+
+        for valid_name in self.segment_order:
+            if valid_name in list(seg_descs.keys()):
+                seg_value = str(seg_descs[valid_name])
+
+                method = self.segment_treatment[str(valid_name)]
+
+                if method == 'trip_origin':
+                    tld_name += seg_value
+
+                elif method == 'tp':
+                    tld_name += '_' + valid_name + seg_value
+                else:
+                    tld_name += '_' + valid_name + seg_value
+
+        tld_name += '_' + cost_units
+
+        return tld_name
+
+    def _build_set_tld_name(
+            self,
+            segments):
+        """
+        Build a set name for the distribution, using its definition
+        takes a standard order of construction from class
+
+        Parameters
+        ----------
+        segments: pd.DataFrame
+            Dataframe of segments as defined for input
+
+        Returns
+        -------
+        seg_output_name: str
+            Name of distribution at large
+        """
+
+        seg_output_name = str()
+
+        seg_descs = list(segments)
+
+        for valid_name in self.segment_order:
+            if valid_name in seg_descs:
+
+                method = self.segment_treatment[str(valid_name)]
+
+                if method == 'trip_origin':
+                    # is there only 1 trip origin
+                    origin_types = segments[valid_name].unique()
+                    # if so append to names
+                    if len(origin_types == 1):
+                        seg_output_name += origin_types[0]
+
+                elif method == 'tp':
+                    # If all tps are 0, omit from name
+                    if not bool(len(segments[valid_name].unique()) == 1):
+                        seg_output_name += '_' + valid_name
+                else:
+                    seg_output_name += '_' + valid_name
+
+        return seg_output_name
+
+    def _handle_sample_period(self,
+                              input_dat,
+                              sample_period):
+        """
+        Function to subset whole dataset for time periods
+        """
+        # TODO: Needs to be expanded to work for other time periods
+
+        if sample_period == 'weekday':
+            input_dat = self._filter_to_weekday(input_dat)
+
+        return input_dat
+
+    def _correct_defaults(self,
+                          segments):
+        """
+        Assume missing segment classifications from NTS are the same as the input label
+        Append those labels to the dictionary to avoid key errors later on
+
+        Parameters
+        ----------
+        segments:
+            list of segments from target segmentation, as defined in input csv
+        Returns
+        ----------
+        defaults:
+            list of segments missing in current form
+        """
+
+        defaults = {x: x for x in list(segments.columns) if x not in self.tld_to_nts_names}
+        self.tld_to_nts_names.update(defaults)
+
+        return defaults
+
+    def build_tld(self,
+                  input_dat: pd.DataFrame,
+                  trip_filter_type: str,
+                  bands: pd.DataFrame,
+                  segments: pd.DataFrame,
+                  cost_units: str,
+                  sample_threshold: int = 10,
+                  verbose: bool = True):
+
+        """
+        Build a set of trip length distributions
+
+        Parameters
+        ----------
+        input_dat: pd.DataFrame:
+            Dataframe of pre-processed trip length distribution data
+        trip_filter_type: str:
+            Method of isolation for location, household or regional OD
+        bands: pd.DataFrame:
+            Dataframe of bands with headings lower, upper
+        segments: pd.DataFrame:
+            dataframe of segments by individual row
+        cost_units: str:
+            Units of distance, or in theory other cost
+        sample_threshold: int = 10:
+            Sample size below which skip allocation to bands and fail out
+        verbose: bool:
+          Echo or no
+
+        Returns
+        ----------
+        tld_dict: dict
+            A dictionary with {description of tld: tld DataFrame}
+        loc_segs: str
+            input segments with reported number of records and status
+        """
+
+        tld_dict = dict()
+
+        # Handle lookup exceptions
+        self._correct_defaults(segments)
+
+        # create copy of master segments
+        loc_segs = segments.copy()
+
+        # Iterate over each individual segment descriptions
+        for row_num, row in loc_segs.iterrows():
+            # Clone data for sub-setting
+            seg_sub = input_dat.copy()
+            # Open dictionary for segments with values
+            seg_descs = dict()
+            # Iterate over each row
+            for segment, seg_value in row.items():
+                method = self.segment_treatment[str(segment)]
+                # filter based on method
+                seg_sub = self._filter_segment(
+                    seg_sub=seg_sub,
+                    trip_filter_type=trip_filter_type,
+                    segment_name=str(segment),
+                    filter_value=seg_value,
+                    method=method)
+
+                # Break loop if len is 0
+                seg_descs.update({segment: seg_value})
+
+            seg_length = len(seg_sub)
+
+            if verbose:
+                print('Filtered for %s' % row)
+                print('Remaining records %d' % seg_length)
+
+            if seg_length <= sample_threshold:
+                print('No data returned to build tld')
+                loc_segs.loc[row_num, 'records'] = seg_length
+                loc_segs.loc[row_num, 'status'] = 'Failed'
+                continue
+            else:
+                loc_segs.loc[row_num, 'records'] = seg_length
+                loc_segs.loc[row_num, 'status'] = 'Passed'
+
+            # build tld
+            tld = self._build_band_subset(
+                seg_sub=seg_sub,
+                bands=bands,
+                cost_units=cost_units
+            )
+
+            # Append segment names to output frame
+            tld = self._append_segment_names(
+                tld,
+                seg_descs
+            )
+
+            # build single tld name
+            tld_name = self._build_single_tld_name(
+                seg_descs,
+                cost_units=cost_units)
+
+            tld_dict.update({tld_name: tld})
+
+        return tld_dict, loc_segs
+
+    def tld_generator(self,
+                      geo_area: str,
+                      bands_path: nd.PathLike,
+                      segmentation_path: nd.PathLike,
+                      sample_period: str = 'week',
+                      trip_filter_type: str = 'trip_OD',
+                      cost_units: str = 'km',
+                      sample_threshold: int = 10,
+                      verbose: bool = True,
+                      write=True):
+
+        # TODO: Can most of these be defined as class types to limit inputs?
+        """
+        Generate a consistent set of trip length distributions
+
+        Parameters
+        ----------
+        geo_area: str:
+            how to do regional subsets
+            'north', 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie'
+            should be limited by type in future
+        bands_path: nd.PathLike:
+            Path to a .csv describing bands to be used for tlds
+        segmentation_path: nd.PathLike:
+            Path to a .csv describing segmentation to be used
+            Where cols = segments and rows = segment values
+        sample_period:
+            'weekday', 'week', 'weekend' - time period filter for target tld
+            currently only handles week as import data build week
+        trip_filter_type: str = 'trip_OD':
+            How to define the start and end of trips. Currently only works
+            for trip_OD, i.e. filter on the start and end of trip, but will
+            work for household i.e where a house is with small modification
+        cost_units: str = 'km',
+            Units of distance to be output. Essentially picks a constant
+            to multiply the native NTS miles by
+            'miles', 'm', 'km'
+        sample_threshold: int = 10:
+            Sample below which to not bother running an application to bands
+            Smallest possible number you would consider representative
+            Failures captured in output report
+        verbose: bool = True,
+            Echo to terminal or not
+        write: bool = True:
+            Write export to class export folder
+
+        Returns
+        ----------
+        tld_dict: dict
+            A dictionary with {description of tld: tld DataFrame}
+        full_export: pd.DataFrame
+            A compiled, concatenated version of the DataFrames in tld_dict
+
+        Future Improvements
+        ----------
+        Add more functionality for time period handling.
+        Add better error control and type limiting for inputs.
+        """
+
+        input_dat = self.nts_import.copy()
         records = list()
-        records.append(len(output_dat))
+        records.append(len(input_dat))
 
-        # CA Map
-        """
-        1	Main driver of company car
-        2	Other main driver
-        3	Not main driver of household car
-        4	Household car but non driver
-        5	Driver but no car
-        6	Non driver and no car
-        7	NA
-        """
-        ca_map = pd.DataFrame({'CarAccess_B01ID': [1, 2, 3, 4, 5, 6, 7],
-                               'ca': [2, 2, 2, 2, 1, 1, 1]})
+        # Import bands
+        bands = pd.read_csv(bands_path)
+        bands_name = os.path.basename(bands_path)
+        bands_name = bands_name.replace('.csv', '')
 
-        output_dat = output_dat.merge(ca_map,
-                                      how='left',
-                                      on='CarAccess_B01ID')
+        # Import segments
+        segments = pd.read_csv(segmentation_path)
 
-        # map agg gor
-        a_gor_from_map = pd.DataFrame({'agg_gor_from': [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
-                                         'TripOrigGOR_B02ID': [1, 2, 3, 4, 6,
-                                                               7, 8, 5, 9, 10, 11]})
-        a_gor_to_map = pd.DataFrame({'agg_gor_to': [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
-                                       'TripDestGOR_B02ID': [1, 2, 3, 4, 6,
-                                                             7, 8, 5, 9, 10, 11]})
+        # Limited input data pre-processing, should all really happen R side
 
-        output_dat = output_dat.merge(a_gor_from_map,
-                                      how='left',
-                                      on='TripOrigGOR_B02ID')
-
-        output_dat = output_dat.merge(a_gor_to_map,
-                                      how='left',
-                                      on='TripDestGOR_B02ID')
-
-        # Aggregate area type application
-        agg_at = pd.DataFrame({'tfn_area_type': [1, 2, 3, 4, 5, 6, 7, 8],
-                               'agg_tfn_area_type': [1, 1, 2, 2, 3, 3, 4, 4]})
-
-        output_dat = output_dat.merge(agg_at,
-                                      how='left',
-                                      on='tfn_area_type')
-
-        records.append(len(output_dat))
+        # Map categories not classified in classified build
+        # Car availability
+        # TODO: This should be handled upstream, in inputs
+        input_dat = self._map_dict(output_dat=input_dat,
+                                   map_dict=self._household_type_to_ca,
+                                   key='hh_type')
 
         # Filter to weekdays only
-        output_dat = output_dat[
-            output_dat['TravelWeekDay_B01ID'].isin(weekdays)].reset_index(drop=True)
-        records.append(len(output_dat))
+        input_dat = self._handle_sample_period(
+            input_dat,
+            sample_period=sample_period)
 
         # Geo filter on self.region_filter and self.geo_area
-        output_dat = self._apply_geo_filter(output_dat)
+        input_dat = self._apply_geo_filter(input_dat,
+                                           trip_filter_type,
+                                           geo_area
+                                           )
 
-        out_mat = []
-        for index, row in self.target_segmentation.iterrows():
+        # Build tld dictionary, return a proper name for the distributions
+        tld_dict, report = self.build_tld(
+            input_dat=input_dat,
+            trip_filter_type=trip_filter_type,
+            bands=bands,
+            segments=segments,
+            cost_units=cost_units,
+            sample_threshold=sample_threshold,
+            verbose=verbose
+        )
 
-            print(row)
-            op_sub = output_dat.copy()
+        seg_output_name = self._build_set_tld_name(segments)
 
-            # Establish if PA cost or OD TLD
-            if 'cost_type' in list(row):
-                cost_type = row['cost_type']
-            else:
-                if 'p' in row:
-                    if int(row['p']) in self._hb_purposes:
-                        cost_type = 'pa'
-                    elif int(row['p']) in self._nhb_purposes:
-                        cost_type = 'od'
-                    else:
-                        raise ValueError('%d non-recognised purpose' % row['p'])
+        # Build output path
+        tld_out_path = os.path.join(
+            self.output_folder,
+            geo_area,
+            trip_filter_type,
+            seg_output_name,
+            bands_name,
+            sample_period
+        )
 
-            # Seed values so they can go MIA
-            trip_origin, purpose, mode, tp, soc, ns = [0, 0, 0, 0, 0, 0]
-            tfn_at, agg_at, g, ca, agg_gor_from, agg_gor_to = [0, 0, 0, 0, 0, 0]
-
-            for subset, value in row.iteritems():
-                if subset == 'trip_origin':
-                    op_sub = op_sub[op_sub['trip_origin'] == value].reset_index(drop=True)
-                    trip_origin = value
-                if subset == 'p':
-                    if trip_origin == 'hb':
-                        if cost_type == 'pa':
-                            op_sub = op_sub[
-                                (op_sub['nhb_purpose_hb_leg'] == value) |
-                                (op_sub['hb_purpose'] == value)
-                            ]
-                        elif cost_type == 'od':
-                            op_sub = op_sub[op_sub['hb_purpose'] == value].reset_index(drop=True)
-                    elif trip_origin == 'nhb':
-                        op_sub = op_sub[op_sub['nhb_purpose'] == value].reset_index(drop=True)
-                    purpose = value
-                if subset == 'ca':
-                    if value != 0:
-                        op_sub = op_sub[op_sub['ca'] == value].reset_index(drop=True)
-                    ca = value
-                if subset == 'm':
-                    if value != 0:
-                        op_sub = op_sub[op_sub['main_mode'] == value].reset_index(drop=True)
-                    mode = value
-                if subset == 'tp':
-                    tp = value
-                    if value != 0:
-                        # Filter around tp to aggregate
-                        time_vec: list = [value]
-                        if purpose in agg_purp:
-                            time_vec = [3, 4]
-                        op_sub = op_sub[
-                            op_sub['start_time'].isin(
-                                time_vec)].reset_index(drop=True)
-                if subset == 'soc_cat':
-                    soc = value
-                    if value != 0:
-                        op_sub = op_sub[
-                            op_sub['soc_cat'] == value].reset_index(drop=True)
-                if subset == 'ns_sec':
-                    ns = value
-                    if value != 0:
-                        op_sub = op_sub[
-                            op_sub['ns_sec'] == value].reset_index(drop=True)
-                if subset == 'tfn_area_type':
-                    tfn_at = value
-                    if value != 0:
-                        op_sub = op_sub[
-                            op_sub[
-                                'tfn_area_type'] == value].reset_index(drop=True)
-                if subset == 'agg_tfn_area_type':
-                    agg_at = value
-                    if value != 0:
-                        op_sub = op_sub[
-                            op_sub[
-                                'agg_tfn_area_type'] == value].reset_index(drop=True)
-                if subset == 'g':
-                    g = value
-                    if value != 0:
-                        op_sub = op_sub[
-                            op_sub['Sex_B01ID'] == value].reset_index(drop=True)
-                if subset == 'agg_gor_to':
-                    agg_gor_to = value
-                    if value != 0:
-                        op_sub = op_sub[
-                            op_sub['agg_gor_to'] == value].reset_index(drop=True)
-                if subset == 'agg_gor_from':
-                    agg_gor_from = value
-                    if value != 0:
-                        op_sub = op_sub[
-                            op_sub['agg_gor_from'] == value].reset_index(drop=True)
-
-            out = self.trip_length_bands.copy()
-
-            out['ave_km'] = 0
-            out['trips'] = 0
-
-            for line, thres in self.trip_length_bands.iterrows():
-
-                tlb_sub = op_sub.copy()
-
-                lower = thres['lower']
-                upper = thres['upper']
-
-                tlb_sub = tlb_sub[
-                    tlb_sub['TripDisIncSW'] >= lower].reset_index(drop=True)
-                tlb_sub = tlb_sub[
-                    tlb_sub['TripDisIncSW'] < upper].reset_index(drop=True)
-
-                mean_val = (tlb_sub['TripDisIncSW'].mean() * 1.61)
-                total_trips = (tlb_sub['weighted_trip'].sum())
-
-                out.loc[line, 'ave_km'] = mean_val
-                out.loc[line, 'trips'] = total_trips
-
-                del mean_val
-                del total_trips
-
-            out['band_share'] = out['trips']/out['trips'].sum()
-
-            name = (trip_origin + '_tlb' + '_p' +
-                    str(purpose) + '_m' + str(mode))
-            if ca != 0:
-                name = name + '_ca' + str(ca)
-            if tfn_at != 0:
-                name = name + '_at' + str(tfn_at)
-            if agg_at != 0:
-                name = name + '_aat' + str(agg_at)
-            if tp != 0:
-                name = name + '_tp' + str(tp)
-            if soc != 0 or (purpose in [1,2,12] and 'soc_cat' in list(self.target_segmentation)):
-                name = name + '_soc' + str(soc)
-            if ns != 0 and 'ns_sec' in list(self.target_segmentation):
-                name = name + '_ns' + str(ns)
-            if g != 0:
-                name = name + '_g' + str(g)
-            if agg_gor_to != 0:
-                name = name + '_gort' + str(agg_gor_to)
-            if agg_gor_from != 0:
-                name = name + '_gorf' + str(agg_gor_from)
-            name += '.csv'
-
-            ex_name = os.path.join(self.export, name)
-
-            out.to_csv(ex_name, index=False)
-
-            out['mode'] = mode
-            out['period'] = tp
-            out['ca'] = ca
-            out['purpose'] = purpose
-            out['soc'] = soc
-            out['ns'] = ns
-            out['tfn_area_type'] = tfn_at
-            out['agg_tfn_area_type'] = agg_at
-            out['g'] = g
-            out['agg_gor_from'] = agg_gor_from
-            out['agg_gor_to'] = agg_gor_to
-
-            out_mat.append(out)
-
-        final = pd.concat(out_mat)
-
-        full_name = os.path.join(self.export, 'full_export.csv')
+        # Build full export
+        full_export = list()
+        for desc, dat in tld_dict.items():
+            full_export.append(dat)
+        full_export = pd.concat(full_export, ignore_index=True)
 
         if write:
-            final.to_csv(full_name, index=False)
+            # for csv in mat
+            file_ops.create_folder(tld_out_path)
 
-        return out_mat, final
+            # Write report
+            report_path = os.path.join(tld_out_path, seg_output_name + '_report.csv')
+            file_ops.safe_dataframe_to_csv(
+                report,
+                report_path,
+                index=False)
+
+            # Write final compiled tld
+            full_export_path = os.path.join(tld_out_path, 'full_export.csv')
+            file_ops.safe_dataframe_to_csv(
+                full_export,
+                full_export_path,
+                index=False)
+
+            # Write individual tlds
+            for path, df in tld_dict.items():
+                csv_path = path + '.csv'
+                individual_file = os.path.join(tld_out_path, csv_path)
+                file_ops.safe_dataframe_to_csv(
+                    df,
+                    individual_file,
+                    index=False)
+
+        return tld_dict, full_export

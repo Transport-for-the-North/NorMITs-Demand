@@ -12,13 +12,12 @@ File purpose:
 """
 # Built-Ins
 import os
-import sys
 import shutil
 
 # Third Party
 
 # Local Imports
-from normits_demand.cost import tld_generator
+from normits_demand.cost import tld_builder
 
 
 def main(iterator=False):
@@ -53,14 +52,6 @@ def main(iterator=False):
     #       hb_p_m_ca
     #       nhb_p_m_ca  (These then need copying across TPs)
 
-
-    run_another = True
-    while run_another:
-        extract = tld_builder.TripLengthDistributionBuilder(
-            tlb_folder=_TLB_FOLDER,
-            nts_import=_NTS_IMPORT,
-            output_home=output_home,
-        )
     available_bands = os.listdir(_BAND_FOLDER)
     available_bands = [x for x in available_bands if '.csv' in x]
 
@@ -73,7 +64,7 @@ def main(iterator=False):
     available_geo_areas = ['north', 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie', 'gb']
     geo_area = 'gb'
 
-    extract = tld_generator.TripLengthDistributionGenerator(
+    extract = tld_builder.TripLengthDistributionBuilder(
         tlb_folder=_TLB_FOLDER,
         tlb_version=_TLB_VERSION,
         output_folder=_OUTPUT_FOLDER,
