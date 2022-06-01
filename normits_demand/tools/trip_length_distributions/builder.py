@@ -166,19 +166,19 @@ class TripLengthDistributionBuilder:
         self.tlb_folder = tlb_folder
         self.tlb_version = tlb_version
         self.tlb_import_path = os.path.join(tlb_folder, tlb_version)
-        print("Loading processed NTS trip length data from %s" % self.tlb_import_path)
+        print(f"Loading processed NTS trip length data from {self.tlb_import_path}")
         self.nts_import = pd.read_csv(self.tlb_import_path)
         self.output_folder = output_folder
 
         if trip_miles_col in list(self.nts_import):
             self.trip_miles_col = trip_miles_col
         else:
-            raise ValueError("Given trip miles col %s not in NTS data" % trip_miles_col)
+            raise ValueError(f"Given trip miles col {trip_miles_col} not in NTS data")
 
         if trip_count_col in list(self.nts_import):
             self.trip_count_col = trip_count_col
         else:
-            raise ValueError("Given trip count col %s not in NTS data" % trip_count_col)
+            raise ValueError(f"Given trip count col {trip_count_col} not in NTS data")
 
     def _apply_geo_filter(
         self, output_dat: pd.DataFrame, trip_filter_type: str, geo_area: str
