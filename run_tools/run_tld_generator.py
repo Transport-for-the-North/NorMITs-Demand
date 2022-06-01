@@ -12,12 +12,16 @@ File purpose:
 """
 # Built-Ins
 import os
+import sys
 import shutil
 
 # Third Party
 
 # Local Imports
-from normits_demand.cost import tld_builder
+sys.path.append("..")
+# pylint: disable=import-error,wrong-import-position
+from normits_demand.tools import trip_length_distributions as tlds
+# pylint: enable=import-error,wrong-import-position
 
 
 def main(iterator=False):
@@ -61,10 +65,10 @@ def main(iterator=False):
     bands_path = os.path.join(_BAND_FOLDER, available_bands[1])
     segmentation_path = os.path.join(_SEGMENTATION_FOLDER, available_segmentations[0])
 
-    available_geo_areas = ['north', 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie', 'gb']
+    available_geo_areas = ['north'] # , 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie', 'gb']
     geo_area = 'gb'
 
-    extract = tld_builder.TripLengthDistributionBuilder(
+    extract = tlds.TripLengthDistributionBuilder(
         tlb_folder=_TLB_FOLDER,
         tlb_version=_TLB_VERSION,
         output_folder=_OUTPUT_FOLDER,

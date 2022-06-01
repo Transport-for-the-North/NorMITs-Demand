@@ -465,7 +465,7 @@ class TripLengthDistributionBuilder:
 
         return tld
 
-    def _build_single_tld_name(self, seg_descs, cost_units):
+    def _build_single_tld_name(self, seg_descs):
 
         """
         Build single names for the distribution, using its definition
@@ -475,8 +475,6 @@ class TripLengthDistributionBuilder:
         ----------
         seg_descs:
             Dictionary of segment descriptions
-        cost_units:
-            Units used in totals to be appended to tld name
 
         Returns
         -------
@@ -499,8 +497,6 @@ class TripLengthDistributionBuilder:
                     tld_name += "_" + valid_name + seg_value
                 else:
                     tld_name += "_" + valid_name + seg_value
-
-        tld_name += "_" + cost_units
 
         return tld_name
 
@@ -647,8 +643,8 @@ class TripLengthDistributionBuilder:
             seg_length = len(seg_sub)
 
             if verbose:
-                print("Filtered for %s" % row)
-                print("Remaining records %d" % seg_length)
+                print(f"Filtered for {row}")
+                print(f"Remaining records {seg_length:d}")
 
             if seg_length <= sample_threshold:
                 print("No data returned to build tld")
@@ -666,7 +662,7 @@ class TripLengthDistributionBuilder:
             tld = self._append_segment_names(tld, seg_descs)
 
             # build single tld name
-            tld_name = self._build_single_tld_name(seg_descs, cost_units=cost_units)
+            tld_name = self._build_single_tld_name(seg_descs)
 
             tld_dict.update({tld_name: tld})
 
@@ -778,9 +774,10 @@ class TripLengthDistributionBuilder:
             self.output_folder,
             geo_area,
             trip_filter_type,
-            seg_output_name,
             bands_name,
+            seg_output_name,
             sample_period,
+            cost_units,
         )
 
         # Build full export
