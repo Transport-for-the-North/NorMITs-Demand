@@ -25,12 +25,13 @@ from normits_demand.utils import file_ops
 class TripLengthDistributionBuilder:
     # Class constants
 
-    _geo_areas = ['north', 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie', 'gb']
-    _trip_filter_types = ['trip_OD']
-    _sample_periods = ['weekday', 'week', 'weekend']
-    _cost_units = ['km', 'miles', 'm']
+    _geo_areas = ["north", "north_incl_ie", "north_and_mids", "north_and_mids_incl_ie", "gb"]
+    _trip_filter_types = ["trip_OD"]
+    _sample_periods = ["weekday", "week", "weekend"]
+    _cost_units = ["km", "miles", "m"]
 
     # LA Definitions
+    # fmt: off
     _north_las = [
         'E06000001', 'E06000002', 'E06000003', 'E06000004', 'E06000005',
         'E06000006', 'E06000007', 'E06000008', 'E06000009', 'E06000010',
@@ -72,6 +73,7 @@ class TripLengthDistributionBuilder:
         'E08000026', 'E08000027', 'E08000028', 'E08000029',
         'E08000030', 'E08000031'
     ]
+    # fmt: on
     _north_and_mid_las = list(set(_north_las + _mid_las))
 
     # GOR definitions
@@ -84,51 +86,65 @@ class TripLengthDistributionBuilder:
     _nhb_purposes = [11, 12, 13, 14, 15, 16, 18]
 
     # Maps for non-classified categories
-    _household_type_to_ca = {'hh_type': [1, 2, 3, 4, 5, 6, 7, 8],
-                             'ca': [1, 2, 1, 2, 2, 1, 2, 2]}
+    _household_type_to_ca = {
+        "hh_type": [1, 2, 3, 4, 5, 6, 7, 8],
+        "ca": [1, 2, 1, 2, 2, 1, 2, 2],
+    }
 
-    _a_gor_from = pd.DataFrame({'agg_gor_from': [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
-                                'TripOrigGOR_B02ID': [1, 2, 3, 4, 6,
-                                                      7, 8, 5, 9, 10, 11]})
-    _a_gor_to = pd.DataFrame({'agg_gor_to': [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
-                              'TripDestGOR_B02ID': [1, 2, 3, 4, 6,
-                                                    7, 8, 5, 9, 10, 11]})
+    _a_gor_from = pd.DataFrame(
+        {
+            "agg_gor_from": [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
+            "TripOrigGOR_B02ID": [1, 2, 3, 4, 6, 7, 8, 5, 9, 10, 11],
+        }
+    )
+    _a_gor_to = pd.DataFrame(
+        {
+            "agg_gor_to": [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
+            "TripDestGOR_B02ID": [1, 2, 3, 4, 6, 7, 8, 5, 9, 10, 11],
+        }
+    )
 
-    _tfn_at_to_agg_at = {'tfn_at': [1, 2, 3, 4, 5, 6, 7, 8],
-                         'agg_tfn_at': [1, 1, 2, 2, 3, 3, 4, 4]}
+    _tfn_at_to_agg_at = {
+        "tfn_at": [1, 2, 3, 4, 5, 6, 7, 8],
+        "agg_tfn_at": [1, 1, 2, 2, 3, 3, 4, 4],
+    }
 
     # Define weekdays
     _weekday_tps = [1, 2, 3, 4]
 
-    segment_treatment = {'trip_origin': 'trip_origin',
-                         'p': 'int',
-                         'm': 'int',
-                         'ca': 'int',
-                         'tp': 'tp'
-                         }
+    segment_treatment = {
+        "trip_origin": "trip_origin",
+        "p": "int",
+        "m": "int",
+        "ca": "int",
+        "tp": "tp",
+    }
 
     segment_order = [key for key, value in segment_treatment.items()]
 
     # Correspondences between segment names and NTS data names
-    tld_to_nts_names = {'m': 'main_mode',
-                        'p': 'p',
-                        'tp': 'start_time',
-                        'trip_origin': 'trip_direction'}
+    tld_to_nts_names = {
+        "m": "main_mode",
+        "p": "p",
+        "tp": "start_time",
+        "trip_origin": "trip_direction",
+    }
 
     # Miles to other units conversion factors
     miles_to_other_distance = {
-        'miles': 1,
-        'km': 1.6093,
-        'm': 1609.34,
+        "miles": 1,
+        "km": 1.6093,
+        "m": 1609.34,
     }
 
-    def __init__(self,
-                 tlb_folder: nd.PathLike,
-                 tlb_version: nd.PathLike,
-                 output_folder: nd.PathLike,
-                 trip_miles_col: str = 'trip_mile',
-                 trip_count_col: str = 'trips',
-                 ):
+    def __init__(
+        self,
+        tlb_folder: nd.PathLike,
+        tlb_version: nd.PathLike,
+        output_folder: nd.PathLike,
+        trip_miles_col: str = "trip_mile",
+        trip_count_col: str = "trips",
+    ):
         """
         Define the environment for a set of trip length distribution runs.
 
@@ -150,28 +166,23 @@ class TripLengthDistributionBuilder:
         self.tlb_folder = tlb_folder
         self.tlb_version = tlb_version
         self.tlb_import_path = os.path.join(tlb_folder, tlb_version)
-        print('Loading processed NTS trip length data from %s' % self.tlb_import_path)
+        print("Loading processed NTS trip length data from %s" % self.tlb_import_path)
         self.nts_import = pd.read_csv(self.tlb_import_path)
         self.output_folder = output_folder
 
         if trip_miles_col in list(self.nts_import):
             self.trip_miles_col = trip_miles_col
         else:
-            raise ValueError(
-                'Given trip miles col %s not in NTS data' % trip_miles_col
-            )
+            raise ValueError("Given trip miles col %s not in NTS data" % trip_miles_col)
 
         if trip_count_col in list(self.nts_import):
             self.trip_count_col = trip_count_col
         else:
-            raise ValueError(
-                'Given trip count col %s not in NTS data' % trip_count_col
-            )
+            raise ValueError("Given trip count col %s not in NTS data" % trip_count_col)
 
-    def _apply_geo_filter(self,
-                          output_dat: pd.DataFrame,
-                          trip_filter_type: str,
-                          geo_area: str):
+    def _apply_geo_filter(
+        self, output_dat: pd.DataFrame, trip_filter_type: str, geo_area: str
+    ):
         """
         This function defines how the origin and destination of trips are
         derived and also defines regional subsets
@@ -202,14 +213,18 @@ class TripLengthDistributionBuilder:
         target_orig_gors = None
         target_dest_gors = None
 
-        if trip_filter_type == 'trip_OD':
+        if trip_filter_type == "trip_OD":
             # Transpose from and to for OD trip ends
-            to_orig = output_dat[output_dat['trip_direction'] == 'hb_to']['TripOrigGOR_B02ID'].copy()
-            to_dest = output_dat[output_dat['trip_direction'] == 'hb_to']['TripDestGOR_B02ID'].copy()
-            output_dat[output_dat['trip_direction'] == 'hb_to']['TripOrigGOR_B02ID'] = to_dest
-            output_dat[output_dat['trip_direction'] == 'hb_to']['TripDestGOR_B02ID'] = to_orig
+            to_orig = output_dat[output_dat["trip_direction"] == "hb_to"][
+                "TripOrigGOR_B02ID"
+            ].copy()
+            to_dest = output_dat[output_dat["trip_direction"] == "hb_to"][
+                "TripDestGOR_B02ID"
+            ].copy()
+            output_dat[output_dat["trip_direction"] == "hb_to"]["TripOrigGOR_B02ID"] = to_dest
+            output_dat[output_dat["trip_direction"] == "hb_to"]["TripDestGOR_B02ID"] = to_orig
 
-            if geo_area == 'north':
+            if geo_area == "north":
                 filter_orig = True
                 filter_dest = True
                 # From O/D filter
@@ -217,39 +232,33 @@ class TripLengthDistributionBuilder:
                 # To O/D filter
                 target_dest_gors = self._north_gors
 
-            elif geo_area == 'north_incl_ie':
+            elif geo_area == "north_incl_ie":
                 # From filter only
                 filter_orig = True
                 filter_dest = False
                 target_orig_gors = self._north_gors
 
-            elif geo_area == 'north_and_mids':
+            elif geo_area == "north_and_mids":
                 filter_orig = True
                 filter_dest = True
                 target_orig_gors = self._north_and_mid_gors
                 target_dest_gors = self._north_and_mid_gors
 
-            elif geo_area == 'north_and_mids_incl_ie':
+            elif geo_area == "north_and_mids_incl_ie":
                 filter_orig = True
                 target_orig_gors = self._north_and_mid_gors
 
         if filter_orig:
-            output_dat = output_dat[
-                output_dat['TripOrigGOR_B02ID'].isin(
-                    target_orig_gors)]
+            output_dat = output_dat[output_dat["TripOrigGOR_B02ID"].isin(target_orig_gors)]
             output_dat = output_dat.reset_index(drop=True)
         if filter_dest:
-            output_dat = output_dat[
-                output_dat['TripDestGOR_B02ID'].isin(
-                    target_dest_gors)]
+            output_dat = output_dat[output_dat["TripDestGOR_B02ID"].isin(target_dest_gors)]
             output_dat = output_dat.reset_index(drop=True)
 
         return output_dat
 
     @staticmethod
-    def _map_dict(output_dat: pd.DataFrame,
-                  map_dict: dict,
-                  key: str):
+    def _map_dict(output_dat: pd.DataFrame, map_dict: dict, key: str):
 
         """
         Analogue of pd.map for filling out a category from a dictionary
@@ -260,29 +269,28 @@ class TripLengthDistributionBuilder:
 
         map_frame = pd.DataFrame(map_dict)
 
-        output_dat = output_dat.merge(map_frame,
-                                      how='left',
-                                      on=key)
+        output_dat = output_dat.merge(map_frame, how="left", on=key)
 
         return output_dat
 
-    def _filter_to_weekday(self,
-                           output_dat):
+    def _filter_to_weekday(self, output_dat):
         """
         Subset a NTS table to weekdays only using 'TravelWeekDay'
         Correct weekdays defined in class
         """
         w_d = self._weekday_tps
-        output_dat = output_dat[output_dat['start_time'].isin(w_d)]
+        output_dat = output_dat[output_dat["start_time"].isin(w_d)]
         output_dat = output_dat.reset_index(drop=True)
 
         return output_dat
 
-    def _build_band_subset(self,
-                           seg_sub: pd.DataFrame,
-                           bands: pd.DataFrame,
-                           cost_units: str = 'km',
-                           band_rounding: int = 2):
+    def _build_band_subset(
+        self,
+        seg_sub: pd.DataFrame,
+        bands: pd.DataFrame,
+        cost_units: str = "km",
+        band_rounding: int = 2,
+    ):
         """
         Take a set of NTS data and distribute it to a set of given bands,
         counting trips per band and mean trip length per band.
@@ -317,20 +325,18 @@ class TripLengthDistributionBuilder:
         for line, threshold in loc_bands.iterrows():
             tlb_sub = seg_sub.copy()
 
-            lower = threshold['lower']
-            upper = threshold['upper']
+            lower = threshold["lower"]
+            upper = threshold["upper"]
 
             # Simple filter subset to get trip pots
-            tlb_sub = tlb_sub[
-                tlb_sub[self.trip_miles_col] >= lower].reset_index(drop=True)
-            tlb_sub = tlb_sub[
-                tlb_sub[self.trip_miles_col] < upper].reset_index(drop=True)
+            tlb_sub = tlb_sub[tlb_sub[self.trip_miles_col] >= lower].reset_index(drop=True)
+            tlb_sub = tlb_sub[tlb_sub[self.trip_miles_col] < upper].reset_index(drop=True)
 
             # total trips is row wise sum
             total_trips = tlb_sub[self.trip_count_col].sum()
 
             # mean miles is a sum product of trips * distance
-            mean_miles = sum(tlb_sub[self.trip_miles_col]*tlb_sub[self.trip_count_col])
+            mean_miles = sum(tlb_sub[self.trip_miles_col] * tlb_sub[self.trip_count_col])
             if total_trips <= 0:
                 mean_miles = np.mean([lower, upper])
             else:
@@ -338,29 +344,30 @@ class TripLengthDistributionBuilder:
             # Value adjusted for target distance
             mean_val = mean_miles * dist_constant
 
-            loc_bands.loc[line, f'mean_{cost_units}'] = mean_val
-            loc_bands.loc[line, 'total_trips'] = total_trips
+            loc_bands.loc[line, f"mean_{cost_units}"] = mean_val
+            loc_bands.loc[line, "total_trips"] = total_trips
 
         # Derive distibution factors
-        loc_bands['dist'] = loc_bands['total_trips']/loc_bands['total_trips'].sum()
+        loc_bands["dist"] = loc_bands["total_trips"] / loc_bands["total_trips"].sum()
 
         # Multiply bands by dist constant to get target units
-        loc_bands['lower'] *= dist_constant
-        loc_bands['upper'] *= dist_constant
+        loc_bands["lower"] *= dist_constant
+        loc_bands["upper"] *= dist_constant
 
         # Round by target value
-        loc_bands['lower'] = loc_bands['lower'].round(decimals=band_rounding)
-        loc_bands['upper'] = loc_bands['upper'].round(decimals=band_rounding)
+        loc_bands["lower"] = loc_bands["lower"].round(decimals=band_rounding)
+        loc_bands["upper"] = loc_bands["upper"].round(decimals=band_rounding)
 
         return loc_bands
 
-    def _filter_segment(self,
-                        seg_sub: pd.DataFrame,
-                        trip_filter_type: str,
-                        segment_name: str,
-                        filter_value,
-                        method: str = 'int'
-                        ):
+    def _filter_segment(
+        self,
+        seg_sub: pd.DataFrame,
+        trip_filter_type: str,
+        segment_name: str,
+        filter_value,
+        method: str = "int",
+    ):
         """
         Core of process, filters the NTS data down to include the target
         segmentation only, one segment per call.
@@ -395,37 +402,37 @@ class TripLengthDistributionBuilder:
         # TODO: Handle values differently by type for consistency
         # TODO: Fix slice write warning - probably discrete function for transposition
 
-        hb_types = ['hb_fr', 'hb_to']
+        hb_types = ["hb_fr", "hb_to"]
 
         nts_sub = seg_sub.copy()
 
         nts_seg = self.tld_to_nts_names[segment_name]
 
-        if method == 'tp':
+        if method == "tp":
             if filter_value != 0:
                 nts_sub = self._filter_segment(
                     seg_sub=nts_sub,
                     trip_filter_type=trip_filter_type,
                     segment_name=segment_name,
                     filter_value=filter_value,
-                    method='int')
+                    method="int",
+                )
 
-        elif method == 'trip_origin':
-            if filter_value == 'hb':
-                if trip_filter_type == 'trip_OD':
+        elif method == "trip_origin":
+            if filter_value == "hb":
+                if trip_filter_type == "trip_OD":
                     nts_sub = nts_sub[nts_sub[nts_seg].isin(hb_types)]
-            elif filter_value == 'nhb':
-                if trip_filter_type == 'trip_OD':
-                    nts_sub = nts_sub[nts_sub[nts_seg] == 'nhb']
+            elif filter_value == "nhb":
+                if trip_filter_type == "trip_OD":
+                    nts_sub = nts_sub[nts_sub[nts_seg] == "nhb"]
 
-        elif method == 'int':
+        elif method == "int":
             nts_sub = nts_sub[nts_sub[nts_seg] == filter_value]
 
         return nts_sub
 
     @staticmethod
-    def _append_segment_names(tld: pd.DataFrame,
-                              seg_descs):
+    def _append_segment_names(tld: pd.DataFrame, seg_descs):
         """
         Add the segment descriptions and names back into the distribution,
         so they're readable in aggregate and auditable against what the
@@ -446,7 +453,7 @@ class TripLengthDistributionBuilder:
 
         # Append segment sub-categories to tld matrix
         # retain order
-        index_order = ['lower', 'upper']
+        index_order = ["lower", "upper"]
         end_cols = list(tld)[2:]
         for segment, seg_val in seg_descs.items():
             tld[segment] = seg_val
@@ -458,10 +465,7 @@ class TripLengthDistributionBuilder:
 
         return tld
 
-    def _build_single_tld_name(
-            self,
-            seg_descs,
-            cost_units):
+    def _build_single_tld_name(self, seg_descs, cost_units):
 
         """
         Build single names for the distribution, using its definition
@@ -488,21 +492,19 @@ class TripLengthDistributionBuilder:
 
                 method = self.segment_treatment[str(valid_name)]
 
-                if method == 'trip_origin':
+                if method == "trip_origin":
                     tld_name += seg_value
 
-                elif method == 'tp':
-                    tld_name += '_' + valid_name + seg_value
+                elif method == "tp":
+                    tld_name += "_" + valid_name + seg_value
                 else:
-                    tld_name += '_' + valid_name + seg_value
+                    tld_name += "_" + valid_name + seg_value
 
-        tld_name += '_' + cost_units
+        tld_name += "_" + cost_units
 
         return tld_name
 
-    def _build_set_tld_name(
-            self,
-            segments):
+    def _build_set_tld_name(self, segments):
         """
         Build a set name for the distribution, using its definition
         takes a standard order of construction from class
@@ -527,37 +529,34 @@ class TripLengthDistributionBuilder:
 
                 method = self.segment_treatment[str(valid_name)]
 
-                if method == 'trip_origin':
+                if method == "trip_origin":
                     # is there only 1 trip origin
                     origin_types = segments[valid_name].unique()
                     # if so append to names
                     if len(origin_types == 1):
                         seg_output_name += origin_types[0]
 
-                elif method == 'tp':
+                elif method == "tp":
                     # If all tps are 0, omit from name
                     if not bool(len(segments[valid_name].unique()) == 1):
-                        seg_output_name += '_' + valid_name
+                        seg_output_name += "_" + valid_name
                 else:
-                    seg_output_name += '_' + valid_name
+                    seg_output_name += "_" + valid_name
 
         return seg_output_name
 
-    def _handle_sample_period(self,
-                              input_dat,
-                              sample_period):
+    def _handle_sample_period(self, input_dat, sample_period):
         """
         Function to subset whole dataset for time periods
         """
         # TODO: Needs to be expanded to work for other time periods
 
-        if sample_period == 'weekday':
+        if sample_period == "weekday":
             input_dat = self._filter_to_weekday(input_dat)
 
         return input_dat
 
-    def _correct_defaults(self,
-                          segments):
+    def _correct_defaults(self, segments):
         """
         Assume missing segment classifications from NTS are the same as the input label
         Append those labels to the dictionary to avoid key errors later on
@@ -577,14 +576,16 @@ class TripLengthDistributionBuilder:
 
         return defaults
 
-    def build_tld(self,
-                  input_dat: pd.DataFrame,
-                  trip_filter_type: str,
-                  bands: pd.DataFrame,
-                  segments: pd.DataFrame,
-                  cost_units: str,
-                  sample_threshold: int = 10,
-                  verbose: bool = True):
+    def build_tld(
+        self,
+        input_dat: pd.DataFrame,
+        trip_filter_type: str,
+        bands: pd.DataFrame,
+        segments: pd.DataFrame,
+        cost_units: str,
+        sample_threshold: int = 10,
+        verbose: bool = True,
+    ):
 
         """
         Build a set of trip length distributions
@@ -637,7 +638,8 @@ class TripLengthDistributionBuilder:
                     trip_filter_type=trip_filter_type,
                     segment_name=str(segment),
                     filter_value=seg_value,
-                    method=method)
+                    method=method,
+                )
 
                 # Break loop if len is 0
                 seg_descs.update({segment: seg_value})
@@ -645,50 +647,43 @@ class TripLengthDistributionBuilder:
             seg_length = len(seg_sub)
 
             if verbose:
-                print('Filtered for %s' % row)
-                print('Remaining records %d' % seg_length)
+                print("Filtered for %s" % row)
+                print("Remaining records %d" % seg_length)
 
             if seg_length <= sample_threshold:
-                print('No data returned to build tld')
-                loc_segs.loc[row_num, 'records'] = seg_length
-                loc_segs.loc[row_num, 'status'] = 'Failed'
+                print("No data returned to build tld")
+                loc_segs.loc[row_num, "records"] = seg_length
+                loc_segs.loc[row_num, "status"] = "Failed"
                 continue
             else:
-                loc_segs.loc[row_num, 'records'] = seg_length
-                loc_segs.loc[row_num, 'status'] = 'Passed'
+                loc_segs.loc[row_num, "records"] = seg_length
+                loc_segs.loc[row_num, "status"] = "Passed"
 
             # build tld
-            tld = self._build_band_subset(
-                seg_sub=seg_sub,
-                bands=bands,
-                cost_units=cost_units
-            )
+            tld = self._build_band_subset(seg_sub=seg_sub, bands=bands, cost_units=cost_units)
 
             # Append segment names to output frame
-            tld = self._append_segment_names(
-                tld,
-                seg_descs
-            )
+            tld = self._append_segment_names(tld, seg_descs)
 
             # build single tld name
-            tld_name = self._build_single_tld_name(
-                seg_descs,
-                cost_units=cost_units)
+            tld_name = self._build_single_tld_name(seg_descs, cost_units=cost_units)
 
             tld_dict.update({tld_name: tld})
 
         return tld_dict, loc_segs
 
-    def tld_generator(self,
-                      geo_area: str,
-                      bands_path: nd.PathLike,
-                      segmentation_path: nd.PathLike,
-                      sample_period: str = 'week',
-                      trip_filter_type: str = 'trip_OD',
-                      cost_units: str = 'km',
-                      sample_threshold: int = 10,
-                      verbose: bool = True,
-                      write=True):
+    def tld_generator(
+        self,
+        geo_area: str,
+        bands_path: nd.PathLike,
+        segmentation_path: nd.PathLike,
+        sample_period: str = "week",
+        trip_filter_type: str = "trip_OD",
+        cost_units: str = "km",
+        sample_threshold: int = 10,
+        verbose: bool = True,
+        write=True,
+    ):
 
         # TODO: Can most of these be defined as class types to limit inputs?
         """
@@ -745,7 +740,7 @@ class TripLengthDistributionBuilder:
         # Import bands
         bands = pd.read_csv(bands_path)
         bands_name = os.path.basename(bands_path)
-        bands_name = bands_name.replace('.csv', '')
+        bands_name = bands_name.replace(".csv", "")
 
         # Import segments
         segments = pd.read_csv(segmentation_path)
@@ -755,20 +750,15 @@ class TripLengthDistributionBuilder:
         # Map categories not classified in classified build
         # Car availability
         # TODO: This should be handled upstream, in inputs
-        input_dat = self._map_dict(output_dat=input_dat,
-                                   map_dict=self._household_type_to_ca,
-                                   key='hh_type')
+        input_dat = self._map_dict(
+            output_dat=input_dat, map_dict=self._household_type_to_ca, key="hh_type"
+        )
 
         # Filter to weekdays only
-        input_dat = self._handle_sample_period(
-            input_dat,
-            sample_period=sample_period)
+        input_dat = self._handle_sample_period(input_dat, sample_period=sample_period)
 
         # Geo filter on self.region_filter and self.geo_area
-        input_dat = self._apply_geo_filter(input_dat,
-                                           trip_filter_type,
-                                           geo_area
-                                           )
+        input_dat = self._apply_geo_filter(input_dat, trip_filter_type, geo_area)
 
         # Build tld dictionary, return a proper name for the distributions
         tld_dict, report = self.build_tld(
@@ -778,7 +768,7 @@ class TripLengthDistributionBuilder:
             segments=segments,
             cost_units=cost_units,
             sample_threshold=sample_threshold,
-            verbose=verbose
+            verbose=verbose,
         )
 
         seg_output_name = self._build_set_tld_name(segments)
@@ -790,7 +780,7 @@ class TripLengthDistributionBuilder:
             trip_filter_type,
             seg_output_name,
             bands_name,
-            sample_period
+            sample_period,
         )
 
         # Build full export
@@ -804,26 +794,17 @@ class TripLengthDistributionBuilder:
             file_ops.create_folder(tld_out_path)
 
             # Write report
-            report_path = os.path.join(tld_out_path, seg_output_name + '_report.csv')
-            file_ops.safe_dataframe_to_csv(
-                report,
-                report_path,
-                index=False)
+            report_path = os.path.join(tld_out_path, seg_output_name + "_report.csv")
+            file_ops.safe_dataframe_to_csv(report, report_path, index=False)
 
             # Write final compiled tld
-            full_export_path = os.path.join(tld_out_path, 'full_export.csv')
-            file_ops.safe_dataframe_to_csv(
-                full_export,
-                full_export_path,
-                index=False)
+            full_export_path = os.path.join(tld_out_path, "full_export.csv")
+            file_ops.safe_dataframe_to_csv(full_export, full_export_path, index=False)
 
             # Write individual tlds
             for path, df in tld_dict.items():
-                csv_path = path + '.csv'
+                csv_path = path + ".csv"
                 individual_file = os.path.join(tld_out_path, csv_path)
-                file_ops.safe_dataframe_to_csv(
-                    df,
-                    individual_file,
-                    index=False)
+                file_ops.safe_dataframe_to_csv(df, individual_file, index=False)
 
         return tld_dict, full_export
