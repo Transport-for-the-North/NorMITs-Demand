@@ -20,66 +20,11 @@ import pandas as pd
 # Local Imports
 import normits_demand as nd
 from normits_demand.utils import file_ops
+from normits_demand.tools.trip_length_distributions import enumerations as tld_enums
 
 
 class TripLengthDistributionBuilder:
     # Class constants
-
-    _geo_areas = ["north", "north_incl_ie", "north_and_mids", "north_and_mids_incl_ie", "gb"]
-    _trip_filter_types = ["trip_OD"]
-    _sample_periods = ["weekday", "week", "weekend"]
-    _cost_units = ["km", "miles", "m"]
-
-    # LA Definitions
-    # fmt: off
-    _north_las = [
-        'E06000001', 'E06000002', 'E06000003', 'E06000004', 'E06000005',
-        'E06000006', 'E06000007', 'E06000008', 'E06000009', 'E06000010',
-        'E06000011', 'E06000012', 'E06000013', 'E06000014', 'E06000021',
-        'E06000047', 'E06000049', 'E06000050', 'E06000057', 'E07000026',
-        'E07000027', 'E07000028', 'E07000029', 'E07000030', 'E07000031',
-        'E07000033', 'E07000034', 'E07000035', 'E07000037', 'E07000038',
-        'E07000117', 'E07000118', 'E07000119', 'E07000120', 'E07000121',
-        'E07000122', 'E07000123', 'E07000124', 'E07000125', 'E07000126',
-        'E07000127', 'E07000128', 'E07000137', 'E07000142', 'E07000163',
-        'E07000164', 'E07000165', 'E07000166', 'E07000167', 'E07000168',
-        'E07000169', 'E07000170', 'E07000171', 'E07000174', 'E07000175',
-        'E07000198', 'E08000001', 'E08000002', 'E08000003', 'E08000004',
-        'E08000005', 'E08000006', 'E08000007', 'E08000008', 'E08000009',
-        'E08000010', 'E08000011', 'E08000012', 'E08000013', 'E08000014',
-        'E08000015', 'E08000016', 'E08000017', 'E08000018', 'E08000019',
-        'E08000021', 'E08000022', 'E08000023', 'E08000024', 'E08000032',
-        'E08000033', 'E08000034', 'E08000035', 'E08000036', 'E08000037',
-        'W06000001', 'W06000002', 'W06000003', 'W06000004', 'W06000005',
-        'W06000006',
-    ]
-    _mid_las = [
-        'E06000015', 'E06000016', 'E06000017', 'E06000018',
-        'E07000032', 'E07000033', 'E07000034', 'E07000035',
-        'E07000036', 'E07000037', 'E07000038', 'E07000039',
-        'E07000129', 'E07000130', 'E07000131', 'E07000132',
-        'E07000133', 'E07000134', 'E07000135', 'E07000136',
-        'E07000137', 'E07000138', 'E07000139', 'E07000140',
-        'E07000141', 'E07000142', 'E07000150', 'E07000151',
-        'E07000152', 'E07000153', 'E07000154', 'E07000155',
-        'E07000156', 'E07000170', 'E07000171', 'E07000172',
-        'E07000173', 'E07000174', 'E07000175', 'E07000176',
-        'E06000019', 'E06000020', 'E06000021', 'E06000051',
-        'E07000192', 'E07000193', 'E07000194', 'E07000195',
-        'E07000196', 'E07000197', 'E07000198', 'E07000199',
-        'E07000234', 'E07000235', 'E07000236', 'E07000237',
-        'E07000238', 'E07000239', 'E07000218', 'E07000219',
-        'E07000220', 'E07000221', 'E07000222', 'E08000025',
-        'E08000026', 'E08000027', 'E08000028', 'E08000029',
-        'E08000030', 'E08000031'
-    ]
-    # fmt: on
-    _north_and_mid_las = list(set(_north_las + _mid_las))
-
-    # GOR definitions
-    _north_gors = [1, 2, 3]
-    _mid_gors = [4, 5]
-    _north_and_mid_gors = list(set(_north_gors + _mid_gors))
 
     # HB/NHB definitions
     _hb_purposes = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -162,6 +107,8 @@ class TripLengthDistributionBuilder:
         trip_count_col:
             Which column to use as the count of trips in the import data
         """
+        # TODO(BT): Pass this in
+        self.input_cost_units = tld_enums.CostUnits.MILES
 
         self.tlb_folder = tlb_folder
         self.tlb_version = tlb_version
@@ -180,22 +127,68 @@ class TripLengthDistributionBuilder:
         else:
             raise ValueError(f"Given trip count col {trip_count_col} not in NTS data")
 
+    @staticmethod
+    def _apply_od_geo_filter(
+        nts_data: pd.DataFrame,
+        geo_area: tld_enums.GeoArea,
+        trip_filter_type: tld_enums.TripFilter,
+    ) -> pd.DataFrame:
+        """Internal function of self._apply_geo_filter"""
+        # Init
+        output_data = nts_data.copy()
+        orig_gor_col = "TripOrigGOR_B02ID"
+        dest_gor_col = "TripDestGOR_B02ID"
+
+        # Transpose origin and destination for OD_to trip ends (Makes them "PA")
+        mask = (output_data["trip_direction"] == "hb_to")
+        temp_orig = output_data[mask][orig_gor_col].copy()
+        temp_dest = output_data[mask][dest_gor_col].copy()
+        output_data.loc[mask, orig_gor_col] = temp_dest
+        output_data.loc[mask, dest_gor_col] = temp_orig
+
+        # Decide how to filter
+        if trip_filter_type == tld_enums.TripFilter.TRIP_OD:
+            filter_orig = True
+            filter_dest = True
+        elif trip_filter_type == tld_enums.TripFilter.TRIP_O:
+            filter_orig = True
+            filter_dest = False
+        elif trip_filter_type == tld_enums.TripFilter.TRIP_D:
+            filter_orig = False
+            filter_dest = True
+        else:
+            raise ValueError(
+                f"Don't know how to apply the OD filter {trip_filter_type}"
+            )
+
+        # Finally, filter the data
+        if filter_orig:
+            mask = output_data[orig_gor_col].isin(geo_area.get_gors())
+            output_data = output_data[mask].reset_index(drop=True)
+
+        if filter_dest:
+            mask = output_data[dest_gor_col].isin(geo_area.get_gors())
+            output_data = output_data[mask].reset_index(drop=True)
+
+        return output_data
+
     def _apply_geo_filter(
-        self, output_dat: pd.DataFrame, trip_filter_type: str, geo_area: str
-    ):
-        """
-        This function defines how the origin and destination of trips are
-        derived and also defines regional subsets
-        If region filter is based on home, filters on a UA subset
-        If it's based on trip ends (gor) filters on trip O/D
+        self,
+        nts_data: pd.DataFrame,
+        geo_area: tld_enums.GeoArea,
+        trip_filter_type: tld_enums.TripFilter,
+    ) -> pd.DataFrame:
+        """Filters the data to a geographical area
 
         Parameters
         ----------
-        output_dat: pd.DataFrame
+        nts_data: pd.DataFrame
             Processed NTS data
+
         trip_filter_type: str
             How to filter the origin/destination of trips.
             this is defined here in the class, so improvement work here.
+
         geo_area:
             Target regional subset
 
@@ -204,58 +197,18 @@ class TripLengthDistributionBuilder:
         output_dat:
             Input dataframe modified to target geography
         """
+        # TODO(CS): Work for household trip_filter_type properly
 
-        # TODO: Work for household trip_filter_type properly
+        if trip_filter_type.is_od_type():
+            return self._apply_od_geo_filter(
+                nts_data=nts_data,
+                geo_area=geo_area,
+                trip_filter_type=trip_filter_type,
+            )
 
-        # If region filters are home end, filter by LA
-        filter_orig = False
-        filter_dest = False
-        target_orig_gors = None
-        target_dest_gors = None
-
-        if trip_filter_type == "trip_OD":
-            # Transpose from and to for OD trip ends
-            to_orig = output_dat[output_dat["trip_direction"] == "hb_to"][
-                "TripOrigGOR_B02ID"
-            ].copy()
-            to_dest = output_dat[output_dat["trip_direction"] == "hb_to"][
-                "TripDestGOR_B02ID"
-            ].copy()
-            output_dat[output_dat["trip_direction"] == "hb_to"]["TripOrigGOR_B02ID"] = to_dest
-            output_dat[output_dat["trip_direction"] == "hb_to"]["TripDestGOR_B02ID"] = to_orig
-
-            if geo_area == "north":
-                filter_orig = True
-                filter_dest = True
-                # From O/D filter
-                target_orig_gors = self._north_gors
-                # To O/D filter
-                target_dest_gors = self._north_gors
-
-            elif geo_area == "north_incl_ie":
-                # From filter only
-                filter_orig = True
-                filter_dest = False
-                target_orig_gors = self._north_gors
-
-            elif geo_area == "north_and_mids":
-                filter_orig = True
-                filter_dest = True
-                target_orig_gors = self._north_and_mid_gors
-                target_dest_gors = self._north_and_mid_gors
-
-            elif geo_area == "north_and_mids_incl_ie":
-                filter_orig = True
-                target_orig_gors = self._north_and_mid_gors
-
-        if filter_orig:
-            output_dat = output_dat[output_dat["TripOrigGOR_B02ID"].isin(target_orig_gors)]
-            output_dat = output_dat.reset_index(drop=True)
-        if filter_dest:
-            output_dat = output_dat[output_dat["TripDestGOR_B02ID"].isin(target_dest_gors)]
-            output_dat = output_dat.reset_index(drop=True)
-
-        return output_dat
+        raise ValueError(
+            f"Don't know how to apply to filter '{trip_filter_type}'"
+        )
 
     @staticmethod
     def _map_dict(output_dat: pd.DataFrame, map_dict: dict, key: str):
@@ -418,6 +371,7 @@ class TripLengthDistributionBuilder:
                     method="int",
                 )
 
+        # Is this even needed? Just filter on hb / nhb no matter what?
         elif method == "trip_origin":
             if filter_value == "hb":
                 if trip_filter_type == "trip_OD":
@@ -575,31 +529,41 @@ class TripLengthDistributionBuilder:
     def build_tld(
         self,
         input_dat: pd.DataFrame,
-        trip_filter_type: str,
         bands: pd.DataFrame,
         segments: pd.DataFrame,
-        cost_units: str,
+        trip_filter_type: tld_enums.TripFilter,
+        cost_units: tld_enums.CostUnits,
         sample_threshold: int = 10,
         verbose: bool = True,
     ):
-
         """
         Build a set of trip length distributions
 
         Parameters
         ----------
-        input_dat: pd.DataFrame:
+        input_dat:
             Dataframe of pre-processed trip length distribution data
-        trip_filter_type: str:
-            Method of isolation for location, household or regional OD
+
         bands: pd.DataFrame:
             Dataframe of bands with headings lower, upper
+
         segments: pd.DataFrame:
             dataframe of segments by individual row
-        cost_units: str:
-            Units of distance, or in theory other cost
+
+        trip_filter_type:
+            How to filter the trips into the geographical area.
+            TRIP_OD will filter the origin and destination of trips into the
+            defined `gep_area`.
+            TRIP_O will only filter the origins
+            TRIP_O will only filter the destinations
+
+        cost_units:
+            The cost units to use in the output. The data will be multiplied
+            by a constant to convert.
+
         sample_threshold: int = 10:
             Sample size below which skip allocation to bands and fail out
+
         verbose: bool:
           Echo or no
 
@@ -670,49 +634,54 @@ class TripLengthDistributionBuilder:
 
     def tld_generator(
         self,
-        geo_area: str,
         bands_path: nd.PathLike,
         segmentation_path: nd.PathLike,
-        sample_period: str = "week",
-        trip_filter_type: str = "trip_OD",
-        cost_units: str = "km",
+        geo_area: tld_enums.GeoArea,
+        sample_period: tld_enums.SampleTimePeriods,
+        trip_filter_type: tld_enums.TripFilter,
+        cost_units: tld_enums.CostUnits = tld_enums.CostUnits.MILES,
         sample_threshold: int = 10,
         verbose: bool = True,
         write=True,
-    ):
-
-        # TODO: Can most of these be defined as class types to limit inputs?
-        """
-        Generate a consistent set of trip length distributions
+    ) -> None:
+        """Generate a trip length distribution
 
         Parameters
         ----------
-        geo_area: str:
-            how to do regional subsets
-            'north', 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie'
-            should be limited by type in future
-        bands_path: nd.PathLike:
+        bands_path:
             Path to a .csv describing bands to be used for tlds
-        segmentation_path: nd.PathLike:
+            # TODO(BT): Make this an object
+
+        segmentation_path:
             Path to a .csv describing segmentation to be used
             Where cols = segments and rows = segment values
+            # TODO(BT): Make this an object
+
+        geo_area:
+            The geographical area to limit the generated TLD to
+
         sample_period:
-            'weekday', 'week', 'weekend' - time period filter for target tld
-            currently only handles week as import data build week
-        trip_filter_type: str = 'trip_OD':
-            How to define the start and end of trips. Currently only works
-            for trip_OD, i.e. filter on the start and end of trip, but will
-            work for household i.e where a house is with small modification
-        cost_units: str = 'km',
-            Units of distance to be output. Essentially picks a constant
-            to multiply the native NTS miles by
-            'miles', 'm', 'km'
+            Time period filter for the generated TLD
+
+        trip_filter_type:
+            How to filter the trips into the geographical area.
+            TRIP_OD will filter the origin and destination of trips into the
+            defined `gep_area`.
+            TRIP_O will only filter the origins
+            TRIP_O will only filter the destinations
+
+        cost_units:
+            The cost units to use in the output. The data will be multiplied
+            by a constant to convert.
+
         sample_threshold: int = 10:
             Sample below which to not bother running an application to bands
             Smallest possible number you would consider representative
             Failures captured in output report
+
         verbose: bool = True,
             Echo to terminal or not
+
         write: bool = True:
             Write export to class export folder
 
@@ -754,14 +723,18 @@ class TripLengthDistributionBuilder:
         input_dat = self._handle_sample_period(input_dat, sample_period=sample_period)
 
         # Geo filter on self.region_filter and self.geo_area
-        input_dat = self._apply_geo_filter(input_dat, trip_filter_type, geo_area)
+        input_dat = self._apply_geo_filter(
+            input_dat,
+            geo_area=geo_area,
+            trip_filter_type=trip_filter_type,
+        )
 
         # Build tld dictionary, return a proper name for the distributions
         tld_dict, report = self.build_tld(
             input_dat=input_dat,
-            trip_filter_type=trip_filter_type,
             bands=bands,
             segments=segments,
+            trip_filter_type=trip_filter_type,
             cost_units=cost_units,
             sample_threshold=sample_threshold,
             verbose=verbose,

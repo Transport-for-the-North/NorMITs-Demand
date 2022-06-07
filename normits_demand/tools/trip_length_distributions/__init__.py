@@ -15,5 +15,5 @@ File purpose:
 # Third Party
 
 # Local Imports
-import normits_demand.tools.trip_length_distributions.enumerations
+from normits_demand.tools.trip_length_distributions.enumerations import *
 from normits_demand.tools.trip_length_distributions.builder import TripLengthDistributionBuilder

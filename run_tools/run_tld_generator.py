@@ -23,15 +23,83 @@ sys.path.append("..")
 from normits_demand.tools import trip_length_distributions as tlds
 # pylint: enable=import-error,wrong-import-position
 
+# GLOBAL
+TLB_FOLDER = 'I:/NTS/outputs/tld'
+TLB_VERSION = 'nts_tld_data_v3.1.csv'
+OUTPUT_FOLDER = r'I:\NorMITs Demand\import\trip_length_distributions\tld_tool_outputs'
+TLD_HOME = r'I:\NorMITs Demand\import\trip_length_distributions\config'
+
+BAND_FOLDER = os.path.join(TLD_HOME, 'bands')
+SEGMENTATION_FOLDER = os.path.join(TLD_HOME, 'segmentations')
+
+
+def run_all_combinations():
+    # Get a list of all available options
+    available_bands = os.listdir(BAND_FOLDER)
+    available_bands = [x for x in available_bands if '.csv' in x]
+
+    available_segmentations = os.listdir(SEGMENTATION_FOLDER)
+    available_segmentations = [x for x in available_segmentations if '.csv' in x]
+
+    available_geo_areas = ['north', 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie', 'gb']
+
+    extract = tlds.TripLengthDistributionBuilder(
+        tlb_folder=TLB_FOLDER,
+        tlb_version=TLB_VERSION,
+        output_folder=OUTPUT_FOLDER,
+    )
+
+    for ga in available_geo_areas:
+        for bsp in available_bands:
+            for asp in available_segmentations:
+                extract.tld_generator(
+                    geo_area=ga,
+                    sample_period=tlds.SampleTimePeriods.FULL_WEEK,
+                    trip_filter_type=tlds.TripFilter.TRIP_OD,
+                    cost_units=tlds.CostUnits.KM,
+                    bands_path=os.path.join(BAND_FOLDER, bsp),
+                    segmentation_path=os.path.join(SEGMENTATION_FOLDER, asp),
+                    sample_threshold=10,
+                    verbose=True
+                )
+
+
+def run_test():
+    # Get a list of all available options
+    available_bands = os.listdir(BAND_FOLDER)
+    available_bands = [x for x in available_bands if '.csv' in x]
+    available_bands = available_bands[:1]
+
+    available_segmentations = os.listdir(SEGMENTATION_FOLDER)
+    available_segmentations = [x for x in available_segmentations if '.csv' in x]
+    available_segmentations = available_segmentations[:1]
+
+    extract = tlds.TripLengthDistributionBuilder(
+        tlb_folder=TLB_FOLDER,
+        tlb_version=TLB_VERSION,
+        output_folder=OUTPUT_FOLDER,
+    )
+
+    for bsp in available_bands:
+        for asp in available_segmentations:
+            kwargs = {
+                "geo_area": tlds.GeoArea.NORTH,
+                "sample_period": tlds.SampleTimePeriods.FULL_WEEK,
+                "cost_units": tlds.CostUnits.KM,
+                "bands_path": os.path.join(BAND_FOLDER, bsp),
+                "segmentation_path": os.path.join(SEGMENTATION_FOLDER, asp),
+                "sample_threshold": 10,
+                "verbose": True,
+            }
+
+            # North
+            extract.tld_generator(trip_filter_type=tlds.TripFilter.TRIP_OD, **kwargs)
+
+            # North inc_ie
+            extract.tld_generator(trip_filter_type=tlds.TripFilter.TRIP_O, **kwargs)
+
 
 def main(iterator=False):
-    _TLB_FOLDER = 'I:/NTS/outputs/tld'
-    _TLB_VERSION = 'nts_tld_data_v3.1.csv'
-    _OUTPUT_FOLDER = r'I:\NorMITs Demand\import\trip_length_distributions\tld_tool_outputs'
-    _TLD_HOME = r'I:\NorMITs Demand\import\trip_length_distributions\config'
-
-    _BAND_FOLDER = os.path.join(_TLD_HOME, 'bands')
-    _SEGMENTATION_FOLDER = os.path.join(_TLD_HOME, 'segmentations')
 
     # A full DiMo run requires:
     # ## run at north_and_mids, trip_OD ## #
@@ -56,22 +124,22 @@ def main(iterator=False):
     #       hb_p_m_ca
     #       nhb_p_m_ca  (These then need copying across TPs)
 
-    available_bands = os.listdir(_BAND_FOLDER)
+    available_bands = os.listdir(BAND_FOLDER)
     available_bands = [x for x in available_bands if '.csv' in x]
 
-    available_segmentations = os.listdir(_SEGMENTATION_FOLDER)
+    available_segmentations = os.listdir(SEGMENTATION_FOLDER)
     available_segmentations = [x for x in available_segmentations if '.csv' in x]
 
-    bands_path = os.path.join(_BAND_FOLDER, available_bands[1])
-    segmentation_path = os.path.join(_SEGMENTATION_FOLDER, available_segmentations[0])
+    bands_path = os.path.join(BAND_FOLDER, available_bands[1])
+    segmentation_path = os.path.join(SEGMENTATION_FOLDER, available_segmentations[0])
 
     available_geo_areas = ['north'] # , 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie', 'gb']
     geo_area = 'gb'
 
     extract = tlds.TripLengthDistributionBuilder(
-        tlb_folder=_TLB_FOLDER,
-        tlb_version=_TLB_VERSION,
-        output_folder=_OUTPUT_FOLDER,
+        tlb_folder=TLB_FOLDER,
+        tlb_version=TLB_VERSION,
+        output_folder=OUTPUT_FOLDER,
     )
 
     if iterator:
@@ -82,8 +150,8 @@ def main(iterator=False):
                         geo_area=ga,
                         sample_period='week',
                         trip_filter_type='trip_OD',
-                        bands_path=os.path.join(_BAND_FOLDER, bsp),
-                        segmentation_path=os.path.join(_SEGMENTATION_FOLDER, asp),
+                        bands_path=os.path.join(BAND_FOLDER, bsp),
+                        segmentation_path=os.path.join(SEGMENTATION_FOLDER, asp),
                         cost_units='km',
                         sample_threshold=10,
                         verbose=True
@@ -120,4 +188,5 @@ def copy_across_tps():
 
 
 if __name__ == '__main__':
-    main(iterator=True)
+    run_test()
+    # main(iterator=True)
