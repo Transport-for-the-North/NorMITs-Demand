@@ -26,7 +26,7 @@ from normits_demand.pathing import MiTEMImportPaths
 ##### CONSTANTS #####
 years = [2021, 2030, 2040]
 scenario = nd.Scenario.NTEM.value
-mitem_iter = "9.6d"
+mitem_iter = "9.6e"
 lu_drive = run_notem.lu_drive
 by_iteration = run_notem.by_iteration
 fy_iteration = run_notem.fy_iteration
@@ -39,7 +39,7 @@ mitem_export_home = r"T:\MidMITs Demand\MiTEM"
 def main():
     """Run MiTEM."""
     hb_production_import_version = "2.2.1"
-    hb_attraction_import_version = "2.3"
+    hb_attraction_import_version = "2.3.1"
     nhb_production_import_version = "2.1"
 
     mode_balancing_zones = dict.fromkeys((1, 2, 5), nd.get_zoning_system("county"))
