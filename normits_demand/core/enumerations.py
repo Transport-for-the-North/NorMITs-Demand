@@ -162,9 +162,13 @@ class AssignmentModel(enum.Enum):
     NOHAM = "NoHAM"
     NORMS = "NoRMS"
 
+    def get_name(self) -> str:
+        """Return the model name."""
+        return self.value
+
     def get_zoning_system(self) -> nd.ZoningSystem:
         """Return the zone system for the assignment model."""
-        return nd.get_zoning_system(self.value.lower())
+        return nd.get_zoning_system(self.get_name().lower())
 
     @property
     @classmethod
@@ -182,5 +186,5 @@ class AssignmentModel(enum.Enum):
     @property
     @classmethod
     def tfn_modes(cls) -> Set[AssignmentModel]:
-        """TfN's assignment models."""
+        """Transport for the North's assignment models."""
         return {cls.NOHAM, cls.NORMS}
