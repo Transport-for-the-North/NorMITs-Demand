@@ -204,6 +204,9 @@ def compare_reports(files: pd.DataFrame, value_cols: Set) -> pd.DataFrame:
             continue
         comparisons.append({"index": paths.Index, **_compare_dataframes(**data)})
 
+    if comparisons == []:
+        return files
+
     comparisons = pd.DataFrame(comparisons).set_index("index")
     comparisons = pd.concat([files, comparisons], axis=1)
     return comparisons.sort_values("max_difference", ascending=False)
@@ -413,8 +416,8 @@ if __name__ == "__main__":
         main(
             ComparisonInputs(
                 base_folder=Path(r"T:\MidMITs Demand\MiTEM"),
-                compare_iters=("iter9.6c", "iter9.6b"),
-                scenarios=(nd.Scenario.NTEM, nd.Scenario.SC01_JAM),
+                compare_iters=("iter9.6d", "iter9.6c-COVID"),
+                scenarios=(nd.Scenario.NTEM, nd.Scenario.NTEM),
                 output_folder=Path(
                     r"C:\WSP_Projects\MidMITs\02 MidMITs\Outputs"
                     r"\MiTEM\Localised Adjustment Comparison"
