@@ -46,9 +46,9 @@ class params:
         "base year": 2018,
         "base year lower": 2016,
         "base year higher": 2021,
-        "target year": 2021,
-        "target year lower": None,
-        "target year higher": None,
+        "target year": 2040,
+        "target year lower": 2036,
+        "target year higher": 2041,
     }
     data_source = pathlib.Path(r"C:\Projects\MidMITS\NTEM")
     lookup_dir = pathlib.Path(r"SHP/NTEM_land_use_growth_lookup.xlsx")
@@ -101,7 +101,7 @@ def read_tfn() -> dict:
     pop_base.index.rename(["msoa_zone_id", "tfn_traveller_type", "pop code"])
     emp_base.columns = ["people"]
     pop_base.columns = ["area_type", f"{p.years['base year']}"]
-    dict = {
+    data = {
         "emp": {
             "df": emp_base,
             "cols": ["msoa_zone_id", "sic_code"],
@@ -115,7 +115,7 @@ def read_tfn() -> dict:
             "NTEM col": "NTEM_traveller_type",
         },
     }
-    return dict
+    return data
 
 
 def read_NTEM(year: int) -> pd.DataFrame:
@@ -328,9 +328,6 @@ def apply_abs(sector: str) -> pd.DataFrame:
     p = params
     tfn_dict = read_tfn()[sector]
     tfn_data = tfn_dict["df"]
-    # tfn_data.index.rename(
-    #     tfn_dict['cols'], inplace=True
-    # )
     NTEM = func(
         sector, p.years["base year"], p.years["base year lower"], p.years["base year higher"]
     ).join(
