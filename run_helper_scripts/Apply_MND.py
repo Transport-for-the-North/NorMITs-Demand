@@ -24,6 +24,7 @@ SEGS = {'hb':{'p_tp':HB_P_TP_WEEK,'p_m_tp':HB_P_M_TP_WEEK},
 'nhb':{'p_tp':NHB_P_TP_WEEK,'p_m_tp':NHB_P_M_TP_WEEK}
 }
 FILE_PATH = pathlib.Path(r"C:\Projects\MidMITS\Python\outputs\ApplyMND")
+YEARS = [2030,2040]
 CONVERGENCE = 10
 MAX_ITER = 20
 
@@ -110,10 +111,10 @@ def loop(
     return dvec
 
 
-def main(orig_dest,hb_nhb):
+def main(orig_dest: str,hb_nhb: str, year: int) -> nd.DVector:
     logging.info("Beginning initial factoring.")
     trips_19 = nd.DVector.load(
-        os.path.join(FILE_PATH,orig_dest,f"{hb_nhb}_msoa_notem_segmented_2021_dvec.pkl")
+        os.path.join(FILE_PATH,orig_dest,f"{hb_nhb}_msoa_notem_segmented_{year}_dvec.pkl")
     )
     dft_factors = pd.read_csv(os.path.join(FILE_PATH,r"dft_factors.csv"))
     dft_dvec = nd.DVector(
@@ -157,18 +158,19 @@ def balance(production: DVector, attraction: DVector,hb_nhb: str) -> DVector:
     return new
 
 if __name__ == "__main__":
-    for j in ['nhb','hb']:
-        output = {}
-        for i in ['origin','destination']:
-            DVEC = main(i,j)
-            output[i] = DVEC
-            DVEC.save(os.path.join(FILE_PATH,f"{i}_{j}.pkl"))
-        adjusted = balance(output['origin'],output['destination'],j)
-        adjusted.save(os.path.join(FILE_PATH,f"{j}_adjusted_attraction.pkl"))
-    # DVEC.write_sector_reports(
-    #     os.path.join(FILE_PATH, "final_seg.csv"),
-    #     os.path.join(FILE_PATH, "ca.csv"),
-    #     os.path.join(FILE_PATH, "ie.csv"),
-    #     os.path.join(FILE_PATH, "final_lad_2.csv"),
-    #     HB_P_M_TP_WEEK,
-    # )
+    for k in YEARS:
+        for j in ['nhb','hb']:
+            output = {}
+            for i in ['origin','destination']:
+                DVEC = main(i,j,k)
+                output[i] = DVEC
+                DVEC.save(os.path.join(FILE_PATH,f"{i}_{j}_{k}.pkl"))
+            adjusted = balance(output['origin'],output['destination'],j)
+            adjusted.save(os.path.join(FILE_PATH,f"{j}_adjusted_attraction.pkl"))
+        # DVEC.write_sector_reports(
+        #     os.path.join(FILE_PATH, "final_seg.csv"),
+        #     os.path.join(FILE_PATH, "ca.csv"),
+        #     os.path.join(FILE_PATH, "ie.csv"),
+        #     os.path.join(FILE_PATH, "final_lad_2.csv"),
+        #     HB_P_M_TP_WEEK,
+        # )
