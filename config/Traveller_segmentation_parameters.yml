@@ -1,0 +1,23 @@
+import_folder: I:\NorMITs Demand\import
+output_folder: C:\Users\MattBuckley\Documents\Projects\NorMITs Demand\Outputs\Matrix Decompilation\New
+notem_iteration: 4
+scenario: SC01_JAM
+matrix_folder: I:\NorMITs Demand\Distribution Model\iter9.3.3\train\Final Outputs\Full PA Matrices
+model: NoRMS
+year: 2018
+trip_length_distribution:
+  folder: I:\NorMITs Synthesiser\import\trip_length_bands
+  area: gb
+  segmentation: enhanced_ca_segments
+disaggregation_settings:
+  aggregate_surplus_segments: yes
+  export_original: yes
+  export_furness: no
+  rounding: 5
+  time_period: 24hr
+  intrazonal_cost_infill: 0.5
+  maximum_furness_loops: 1999
+  pa_furness_convergence: 0.1
+  bandshare_convergence: 0.975
+  max_bandshare_loops: 200
+  multiprocessing_threads: -1
