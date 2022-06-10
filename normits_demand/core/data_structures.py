@@ -612,6 +612,68 @@ class DVector:
             import_data=dvec_data,
             process_count=self.process_count,
         )
+    def __sub__(self,other: DVector) -> DVector:
+        """
+        Builds a new Dvec by subtracting other from self.
+
+        DVectors must have the same zone system, segmentation
+        and time format.
+
+        Retains process_count, df_chunk_size, and verbose params from a.
+
+        Args:
+        -----
+        self:
+            Your target DVector.
+        other : 
+            The DVector you want to subtract from your DVector.
+        Returns:
+        -----
+            DVector: The difference between the two DVectors
+        """
+        # ## CHECK WE CAN ADD a AND b ## #
+        return_zoning_system = self._check_other(other, "multiply")
+        # TODO(MB) Add functionality for handling addition of DVectors
+        #   with different segmentation
+        if self.segmentation != other.segmentation:
+            raise DVectorError(
+                "Cannot subtract 2 DVectors with different segmentation"
+            )
+        if self.time_format != other.time_format:
+            raise DVectorError(
+                "Cannot subtract 2 DVectors with different time_format"
+            )
+
+        # Perform addition
+        dvec_data = {}
+        for segment in self.segmentation.segment_names:
+            dvec_data[segment] = self._data[segment] - other._data[segment]
+
+        return DVector(
+            zoning_system=return_zoning_system,
+            segmentation=self.segmentation,
+            time_format=self.time_format,
+            import_data=dvec_data,
+            process_count=self.process_count,
+        )
+    def __abs__(self) -> DVector:
+        """
+        Builds an identical DVector but with all values positive
+
+        Returns:
+            DVector: All positive DVector
+        """
+        dvec_data = {}
+        for segment in self.segmentation.segment_names:
+            dvec_data[segment] = np.absolute(self._data[segment])
+        
+        return DVector(
+            zoning_system=self.zoning_system,
+            segmentation=self.segmentation,
+            time_format=self.time_format,
+            import_data=dvec_data,
+            process_count=self.process_count,
+        )
 
     def copy(self) -> DVector:
         """Returns a copy of this class"""
@@ -2304,7 +2366,7 @@ class DVector:
                              ca_sector_path: nd.PathLike,
                              ie_sector_path: nd.PathLike,
                              lad_report_path: nd.PathLike = None,
-                             lad_report_seg: nd.core.zoning.ZoningSystem = None,
+                             lad_report_seg: nd.core.segments.SegmentationLevel = None,
                              ) -> None:
         """
         Writes segment, CA sector, and IE sector reports to disk
