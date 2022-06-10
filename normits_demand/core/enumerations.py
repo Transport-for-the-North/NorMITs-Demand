@@ -170,21 +170,19 @@ class AssignmentModel(enum.Enum):
         """Return the zone system for the assignment model."""
         return nd.get_zoning_system(self.get_name().lower())
 
-    @property
     @classmethod
     def mode_lookup(cls) -> Dict[AssignmentModel, Mode]:
         """Dictionary lookup for the assignment model modes."""
         return {
             cls.NOHAM: Mode.CAR,
-            cls.NORMS: Mode.RAIL,
+            cls.NORMS: Mode.TRAIN,
         }
 
     def get_mode(self) -> Mode:
         """Return the assignment model mode."""
-        return self.mode_lookup[self]
+        return self.mode_lookup()[self]
 
-    @property
     @classmethod
-    def tfn_modes(cls) -> Set[AssignmentModel]:
+    def tfn_models(cls) -> Set[AssignmentModel]:
         """Transport for the North's assignment models."""
         return {cls.NOHAM, cls.NORMS}
