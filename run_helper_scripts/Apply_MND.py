@@ -3,6 +3,7 @@ import logging
 import os
 import pathlib
 import sys
+from typing import Optional
 
 import pandas as pd
 
@@ -11,6 +12,7 @@ sys.path.append(".")
 # pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
 from normits_demand.core.data_structures import DVector
+
 # pylint: enable=import-error,wrong-import-position
 
 # constants
@@ -28,6 +30,7 @@ SEGS = {
 PA_LOOKUP = {"origin": "productions", "destination": "attractions"}
 FACTORS_FOLDER = pathlib.Path(r"T:\MidMITs Demand\Inputs\MND Adjustment")
 TRIP_ENDS_FOLDER = pathlib.Path(r"T:\MidMITs Demand\MiTEM\iter9.6c\NTEM")
+OUTPUT_FOLDER = pathlib.Path(r"T:\MidMITs Demand\MiTEM\iter9.6c\NTEM")
 YEARS = [2030, 2040]
 CONVERGENCE = 10
 MAX_ITER = 20
@@ -116,16 +119,49 @@ def loop(
     return dvec
 
 
+def dvec_path(
+    scenario_folder: pathlib.Path,
+    orig_dest: str,
+    hb_nhb: str,
+    year: int,
+    suffix: Optional[str] = None,
+) -> pathlib.Path:
+    """Creates path to a DVector file.
+
+    Parameters
+    ----------
+    scenario_folder : pathlib.Path
+        Scenario folder containing sub-folders for hb/nhb
+        productions and attractions.
+    orig_dest : str
+        Trip end type, 'origin' or 'destination'
+    hb_nhb : str
+        Trip type, 'hb' or 'nhb'
+    year : int
+        Year of DVector
+    suffix : Optional[str], optional
+        Suffix to add to the end of the file name before
+        the extenstion
+
+    Returns
+    -------
+    pathlib.Path
+        Path to a new or existing DVector file.
+    """
+    pa = PA_LOOKUP[orig_dest]
+    if suffix is None:
+        filename = f"{hb_nhb}_msoa_notem_segmented_{year}_dvec.pkl"
+    else:
+        filename = f"{hb_nhb}_msoa_notem_segmented_{year}_dvec-{suffix}.pkl"
+
+    output = scenario_folder / f"{hb_nhb}_{pa}" / filename
+    output.parent.mkdir(exist_ok=True, parents=True)
+    return output
+
+
 def main(orig_dest: str, hb_nhb: str, year: int) -> nd.DVector:
     logging.info("Beginning initial factoring.")
-    pa = PA_LOOKUP[orig_dest]
-    trips_19 = nd.DVector.load(
-        os.path.join(
-            TRIP_ENDS_FOLDER,
-            f"{hb_nhb}_{pa}",
-            f"{hb_nhb}_msoa_notem_segmented_{year}_dvec.pkl",
-        )
-    )
+    trips_19 = nd.DVector.load(dvec_path(TRIP_ENDS_FOLDER, orig_dest, hb_nhb, year))
     dft_factors = pd.read_csv(os.path.join(FACTORS_FOLDER, r"dft_factors.csv"))
     dft_dvec = nd.DVector(
         segmentation=M_TP_WEEK,
@@ -178,9 +214,12 @@ if __name__ == "__main__":
             for i in ["origin", "destination"]:
                 DVEC = main(i, j, k)
                 output[i] = DVEC
-                DVEC.save(os.path.join(FACTORS_FOLDER, f"{i}_{j}_{k}.pkl"))
+
+                suffix = "-pre_balancing" if i == "destination" else None
+
+                DVEC.save(dvec_path(OUTPUT_FOLDER, i, j, k, suffix=suffix))
             adjusted = balance(output["origin"], output["destination"], j)
-            adjusted.save(os.path.join(FACTORS_FOLDER, f"{j}_adjusted_attraction.pkl"))
+            adjusted.save(dvec_path(OUTPUT_FOLDER, "destination", j, k))
         # DVEC.write_sector_reports(
         #     os.path.join(FILE_PATH, "final_seg.csv"),
         #     os.path.join(FILE_PATH, "ca.csv"),
