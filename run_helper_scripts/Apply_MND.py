@@ -1,16 +1,19 @@
 # imports
-import sys
+import logging
 import os
 import pathlib
-import logging
+import sys
+from typing import Optional
+
 import pandas as pd
 
-from normits_demand.core.data_structures import DVector
-
-logging.basicConfig(filename="log.log", level=logging.INFO)
 sys.path.append("..")
 sys.path.append(".")
+# pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
+from normits_demand.core.data_structures import DVector
+
+# pylint: enable=import-error,wrong-import-position
 
 # constants
 MSOA = nd.get_zoning_system("msoa")
@@ -20,31 +23,36 @@ NHB_P_TP_WEEK = nd.get_segmentation_level("nhb_p_tp_week")
 M_TP_WEEK = nd.get_segmentation_level("m_tp_week")
 HB_P_M_TP_WEEK = nd.get_segmentation_level("hb_p_m_tp_week")
 NHB_P_M_TP_WEEK = nd.get_segmentation_level("nhb_p_m_tp_week")
-SEGS = {'hb':{'p_tp':HB_P_TP_WEEK,'p_m_tp':HB_P_M_TP_WEEK},
-'nhb':{'p_tp':NHB_P_TP_WEEK,'p_m_tp':NHB_P_M_TP_WEEK}
+SEGS = {
+    "hb": {"p_tp": HB_P_TP_WEEK, "p_m_tp": HB_P_M_TP_WEEK},
+    "nhb": {"p_tp": NHB_P_TP_WEEK, "p_m_tp": NHB_P_M_TP_WEEK},
 }
-FILE_PATH = pathlib.Path(r"C:\Projects\MidMITS\Python\outputs\ApplyMND")
-YEARS = [2030,2040]
+PA_LOOKUP = {"origin": "productions", "destination": "attractions"}
+FACTORS_FOLDER = pathlib.Path(r"T:\MidMITs Demand\Inputs\MND Adjustment")
+TRIP_ENDS_FOLDER = pathlib.Path(r"T:\MidMITs Demand\MiTEM\iter9.6c\NTEM")
+OUTPUT_FOLDER = pathlib.Path(r"T:\MidMITs Demand\MiTEM\iter9.6c-COVID\NTEM")
+YEARS = [2030, 2040]
 CONVERGENCE = 10
 MAX_ITER = 20
 
+
 def mnd_factors(org_dest: str, hb_nhb: str) -> nd.DVector:
     """_summary_
-   Reads in a csv of MND data and returns a dataframe of factors from 2019-November 2021
-   Args:
-       org_dest: either 'origin' or 'destination'
-   Returns:
-       a dvector of mnd factors at LAD zoning, and 'hb_p_tp_week' segmentation
-   """
+    Reads in a csv of MND data and returns a dataframe of factors from 2019-November 2021
+    Args:
+        org_dest: either 'origin' or 'destination'
+    Returns:
+        a dvector of mnd factors at LAD zoning, and 'hb_p_tp_week' segmentation
+    """
     df = (
-        pd.read_csv(os.path.join(FILE_PATH,r"mnd_factors.csv"))
+        pd.read_csv(os.path.join(FACTORS_FOLDER, r"mnd_factors.csv"))
         .groupby(["LAD", "tp", "p"])
         .sum()
     )
-    if hb_nhb == 'nhb':
-        df.drop(7,level=2,axis=0,inplace=True)
-        update = {i:i+10 for i in df.index.get_level_values('p')}
-        df.rename(index=update,level=2,inplace=True)
+    if hb_nhb == "nhb":
+        df.drop(7, level=2, axis=0, inplace=True)
+        update = {i: i + 10 for i in df.index.get_level_values("p")}
+        df.rename(index=update, level=2, inplace=True)
     df.rename(
         index={"AM": 1, "IP": 2, "PM": 3, "OP": 4, "Saturday": 5, "Sunday": 6}, inplace=True
     )
@@ -54,7 +62,7 @@ def mnd_factors(org_dest: str, hb_nhb: str) -> nd.DVector:
     df.reset_index(inplace=True)
     unstacked = df[["LAD", "p", "tp", "factor"]]
     dvec = nd.DVector(
-        segmentation=SEGS[hb_nhb]['p_tp'],
+        segmentation=SEGS[hb_nhb]["p_tp"],
         import_data=unstacked,
         zoning_system=LAD,
         zone_col="LAD",
@@ -69,7 +77,7 @@ def loop(
     base: nd.data_structures.DVector,
     dft_vec: nd.data_structures.DVector,
     mnd_vec: nd.data_structures.DVector,
-    hb_nhb: str
+    hb_nhb: str,
 ):
     """
     Matches the target year numbers to sets of factors iteratively, such that
@@ -88,7 +96,7 @@ def loop(
     """
     dvec = factored
     dft_base = base.aggregate(M_TP_WEEK)
-    mnd_base = base.aggregate(SEGS[hb_nhb]['p_tp'])
+    mnd_base = base.aggregate(SEGS[hb_nhb]["p_tp"])
     i = CONVERGENCE + 1
     j = 1
     while i > CONVERGENCE and j < MAX_ITER:
@@ -97,7 +105,7 @@ def loop(
         adj_dft = dft_vec / mnd_res
         final_dft = dvec * adj_dft
         logging.info("Adjusted to DfT.")
-        dft_res = final_dft.aggregate(SEGS[hb_nhb]['p_tp']).translate_zoning(
+        dft_res = final_dft.aggregate(SEGS[hb_nhb]["p_tp"]).translate_zoning(
             LAD
         ) / mnd_base.translate_zoning(LAD)
         adj_mnd = (mnd_vec / dft_res).translate_zoning(MSOA, weighting="no_weight")
@@ -111,12 +119,50 @@ def loop(
     return dvec
 
 
-def main(orig_dest: str,hb_nhb: str, year: int) -> nd.DVector:
+def dvec_path(
+    scenario_folder: pathlib.Path,
+    orig_dest: str,
+    hb_nhb: str,
+    year: int,
+    suffix: Optional[str] = None,
+) -> pathlib.Path:
+    """Creates path to a DVector file.
+
+    Parameters
+    ----------
+    scenario_folder : pathlib.Path
+        Scenario folder containing sub-folders for hb/nhb
+        productions and attractions.
+    orig_dest : str
+        Trip end type, 'origin' or 'destination'
+    hb_nhb : str
+        Trip type, 'hb' or 'nhb'
+    year : int
+        Year of DVector
+    suffix : Optional[str], optional
+        Suffix to add to the end of the file name before
+        the extenstion
+
+    Returns
+    -------
+    pathlib.Path
+        Path to a new or existing DVector file.
+    """
+    pa = PA_LOOKUP[orig_dest]
+    if suffix is None:
+        filename = f"{hb_nhb}_msoa_notem_segmented_{year}_dvec.pkl"
+    else:
+        filename = f"{hb_nhb}_msoa_notem_segmented_{year}_dvec-{suffix}.pkl"
+
+    output = scenario_folder / f"{hb_nhb}_{pa}" / filename
+    output.parent.mkdir(exist_ok=True, parents=True)
+    return output
+
+
+def main(orig_dest: str, hb_nhb: str, year: int) -> nd.DVector:
     logging.info("Beginning initial factoring.")
-    trips_19 = nd.DVector.load(
-        os.path.join(FILE_PATH,orig_dest,f"{hb_nhb}_msoa_notem_segmented_{year}_dvec.pkl")
-    )
-    dft_factors = pd.read_csv(os.path.join(FILE_PATH,r"dft_factors.csv"))
+    trips_19 = nd.DVector.load(dvec_path(TRIP_ENDS_FOLDER, orig_dest, hb_nhb, year))
+    dft_factors = pd.read_csv(os.path.join(FACTORS_FOLDER, r"dft_factors.csv"))
     dft_dvec = nd.DVector(
         segmentation=M_TP_WEEK,
         import_data=dft_factors,
@@ -126,9 +172,9 @@ def main(orig_dest: str,hb_nhb: str, year: int) -> nd.DVector:
         time_format="avg_week",
     )
     dft_21 = trips_19 * dft_dvec
-    mnd = mnd_factors(orig_dest,hb_nhb)
-    agg_19 = trips_19.aggregate(SEGS[hb_nhb]['p_tp']).translate_zoning(LAD)
-    agg_21 = dft_21.aggregate(SEGS[hb_nhb]['p_tp']).translate_zoning(LAD)
+    mnd = mnd_factors(orig_dest, hb_nhb)
+    agg_19 = trips_19.aggregate(SEGS[hb_nhb]["p_tp"]).translate_zoning(LAD)
+    agg_21 = dft_21.aggregate(SEGS[hb_nhb]["p_tp"]).translate_zoning(LAD)
     dft_res = agg_21 / agg_19
     adj = (mnd / dft_res).translate_zoning(MSOA, weighting="no_weight")
     final = dft_21 * adj
@@ -136,7 +182,8 @@ def main(orig_dest: str,hb_nhb: str, year: int) -> nd.DVector:
     export = loop(final, trips_19, dft_dvec, mnd, hb_nhb)
     return export
 
-def balance(production: DVector, attraction: DVector,hb_nhb: str) -> DVector:
+
+def balance(production: DVector, attraction: DVector, hb_nhb: str) -> DVector:
     """
     Balances attractions to productions to fix furnessing issues, using DVector.balance_at_segments.
 
@@ -154,19 +201,25 @@ def balance(production: DVector, attraction: DVector,hb_nhb: str) -> DVector:
         "m",
         mode_balancing_zones,
     )
-    new = attraction.balance_at_segments(production,True,attraction_balance_zoning)
+    new = attraction.balance_at_segments(production, True, attraction_balance_zoning)
     return new
 
+
 if __name__ == "__main__":
+    logging.basicConfig(filename="log.log", level=logging.INFO)
+
     for k in YEARS:
-        for j in ['nhb','hb']:
+        for j in ["nhb", "hb"]:
             output = {}
-            for i in ['origin','destination']:
-                DVEC = main(i,j,k)
+            for i in ["origin", "destination"]:
+                DVEC = main(i, j, k)
                 output[i] = DVEC
-                DVEC.save(os.path.join(FILE_PATH,f"{i}_{j}_{k}.pkl"))
-            adjusted = balance(output['origin'],output['destination'],j)
-            adjusted.save(os.path.join(FILE_PATH,f"{j}_adjusted_attraction.pkl"))
+
+                suffix = "-pre_balancing" if i == "destination" else None
+
+                DVEC.save(dvec_path(OUTPUT_FOLDER, i, j, k, suffix=suffix))
+            adjusted = balance(output["origin"], output["destination"], j)
+            adjusted.save(dvec_path(OUTPUT_FOLDER, "destination", j, k))
         # DVEC.write_sector_reports(
         #     os.path.join(FILE_PATH, "final_seg.csv"),
         #     os.path.join(FILE_PATH, "ca.csv"),
