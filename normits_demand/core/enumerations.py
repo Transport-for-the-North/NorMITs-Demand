@@ -71,6 +71,20 @@ class IsValidEnum(enum.Enum):
         return success
 
 
+class IsValidEnumWithAutoNameLower(IsValidEnum):
+    """Enum class to combine IsValidEnum and AutoName
+
+    Must be a better way to do this, but inheriting both classes seems to not
+    produce the expected results
+
+    TODO(BT): Investigate a better way to combine these classes
+    """
+    @staticmethod
+    def _generate_next_value_(name, start, count, last_values):
+        del start, count, last_values  # Unused
+        return name.lower()
+
+
 @enum.unique
 class Mode(IsValidEnum):
     """Collection of valid modes and their values/names"""

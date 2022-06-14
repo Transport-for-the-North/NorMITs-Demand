@@ -27,17 +27,8 @@ from normits_demand.core import enumerations as nd_enum
 #   Externally needed if making a TLD class to handle these properly
 
 
-# fmt: on
-_north_and_mid_las = list(set(_north_las + _mid_las))
-
-# GOR definitions
-_north_gors = [1, 2, 3]
-_mid_gors = [4, 5]
-_north_and_mid_gors = list(set(_north_gors + _mid_gors))
-
-
 @enum.unique
-class GeoArea(nd_enum.AutoName, nd_enum.IsValidEnum):
+class GeoArea(nd_enum.IsValidEnumWithAutoNameLower):
     """Valid geographical area filters for the TLD builder"""
     NORTH = enum.auto()
     NORTH_AND_MIDS = enum.auto()
@@ -54,12 +45,15 @@ class GeoArea(nd_enum.AutoName, nd_enum.IsValidEnum):
             f"No definition exits for LADs for GeoArea `{self}`"
         )
 
-    def get_gors(self) -> list[str]:
+    def get_gors(self) -> list[int]:
         """Gets the Government Office Regions relevant to this geo area"""
         if self == GeoArea.NORTH:
             return GeoArea._north_gors()
         if self == GeoArea.NORTH_AND_MIDS:
             return list(set(GeoArea._north_gors() + GeoArea._midlands_gors()))
+
+        if self == GeoArea.GB:
+            return GeoArea._gb_gors()
 
         raise nd.NormitsDemandError(
             f"No definition exits for GORs for GeoArea `{self}`"
@@ -72,6 +66,10 @@ class GeoArea(nd_enum.AutoName, nd_enum.IsValidEnum):
     @staticmethod
     def _midlands_gors() -> list[int]:
         return [4, 5]
+
+    @staticmethod
+    def _gb_gors() -> list[int]:
+        return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
     @staticmethod
     def _north_lads() -> list[str]:
@@ -117,7 +115,7 @@ class GeoArea(nd_enum.AutoName, nd_enum.IsValidEnum):
 
 
 @enum.unique
-class TripFilter(nd_enum.AutoName, nd_enum.IsValidEnum):
+class TripFilter(nd_enum.IsValidEnumWithAutoNameLower):
     """Valid trip filter types for the TLD builder"""
     TRIP_OD = enum.auto()
     TRIP_O = enum.auto()
@@ -133,15 +131,15 @@ class TripFilter(nd_enum.AutoName, nd_enum.IsValidEnum):
 
 class CostUnits(nd_enum.IsValidEnum):
     """Valid cost units for the TLD builder"""
-    KM = "KM"
-    KILOMETRES = "KM"
-    KILOMETERS = "KM"
+    KM = "km"
+    KILOMETRES = "km"
+    KILOMETERS = "km"
 
-    M = "M"
-    METRES = "M"
-    METERS = "M"
+    M = "m"
+    METRES = "m"
+    METERS = "m"
 
-    MILES = "MILES"
+    MILES = "miles"
 
     def get_conversion_factor(self, to_units: CostUnits):
         """Calculates the conversion factors between cost units
@@ -201,7 +199,7 @@ class CostUnits(nd_enum.IsValidEnum):
 
 
 @enum.unique
-class SampleTimePeriods(nd_enum.AutoName, nd_enum.IsValidEnum):
+class SampleTimePeriods(nd_enum.IsValidEnumWithAutoNameLower):
     """Valid time periods filters for the TLD builder"""
     FULL_WEEK = enum.auto()
     WEEK_DAYS = enum.auto()

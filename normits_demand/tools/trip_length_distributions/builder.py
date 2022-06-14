@@ -13,6 +13,8 @@ File purpose:
 # Built-Ins
 import os
 
+from typing import Tuple
+
 # Third Party
 import numpy as np
 import pandas as pd
@@ -61,11 +63,12 @@ class TripLengthDistributionBuilder:
         "trip_origin": "trip_origin",
         "p": "int",
         "m": "int",
+        "soc": "int",
+        "ns": "int",
         "ca": "int",
         "tp": "tp",
     }
-
-    segment_order = [key for key, value in segment_treatment.items()]
+    segment_order = list(segment_treatment.keys())
 
     # Correspondences between segment names and NTS data names
     tld_to_nts_names = {
@@ -241,7 +244,7 @@ class TripLengthDistributionBuilder:
         self,
         seg_sub: pd.DataFrame,
         bands: pd.DataFrame,
-        cost_units: str = "km",
+        output_cost_units: tld_enums.CostUnits,
         band_rounding: int = 2,
     ):
         """
@@ -253,11 +256,14 @@ class TripLengthDistributionBuilder:
         seg_sub: pd.DataFrame
             DataFrame of NTS data, sub refers to the fact this should have
             been filtered down by this point in the process
+
         bands: pd.DataFrame
             DataFrame of target bands
-        cost_units: str:
-            Units for outputs. Inputs always in miles so is used to fetch
-            a constant for conversion
+
+        cost_units:
+            The cost units to use in the output. The data will be multiplied
+            by a constant to convert.
+
         band_rounding: int:
             Number of decimal places to round bands to after conversion
             Currently not handled outside of private function so essentially
@@ -268,12 +274,11 @@ class TripLengthDistributionBuilder:
         out_frame:
             Import bands DataFrame with appended trip and distance totals
         """
-
-        dist_constant = self.miles_to_other_distance[cost_units]
+        # Rename to output units
+        conv_factor = self.input_cost_units.get_conversion_factor(output_cost_units)
 
         loc_bands = bands.copy()
 
-        # TODO: Handle inline numpy warnings with 0 trip band div0s
         # Iterate over lines in target bands copy (don't change master)
         for line, threshold in loc_bands.iterrows():
             tlb_sub = seg_sub.copy()
@@ -295,17 +300,17 @@ class TripLengthDistributionBuilder:
             else:
                 mean_miles /= total_trips
             # Value adjusted for target distance
-            mean_val = mean_miles * dist_constant
+            mean_val = mean_miles * conv_factor
 
-            loc_bands.loc[line, f"mean_{cost_units}"] = mean_val
+            loc_bands.loc[line, f"mean_{output_cost_units.value}"] = mean_val
             loc_bands.loc[line, "total_trips"] = total_trips
 
-        # Derive distibution factors
+        # Derive distribution factors
         loc_bands["dist"] = loc_bands["total_trips"] / loc_bands["total_trips"].sum()
 
         # Multiply bands by dist constant to get target units
-        loc_bands["lower"] *= dist_constant
-        loc_bands["upper"] *= dist_constant
+        loc_bands["lower"] *= conv_factor
+        loc_bands["upper"] *= conv_factor
 
         # Round by target value
         loc_bands["lower"] = loc_bands["lower"].round(decimals=band_rounding)
@@ -316,7 +321,6 @@ class TripLengthDistributionBuilder:
     def _filter_segment(
         self,
         seg_sub: pd.DataFrame,
-        trip_filter_type: str,
         segment_name: str,
         filter_value,
         method: str = "int",
@@ -365,7 +369,6 @@ class TripLengthDistributionBuilder:
             if filter_value != 0:
                 nts_sub = self._filter_segment(
                     seg_sub=nts_sub,
-                    trip_filter_type=trip_filter_type,
                     segment_name=segment_name,
                     filter_value=filter_value,
                     method="int",
@@ -374,11 +377,9 @@ class TripLengthDistributionBuilder:
         # Is this even needed? Just filter on hb / nhb no matter what?
         elif method == "trip_origin":
             if filter_value == "hb":
-                if trip_filter_type == "trip_OD":
-                    nts_sub = nts_sub[nts_sub[nts_seg].isin(hb_types)]
+                nts_sub = nts_sub[nts_sub[nts_seg].isin(hb_types)]
             elif filter_value == "nhb":
-                if trip_filter_type == "trip_OD":
-                    nts_sub = nts_sub[nts_sub[nts_seg] == "nhb"]
+                nts_sub = nts_sub[nts_sub[nts_seg] == "nhb"]
 
         elif method == "int":
             nts_sub = nts_sub[nts_sub[nts_seg] == filter_value]
@@ -531,7 +532,6 @@ class TripLengthDistributionBuilder:
         input_dat: pd.DataFrame,
         bands: pd.DataFrame,
         segments: pd.DataFrame,
-        trip_filter_type: tld_enums.TripFilter,
         cost_units: tld_enums.CostUnits,
         sample_threshold: int = 10,
         verbose: bool = True,
@@ -549,13 +549,6 @@ class TripLengthDistributionBuilder:
 
         segments: pd.DataFrame:
             dataframe of segments by individual row
-
-        trip_filter_type:
-            How to filter the trips into the geographical area.
-            TRIP_OD will filter the origin and destination of trips into the
-            defined `gep_area`.
-            TRIP_O will only filter the origins
-            TRIP_O will only filter the destinations
 
         cost_units:
             The cost units to use in the output. The data will be multiplied
@@ -595,7 +588,6 @@ class TripLengthDistributionBuilder:
                 # filter based on method
                 seg_sub = self._filter_segment(
                     seg_sub=seg_sub,
-                    trip_filter_type=trip_filter_type,
                     segment_name=str(segment),
                     filter_value=seg_value,
                     method=method,
@@ -610,17 +602,22 @@ class TripLengthDistributionBuilder:
                 print(f"Filtered for {row}")
                 print(f"Remaining records {seg_length:d}")
 
+            # Don't carry on if not enough data
             if seg_length <= sample_threshold:
                 print("No data returned to build tld")
                 loc_segs.loc[row_num, "records"] = seg_length
                 loc_segs.loc[row_num, "status"] = "Failed"
                 continue
-            else:
-                loc_segs.loc[row_num, "records"] = seg_length
-                loc_segs.loc[row_num, "status"] = "Passed"
+
+            loc_segs.loc[row_num, "records"] = seg_length
+            loc_segs.loc[row_num, "status"] = "Passed"
 
             # build tld
-            tld = self._build_band_subset(seg_sub=seg_sub, bands=bands, cost_units=cost_units)
+            tld = self._build_band_subset(
+                seg_sub=seg_sub,
+                bands=bands,
+                output_cost_units=cost_units,
+            )
 
             # Append segment names to output frame
             tld = self._append_segment_names(tld, seg_descs)
@@ -643,7 +640,7 @@ class TripLengthDistributionBuilder:
         sample_threshold: int = 10,
         verbose: bool = True,
         write=True,
-    ) -> None:
+    ) -> Tuple[dict[str, pd.DataFrame], pd.DataFrame]:
         """Generate a trip length distribution
 
         Parameters
@@ -734,7 +731,6 @@ class TripLengthDistributionBuilder:
             input_dat=input_dat,
             bands=bands,
             segments=segments,
-            trip_filter_type=trip_filter_type,
             cost_units=cost_units,
             sample_threshold=sample_threshold,
             verbose=verbose,
@@ -745,12 +741,12 @@ class TripLengthDistributionBuilder:
         # Build output path
         tld_out_path = os.path.join(
             self.output_folder,
-            geo_area,
-            trip_filter_type,
+            geo_area.value,
+            trip_filter_type.value,
             bands_name,
             seg_output_name,
-            sample_period,
-            cost_units,
+            sample_period.value,
+            cost_units.value,
         )
 
         # Build full export

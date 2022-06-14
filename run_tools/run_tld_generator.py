@@ -89,11 +89,12 @@ def run_test():
                 "bands_path": os.path.join(BAND_FOLDER, bsp),
                 "segmentation_path": os.path.join(SEGMENTATION_FOLDER, asp),
                 "sample_threshold": 10,
-                "verbose": True,
+                # "verbose": True,
+                "verbose": False,
             }
 
             # North
-            extract.tld_generator(trip_filter_type=tlds.TripFilter.TRIP_OD, **kwargs)
+            # extract.tld_generator(trip_filter_type=tlds.TripFilter.TRIP_OD, **kwargs)
 
             # North inc_ie
             extract.tld_generator(trip_filter_type=tlds.TripFilter.TRIP_O, **kwargs)
