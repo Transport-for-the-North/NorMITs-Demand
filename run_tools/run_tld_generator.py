@@ -15,6 +15,8 @@ import os
 import sys
 import shutil
 
+import itertools
+
 # Third Party
 
 # Local Imports
@@ -34,14 +36,13 @@ SEGMENTATION_FOLDER = os.path.join(TLD_HOME, 'segmentations')
 
 
 def run_all_combinations():
+    """Runs every combination of inputs through the TLD builder"""
     # Get a list of all available options
-    available_bands = os.listdir(BAND_FOLDER)
-    available_bands = [x for x in available_bands if '.csv' in x]
+    band_list = os.listdir(BAND_FOLDER)
+    band_list = [x for x in band_list if '.csv' in x]
 
-    available_segmentations = os.listdir(SEGMENTATION_FOLDER)
-    available_segmentations = [x for x in available_segmentations if '.csv' in x]
-
-    available_geo_areas = ['north', 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie', 'gb']
+    seg_list = os.listdir(SEGMENTATION_FOLDER)
+    seg_list = [x for x in seg_list if '.csv' in x]
 
     extract = tlds.TripLengthDistributionBuilder(
         tlb_folder=TLB_FOLDER,
@@ -49,58 +50,59 @@ def run_all_combinations():
         output_folder=OUTPUT_FOLDER,
     )
 
-    for ga in available_geo_areas:
-        for bsp in available_bands:
-            for asp in available_segmentations:
-                extract.tld_generator(
-                    geo_area=ga,
-                    sample_period=tlds.SampleTimePeriods.FULL_WEEK,
-                    trip_filter_type=tlds.TripFilter.TRIP_OD,
-                    cost_units=tlds.CostUnits.KM,
-                    bands_path=os.path.join(BAND_FOLDER, bsp),
-                    segmentation_path=os.path.join(SEGMENTATION_FOLDER, asp),
-                    sample_threshold=10,
-                    verbose=True
-                )
+    for area, bands, seg in itertools.product(list(tlds.GeoArea), band_list, seg_list):
+        # Built list of unchanging kwargs
+        kwargs = {
+            "geo_area": area,
+            "sample_period": tlds.SampleTimePeriods.FULL_WEEK,
+            "cost_units": tlds.CostUnits.KM,
+            "bands_path": os.path.join(BAND_FOLDER, bands),
+            "segmentation_path": os.path.join(SEGMENTATION_FOLDER, seg),
+            "sample_threshold": 10,
+            "verbose": False,
+        }
 
+        extract.tld_generator(trip_filter_type=tlds.TripFilter.TRIP_OD, **kwargs)
 
-def run_test():
-    # Get a list of all available options
-    available_bands = os.listdir(BAND_FOLDER)
-    available_bands = [x for x in available_bands if '.csv' in x]
-    available_bands = available_bands[:1]
-
-    available_segmentations = os.listdir(SEGMENTATION_FOLDER)
-    available_segmentations = [x for x in available_segmentations if '.csv' in x]
-    available_segmentations = available_segmentations[:1]
-
-    extract = tlds.TripLengthDistributionBuilder(
-        tlb_folder=TLB_FOLDER,
-        tlb_version=TLB_VERSION,
-        output_folder=OUTPUT_FOLDER,
-    )
-
-    for bsp in available_bands:
-        for asp in available_segmentations:
-            kwargs = {
-                "geo_area": tlds.GeoArea.NORTH,
-                "sample_period": tlds.SampleTimePeriods.FULL_WEEK,
-                "cost_units": tlds.CostUnits.KM,
-                "bands_path": os.path.join(BAND_FOLDER, bsp),
-                "segmentation_path": os.path.join(SEGMENTATION_FOLDER, asp),
-                "sample_threshold": 10,
-                # "verbose": True,
-                "verbose": False,
-            }
-
-            # North
-            # extract.tld_generator(trip_filter_type=tlds.TripFilter.TRIP_OD, **kwargs)
-
-            # North inc_ie
+        # Include ie movements filter too if not GB
+        if area != tlds.GeoArea.GB:
             extract.tld_generator(trip_filter_type=tlds.TripFilter.TRIP_O, **kwargs)
 
 
-def main(iterator=False):
+def run_test():
+    """Runs a test set of inputs through the TLD builder"""
+    # Get a list of all available options
+    band_list = os.listdir(BAND_FOLDER)
+    band_list = [x for x in band_list if '.csv' in x]
+
+    seg_list = os.listdir(SEGMENTATION_FOLDER)
+    seg_list = [x for x in seg_list if '.csv' in x]
+
+    extract = tlds.TripLengthDistributionBuilder(
+        tlb_folder=TLB_FOLDER,
+        tlb_version=TLB_VERSION,
+        output_folder=OUTPUT_FOLDER,
+    )
+
+    kwargs = {
+        "geo_area": tlds.GeoArea.NORTH,
+        "sample_period": tlds.SampleTimePeriods.FULL_WEEK,
+        "cost_units": tlds.CostUnits.KM,
+        "bands_path": os.path.join(BAND_FOLDER, band_list[0]),
+        "segmentation_path": os.path.join(SEGMENTATION_FOLDER, seg_list[0]),
+        "sample_threshold": 10,
+        "verbose": False,
+    }
+
+    # North
+    extract.tld_generator(trip_filter_type=tlds.TripFilter.TRIP_OD, **kwargs)
+
+    # North inc_ie
+    extract.tld_generator(trip_filter_type=tlds.TripFilter.TRIP_O, **kwargs)
+
+
+def build_new_dimo_tlds():
+    """Build a new version of all the TLDs needed for the distribution model"""
 
     # A full DiMo run requires:
     # ## run at north_and_mids, trip_OD ## #
@@ -124,51 +126,30 @@ def main(iterator=False):
     #   dm_gb_rail_bands
     #       hb_p_m_ca
     #       nhb_p_m_ca  (These then need copying across TPs)
+    pass
 
-    available_bands = os.listdir(BAND_FOLDER)
-    available_bands = [x for x in available_bands if '.csv' in x]
 
-    available_segmentations = os.listdir(SEGMENTATION_FOLDER)
-    available_segmentations = [x for x in available_segmentations if '.csv' in x]
+def build_new_traveller_segment_tlds():
+    """Build a new version of all the TLDs needed for the traveller segments"""
 
-    bands_path = os.path.join(BAND_FOLDER, available_bands[1])
-    segmentation_path = os.path.join(SEGMENTATION_FOLDER, available_segmentations[0])
+    # A full traveller segment run needs:
+    # ## run at GB, trip_OD ## #
+    #
+    #   dm_highway_bands
+    #       hb_business
+    #       hb_commute
+    #       hb_other
+    #       nhb_business
+    #       nhb_other
+    #
+    #   dm_north_rail_bands - one for CA, one for NCA
+    #       hb_business
+    #       hb_commute
+    #       hb_other
+    #       nhb_business
+    #       nhb_other
 
-    available_geo_areas = ['north'] # , 'north_incl_ie', 'north_and_mids', 'north_and_mids_incl_ie', 'gb']
-    geo_area = 'gb'
-
-    extract = tlds.TripLengthDistributionBuilder(
-        tlb_folder=TLB_FOLDER,
-        tlb_version=TLB_VERSION,
-        output_folder=OUTPUT_FOLDER,
-    )
-
-    if iterator:
-        for ga in available_geo_areas:
-            for bsp in available_bands:
-                for asp in available_segmentations:
-                    extract.tld_generator(
-                        geo_area=ga,
-                        sample_period='week',
-                        trip_filter_type='trip_OD',
-                        bands_path=os.path.join(BAND_FOLDER, bsp),
-                        segmentation_path=os.path.join(SEGMENTATION_FOLDER, asp),
-                        cost_units='km',
-                        sample_threshold=10,
-                        verbose=True
-                    )
-
-    else:
-        extract.tld_generator(
-            geo_area=geo_area,
-            sample_period='week',
-            trip_filter_type='trip_OD',
-            bands_path=bands_path,
-            segmentation_path=segmentation_path,
-            cost_units='km',
-            sample_threshold=10,
-            verbose=True
-        )
+    pass
 
 
 def copy_across_tps():
@@ -190,4 +171,7 @@ def copy_across_tps():
 
 if __name__ == '__main__':
     run_test()
-    # main(iterator=True)
+
+    # run_all_combinations()
+    # build_new_dimo_tlds()
+    # build_new_traveller_segment_tlds()
