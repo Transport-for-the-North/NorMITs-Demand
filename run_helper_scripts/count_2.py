@@ -1,5 +1,5 @@
 from openpyxl import load_workbook
-from counts import constants
+from counts import Constants
 import pandas as pd
 """
 Process to apply counts factors to counts
@@ -17,7 +17,7 @@ for county in dash['County'].dropna().unique():
     #if district in wb.sheetnames:
     #sheet = pd.read_excel(r"C:\Projects\MidMITS\growth_stats_11.xlsx",sheet_name=district).set_index('Unnamed: 0')
     #df[district] = pd.Series(sheet.loc['mean'])
-    cols = constants.dash_cols
+    cols = Constants.dash_cols
     for time in ['AM','IP','PM']:
         for type in ['Car', 'LGV', 'HGV']:
             #dash[dash['LAD21NM']==district][f"{column}_2021"] = dash[dash['LAD21NM']==district][f"{column}"] * (1+df.loc[cols[column],district])

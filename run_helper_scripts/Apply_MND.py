@@ -14,7 +14,14 @@ import normits_demand as nd
 from normits_demand.core.data_structures import DVector
 
 # pylint: enable=import-error,wrong-import-position
-
+"""
+Reads in MND data and trip-ends by year, hb or nhb, and production or attraction,
+then factors the trip-end dvectors using the MND and DfT data.  It will output
+six DVectors per year, hb and nhb productions, then two versions of attractions for
+each.  The first attraction is the "raw" output, with suffix 'pre-balancing, and the
+second is balanced to productions such that furnessing will converge.  The outputs
+ready for distribution.
+"""
 # constants
 MSOA = nd.get_zoning_system("msoa")
 LAD = nd.get_zoning_system("lad_2020")
