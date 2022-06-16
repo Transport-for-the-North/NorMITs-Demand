@@ -21,6 +21,8 @@ import pandas as pd
 
 # Local Imports
 import normits_demand as nd
+
+from normits_demand import core as nd_core
 from normits_demand.utils import file_ops
 from normits_demand.tools.trip_length_distributions import enumerations as tld_enums
 
@@ -61,10 +63,11 @@ class TripLengthDistributionBuilder:
 
     segment_treatment = {
         "trip_origin": "trip_origin",
+        "uc": "uc",
         "p": "int",
         "m": "int",
-        "soc": "int",
-        "ns": "int",
+        "soc": "seg",
+        "ns": "seg",
         "ca": "int",
         "tp": "tp",
     }
@@ -73,16 +76,12 @@ class TripLengthDistributionBuilder:
     # Correspondences between segment names and NTS data names
     tld_to_nts_names = {
         "m": "main_mode",
+        "uc": "p",
         "p": "p",
+        "soc": "soc",
+        "ns": "ns",
         "tp": "start_time",
         "trip_origin": "trip_direction",
-    }
-
-    # Miles to other units conversion factors
-    miles_to_other_distance = {
-        "miles": 1,
-        "km": 1.6093,
-        "m": 1609.34,
     }
 
     def __init__(
@@ -90,6 +89,8 @@ class TripLengthDistributionBuilder:
         tlb_folder: nd.PathLike,
         tlb_version: nd.PathLike,
         output_folder: nd.PathLike,
+        bands_definition_dir: str,
+        segment_definition_dir: str,
         trip_miles_col: str = "trip_mile",
         trip_count_col: str = "trips",
     ):
@@ -112,6 +113,9 @@ class TripLengthDistributionBuilder:
         """
         # TODO(BT): Pass this in
         self.input_cost_units = tld_enums.CostUnits.MILES
+
+        self.bands_definition_dir = bands_definition_dir
+        self.segment_definition_dir = segment_definition_dir
 
         self.tlb_folder = tlb_folder
         self.tlb_version = tlb_version
@@ -337,8 +341,6 @@ class TripLengthDistributionBuilder:
         ----------
         seg_sub: pd.DataFrame
             NTS data in frame
-        trip_filter_type: str
-            Origin of trip definition
         segment_name: str
             The name of the segment in the TLD definition. Is translated to
             the equivalent NTS name
@@ -363,9 +365,12 @@ class TripLengthDistributionBuilder:
 
         nts_sub = seg_sub.copy()
 
-        nts_seg = self.tld_to_nts_names[segment_name]
+        nts_seg_col = self.tld_to_nts_names[segment_name]
 
-        if method == "tp":
+        if method == "int":
+            nts_sub = nts_sub[nts_sub[nts_seg_col] == filter_value]
+
+        elif method == "tp":
             if filter_value != 0:
                 nts_sub = self._filter_segment(
                     seg_sub=nts_sub,
@@ -377,12 +382,23 @@ class TripLengthDistributionBuilder:
         # Is this even needed? Just filter on hb / nhb no matter what?
         elif method == "trip_origin":
             if filter_value == "hb":
-                nts_sub = nts_sub[nts_sub[nts_seg].isin(hb_types)]
+                nts_sub = nts_sub[nts_sub[nts_seg_col].isin(hb_types)]
             elif filter_value == "nhb":
-                nts_sub = nts_sub[nts_sub[nts_seg] == "nhb"]
+                nts_sub = nts_sub[nts_sub[nts_seg_col] == "nhb"]
 
-        elif method == "int":
-            nts_sub = nts_sub[nts_sub[nts_seg] == filter_value]
+        elif method == "uc":
+            uc_enum = nd_core.UserClass(filter_value)
+            nts_sub = nts_sub[nts_sub[nts_seg_col].isin(uc_enum.get_purposes())]
+
+        elif method == "seg":
+            # Don't filter if Nan. Invalid segment
+            if not np.isnan(filter_value):
+                nts_sub = nts_sub[nts_sub[nts_seg_col] == filter_value]
+
+        else:
+            raise ValueError(
+                f"Don't know how to filter method {method!r}"
+            )
 
         return nts_sub
 
@@ -437,64 +453,31 @@ class TripLengthDistributionBuilder:
             Name of individual segment
         """
 
-        tld_name = str()
+        name_parts = list()
 
         for valid_name in self.segment_order:
             if valid_name in list(seg_descs.keys()):
-                seg_value = str(seg_descs[valid_name])
+                seg_value = seg_descs[valid_name]
 
                 method = self.segment_treatment[str(valid_name)]
 
                 if method == "trip_origin":
-                    tld_name += seg_value
+                    name_parts += [f"{seg_value}"]
+
+                elif method == 'uc':
+                    name_parts += [f"{seg_value}"]
+
+                elif method == "seg":
+                    if not np.isnan(seg_value):
+                        name_parts += [f"{valid_name}{int(seg_value)}"]
 
                 elif method == "tp":
-                    tld_name += "_" + valid_name + seg_value
+                    if seg_value != 0:
+                        name_parts += [f"{valid_name}{seg_value}"]
                 else:
-                    tld_name += "_" + valid_name + seg_value
+                    name_parts += [f"{valid_name}{seg_value}"]
 
-        return tld_name
-
-    def _build_set_tld_name(self, segments):
-        """
-        Build a set name for the distribution, using its definition
-        takes a standard order of construction from class
-
-        Parameters
-        ----------
-        segments: pd.DataFrame
-            Dataframe of segments as defined for input
-
-        Returns
-        -------
-        seg_output_name: str
-            Name of distribution at large
-        """
-
-        seg_output_name = str()
-
-        seg_descs = list(segments)
-
-        for valid_name in self.segment_order:
-            if valid_name in seg_descs:
-
-                method = self.segment_treatment[str(valid_name)]
-
-                if method == "trip_origin":
-                    # is there only 1 trip origin
-                    origin_types = segments[valid_name].unique()
-                    # if so append to names
-                    if len(origin_types == 1):
-                        seg_output_name += origin_types[0]
-
-                elif method == "tp":
-                    # If all tps are 0, omit from name
-                    if not bool(len(segments[valid_name].unique()) == 1):
-                        seg_output_name += "_" + valid_name
-                else:
-                    seg_output_name += "_" + valid_name
-
-        return seg_output_name
+        return '_'.join(name_parts)
 
     def _handle_sample_period(self, input_dat, sample_period):
         """
@@ -526,6 +509,62 @@ class TripLengthDistributionBuilder:
         self.tld_to_nts_names.update(defaults)
 
         return defaults
+
+    def _get_name_and_fname(self, band_or_seg_name: str) -> Tuple[str, str]:
+        if ".csv" in band_or_seg_name:
+            fname = band_or_seg_name
+            name = band_or_seg_name.replace(".csv", "")
+        else:
+            fname = f"{band_or_seg_name}.csv"
+            name = band_or_seg_name
+        return fname, name
+
+    def build_output_path(
+        self,
+        geo_area: tld_enums.GeoArea,
+        trip_filter_type: tld_enums.TripFilter,
+        bands_name: str,
+        segmentation_name: str,
+        sample_period: tld_enums.SampleTimePeriods,
+        cost_units: tld_enums.CostUnits,
+    ) -> str:
+        """Generates the output path for the TLD params
+
+        Parameters
+        ----------
+        geo_area:
+            The geographical area the TLD is constrained to.
+
+        trip_filter_type:
+            How to filter the trips into given `geo_area`.
+
+        bands_name:
+            The name of the bands being used in the TLD.
+
+        segmentation_name:
+            The name of the segmentation being used in the TLD.
+
+        sample_period:
+            Which time periods the TLD is restricted to.
+
+        cost_units:
+            The cost units used in the output of the TLDs.
+
+        Returns
+        -------
+        path_string:
+            A string. The full path to a folder where this collection of TLDs
+            should be stored.
+        """
+        return os.path.join(
+            self.output_folder,
+            geo_area.value,
+            trip_filter_type.value,
+            bands_name,
+            segmentation_name,
+            sample_period.value,
+            cost_units.value,
+        )
 
     def build_tld(
         self,
@@ -631,8 +670,8 @@ class TripLengthDistributionBuilder:
 
     def tld_generator(
         self,
-        bands_path: nd.PathLike,
-        segmentation_path: nd.PathLike,
+        bands_name: str,
+        segmentation_name: str,
         geo_area: tld_enums.GeoArea,
         sample_period: tld_enums.SampleTimePeriods,
         trip_filter_type: tld_enums.TripFilter,
@@ -645,12 +684,12 @@ class TripLengthDistributionBuilder:
 
         Parameters
         ----------
-        bands_path:
-            Path to a .csv describing bands to be used for tlds
+        bands_name:
+            Name of the bands to use, as named in self.bands_definition_dir
             # TODO(BT): Make this an object
 
-        segmentation_path:
-            Path to a .csv describing segmentation to be used
+        segmentation_name:
+            Name of the segments to use, as named in self.segment_definition_dir
             Where cols = segments and rows = segment values
             # TODO(BT): Make this an object
 
@@ -699,13 +738,12 @@ class TripLengthDistributionBuilder:
         records = list()
         records.append(len(input_dat))
 
-        # Import bands
-        bands = pd.read_csv(bands_path)
-        bands_name = os.path.basename(bands_path)
-        bands_name = bands_name.replace(".csv", "")
+        # Try read in the bands and segmentation
+        fname, bands_name = self._get_name_and_fname(bands_name)
+        bands = pd.read_csv(os.path.join(self.bands_definition_dir, fname))
 
-        # Import segments
-        segments = pd.read_csv(segmentation_path)
+        fname, segmentation_name = self._get_name_and_fname(segmentation_name)
+        segments = pd.read_csv(os.path.join(self.segment_definition_dir, fname))
 
         # Limited input data pre-processing, should all really happen R side
 
@@ -713,7 +751,7 @@ class TripLengthDistributionBuilder:
         # Car availability
         # TODO: This should be handled upstream, in inputs
         input_dat = self._map_dict(
-            output_dat=input_dat, map_dict=self._household_type_to_ca, key="hh_type"
+            output_dat=input_dat, map_dict=self._household_type_to_ca, key="hh_type",
         )
 
         # Filter to weekdays only
@@ -736,17 +774,14 @@ class TripLengthDistributionBuilder:
             verbose=verbose,
         )
 
-        seg_output_name = self._build_set_tld_name(segments)
-
         # Build output path
-        tld_out_path = os.path.join(
-            self.output_folder,
-            geo_area.value,
-            trip_filter_type.value,
-            bands_name,
-            seg_output_name,
-            sample_period.value,
-            cost_units.value,
+        tld_out_path = self.build_output_path(
+            geo_area=geo_area,
+            trip_filter_type=trip_filter_type,
+            bands_name=bands_name,
+            segmentation_name=segmentation_name,
+            sample_period=sample_period,
+            cost_units=cost_units,
         )
 
         # Build full export
@@ -760,7 +795,7 @@ class TripLengthDistributionBuilder:
             file_ops.create_folder(tld_out_path)
 
             # Write report
-            report_path = os.path.join(tld_out_path, seg_output_name + "_report.csv")
+            report_path = os.path.join(tld_out_path, f"{segmentation_name}_report.csv")
             file_ops.safe_dataframe_to_csv(report, report_path, index=False)
 
             # Write final compiled tld

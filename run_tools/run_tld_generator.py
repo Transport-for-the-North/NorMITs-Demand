@@ -47,6 +47,8 @@ def run_all_combinations():
     extract = tlds.TripLengthDistributionBuilder(
         tlb_folder=TLB_FOLDER,
         tlb_version=TLB_VERSION,
+        bands_definition_dir=BAND_FOLDER,
+        segment_definition_dir=SEGMENTATION_FOLDER,
         output_folder=OUTPUT_FOLDER,
     )
 
@@ -56,8 +58,8 @@ def run_all_combinations():
             "geo_area": area,
             "sample_period": tlds.SampleTimePeriods.FULL_WEEK,
             "cost_units": tlds.CostUnits.KM,
-            "bands_path": os.path.join(BAND_FOLDER, bands),
-            "segmentation_path": os.path.join(SEGMENTATION_FOLDER, seg),
+            "bands_name": bands,
+            "segmentation_name": seg,
             "sample_threshold": 10,
             "verbose": False,
         }
@@ -81,6 +83,8 @@ def run_test():
     extract = tlds.TripLengthDistributionBuilder(
         tlb_folder=TLB_FOLDER,
         tlb_version=TLB_VERSION,
+        bands_definition_dir=BAND_FOLDER,
+        segment_definition_dir=SEGMENTATION_FOLDER,
         output_folder=OUTPUT_FOLDER,
     )
 
@@ -88,8 +92,8 @@ def run_test():
         "geo_area": tlds.GeoArea.NORTH,
         "sample_period": tlds.SampleTimePeriods.FULL_WEEK,
         "cost_units": tlds.CostUnits.KM,
-        "bands_path": os.path.join(BAND_FOLDER, band_list[0]),
-        "segmentation_path": os.path.join(SEGMENTATION_FOLDER, seg_list[0]),
+        "bands_name": band_list[0],
+        "segmentation_name": seg_list[0],
         "sample_threshold": 10,
         "verbose": False,
     }
@@ -131,6 +135,47 @@ def build_new_dimo_tlds():
 
 def build_new_traveller_segment_tlds():
     """Build a new version of all the TLDs needed for the traveller segments"""
+    tlb_version = 'nts_tld_data_v3.0.csv'
+
+    # Init
+    extract = tlds.TripLengthDistributionBuilder(
+        tlb_folder=TLB_FOLDER,
+        tlb_version=tlb_version,
+        bands_definition_dir=BAND_FOLDER,
+        segment_definition_dir=SEGMENTATION_FOLDER,
+        output_folder=OUTPUT_FOLDER,
+    )
+
+    path_kwargs = {
+        "geo_area": tlds.GeoArea.GB,
+        "trip_filter_type": tlds.TripFilter.TRIP_OD,
+        "sample_period": tlds.SampleTimePeriods.FULL_WEEK,
+        "cost_units": tlds.CostUnits.KM,
+    }
+    generate_kwargs = path_kwargs.copy()
+    generate_kwargs.update({
+        "sample_threshold": 10,
+        "verbose": False,
+    })
+
+    # ## GENERATE RAIL TLDS ## #
+
+    # Generate with CA combined and then split out
+    # Generate with HB and NHB combined and then split out
+    extract.tld_generator(
+        bands_name="dia_gb_rail_bands",
+        segmentation_name="uc_m_seg_m6",
+        **generate_kwargs,
+    )
+
+    # Copy back out!
+    out_path = extract.build_output_path(
+        bands_name="dia_gb_rail_bands",
+        segmentation_name="uc_m_seg_m6",
+        **path_kwargs,
+    )
+    print(out_path)
+
 
     # A full traveller segment run needs:
     # ## run at GB, trip_OD ## #
@@ -142,12 +187,7 @@ def build_new_traveller_segment_tlds():
     #       nhb_business
     #       nhb_other
     #
-    #   dm_north_rail_bands - one for CA, one for NCA
-    #       hb_business
-    #       hb_commute
-    #       hb_other
-    #       nhb_business
-    #       nhb_other
+
 
     pass
 
@@ -170,8 +210,8 @@ def copy_across_tps():
 
 
 if __name__ == '__main__':
-    run_test()
+    # run_test()
 
     # run_all_combinations()
     # build_new_dimo_tlds()
-    # build_new_traveller_segment_tlds()
+    build_new_traveller_segment_tlds()
