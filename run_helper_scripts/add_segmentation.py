@@ -74,7 +74,7 @@ def get_arguments() -> argparse.Namespace:
 
 
 def add_segment(name: str, unique_segments: Path, overwrite: bool = False) -> None:
-    """Add new segmentation folder to `SEGMENTATION_FOLDER`.
+    """Add new segmentation folder to `SEGMENTATION_DIR`.
 
     Parameters
     ----------
@@ -127,12 +127,12 @@ def main(init_logger: bool = True) -> None:
     Parameters
     ----------
     init_logger : bool, default True
-        Initialise logger with log file in `SEGMENTATION_FOLDER`.
+        Initialise logger with log file in `SEGMENTATION_DIR`.
 
     Raises
     ------
     NotADirectoryError
-        If `SEGMENTATION_FOLDER` doesn't exist.
+        If `SEGMENTATION_DIR` doesn't exist.
     """
     args = get_arguments()
 

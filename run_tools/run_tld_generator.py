@@ -31,24 +31,26 @@ TLB_VERSION = 'nts_tld_data_v3.1.csv'
 OUTPUT_FOLDER = r'I:\NorMITs Demand\import\trip_length_distributions\tld_tool_outputs'
 TLD_HOME = r'I:\NorMITs Demand\import\trip_length_distributions\config'
 
-BAND_FOLDER = os.path.join(TLD_HOME, 'bands')
-SEGMENTATION_FOLDER = os.path.join(TLD_HOME, 'segmentations')
+BAND_DIR = os.path.join(TLD_HOME, 'bands')
+SEGMENTATION_DIR = os.path.join(TLD_HOME, 'segmentations')
+COPY_DEFINITIONS_DIR = os.path.join(SEGMENTATION_DIR, 'copy_defs')
 
 
 def run_all_combinations():
     """Runs every combination of inputs through the TLD builder"""
     # Get a list of all available options
-    band_list = os.listdir(BAND_FOLDER)
+    band_list = os.listdir(BAND_DIR)
     band_list = [x for x in band_list if '.csv' in x]
 
-    seg_list = os.listdir(SEGMENTATION_FOLDER)
+    seg_list = os.listdir(SEGMENTATION_DIR)
     seg_list = [x for x in seg_list if '.csv' in x]
 
     extract = tlds.TripLengthDistributionBuilder(
         tlb_folder=TLB_FOLDER,
         tlb_version=TLB_VERSION,
-        bands_definition_dir=BAND_FOLDER,
-        segment_definition_dir=SEGMENTATION_FOLDER,
+        bands_definition_dir=BAND_DIR,
+        segment_definition_dir=SEGMENTATION_DIR,
+        segment_copy_definition_dir=COPY_DEFINITIONS_DIR,
         output_folder=OUTPUT_FOLDER,
     )
 
@@ -74,17 +76,18 @@ def run_all_combinations():
 def run_test():
     """Runs a test set of inputs through the TLD builder"""
     # Get a list of all available options
-    band_list = os.listdir(BAND_FOLDER)
+    band_list = os.listdir(BAND_DIR)
     band_list = [x for x in band_list if '.csv' in x]
 
-    seg_list = os.listdir(SEGMENTATION_FOLDER)
+    seg_list = os.listdir(SEGMENTATION_DIR)
     seg_list = [x for x in seg_list if '.csv' in x]
 
     extract = tlds.TripLengthDistributionBuilder(
         tlb_folder=TLB_FOLDER,
         tlb_version=TLB_VERSION,
-        bands_definition_dir=BAND_FOLDER,
-        segment_definition_dir=SEGMENTATION_FOLDER,
+        bands_definition_dir=BAND_DIR,
+        segment_definition_dir=SEGMENTATION_DIR,
+        segment_copy_definition_dir=COPY_DEFINITIONS_DIR,
         output_folder=OUTPUT_FOLDER,
     )
 
@@ -141,8 +144,9 @@ def build_new_traveller_segment_tlds():
     extract = tlds.TripLengthDistributionBuilder(
         tlb_folder=TLB_FOLDER,
         tlb_version=tlb_version,
-        bands_definition_dir=BAND_FOLDER,
-        segment_definition_dir=SEGMENTATION_FOLDER,
+        bands_definition_dir=BAND_DIR,
+        segment_definition_dir=SEGMENTATION_DIR,
+        segment_copy_definition_dir=COPY_DEFINITIONS_DIR,
         output_folder=OUTPUT_FOLDER,
     )
 
@@ -162,19 +166,19 @@ def build_new_traveller_segment_tlds():
 
     # Generate with CA combined and then split out
     # Generate with HB and NHB combined and then split out
-    extract.tld_generator(
-        bands_name="dia_gb_rail_bands",
-        segmentation_name="uc_m_seg_m6",
-        **generate_kwargs,
-    )
+    # extract.tld_generator(
+    #     bands_name="dia_gb_rail_bands",
+    #     segmentation_name="uc_m_seg_m6",
+    #     **generate_kwargs,
+    # )
 
     # Copy back out!
-    out_path = extract.build_output_path(
+    extract.copy_tlds(
+        copy_definition_name="traveller_segment_rail",
         bands_name="dia_gb_rail_bands",
         segmentation_name="uc_m_seg_m6",
         **path_kwargs,
     )
-    print(out_path)
 
 
     # A full traveller segment run needs:
