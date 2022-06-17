@@ -3,15 +3,10 @@
 
 ##### IMPORTS #####
 import pathlib
-from pyexpat import model
 import sys
-from tkinter.font import NORMAL
 from typing import Any
-from attr import attr
 
 import pydantic
-
-from normits_demand.distribution import segment_disaggregator
 
 # Add parent folder to path
 sys.path.append("..")
@@ -20,8 +15,10 @@ sys.path.append(".")
 # pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
 from normits_demand import logging as nd_log
-from normits_demand.utils import config_base, file_ops
 from normits_demand.core import enumerations as nd_enum
+from normits_demand.distribution import segment_disaggregator
+from normits_demand.matrices import matrix_processing
+from normits_demand.utils import config_base, file_ops
 
 # pylint: enable=import-error,wrong-import-position
 
@@ -138,6 +135,60 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
 
 
 ##### FUNCTIONS #####
+def aggregate_purposes(
+    matrix_folder: pathlib.Path, model: nd_enum.AssignmentModel, year: int
+) -> pathlib.Path:
+    """Aggregate matrices in NTEM purposes to model user classes.
+
+    Parameters
+    ----------
+    matrix_folder : pathlib.Path
+        Folder containing the matrices by NTEM purpose.
+    model : nd_enum.AssignmentModel
+        Assignment model for the matrices.
+    year : int
+        Model year.
+
+    Returns
+    -------
+    pathlib.Path
+        Folder where the aggregated user class matrices are saved,
+        creates new sub-folder 'userclasses' inside `matrix_folder`.
+
+    Raises
+    ------
+    NotImplementedError
+        For any model other than NoRMS.
+    """
+    if model != nd_enum.AssignmentModel.NORMS:
+        raise NotImplementedError(f"aggregate_purposes not implemented for {model.get_name()}")
+
+    LOG.info("Compiling %s matrices to userclasses", model.get_name())
+    LOG.debug("Input matrices: %s", matrix_folder)
+
+    output_folder = matrix_folder / "userclass"
+    output_folder.mkdir(exist_ok=True)
+    compile_params_path = matrix_processing.build_compile_params(
+        import_dir=matrix_folder,
+        export_dir=output_folder,
+        matrix_format="pa",
+        years_needed=[year],
+        m_needed=model.get_mode().get_mode_values(),
+        ca_needed=[1, 2],
+        split_hb_nhb=True,
+    )[0]
+
+    matrix_processing.compile_matrices(
+        mat_import=matrix_folder,
+        mat_export=output_folder,
+        compile_params_path=compile_params_path,
+        overwrite=False,
+    )
+    LOG.info("Output user class matrices saved: %s", output_folder)
+
+    return output_folder
+
+
 def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> None:
     # TODO Docstring
     # TODO For now use NoRMS syntheic Full PA aggregating to commute, business and other
@@ -186,14 +237,13 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
 
     lookup_folder = model_folder / "Model Zone Lookups"
 
-    # TODO Aggregate NTEM purposes to user class matrices in MODEL_SEGMENTATION
-    # From normits_demand\matrices\matrix_processing.py use compile_matrices and build_compile_params
+    matrix_folder = aggregate_purposes(params.matrix_folder, params.model, params.year)
 
     for to in nd.TripOrigin:
         LOG.info("Decompiling %s matrices", to.get_name())
 
         segment_disaggregator.disaggregate_segments(
-            import_folder=params.matrix_folder,
+            import_folder=matrix_folder,
             # TODO Old TLDs were in miles new are kms and costs and kms so don't need to convert anymore
             target_tld_folder=params.trip_length_distribution.full_folder,
             model_name=params.model.get_name(),
