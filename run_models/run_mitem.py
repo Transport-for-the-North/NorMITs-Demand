@@ -24,9 +24,9 @@ from normits_demand.pathing import MiTEMImportPaths
 
 
 ##### CONSTANTS #####
-years = [2030, 2040]
+years = [2018, 2021, 2030, 2040]
 scenario = nd.Scenario.NTEM.value
-mitem_iter = "9.6c"
+mitem_iter = "9.7"
 lu_drive = run_notem.lu_drive
 by_iteration = run_notem.by_iteration
 fy_iteration = run_notem.fy_iteration
@@ -56,17 +56,19 @@ def main():
         mode_balancing_zones,
     )
 
-    post_me_adjustments = TripEndAdjustmentFactors(
-        file=pathlib.Path(
-            r"T:\MidMITs Demand\MiHAM Assignments\Post ME Trip Rate Adjustments"
-            r"\iter9.6b.1\Adjustment Factors"
-            r"\prior_post_comparison_productions_lad_2020-hb_p_m_tp_week-CAR-cutoff0_2.csv.bz2"
-        ),
-        segmentation=nd.get_segmentation_level("hb_p_m_tp_week"),
-        zoning=nd.get_zoning_system("lad_2020"),
-        time_format=nd.TimeFormat.AVG_DAY,
-    )
-    trip_end_adjustments = [post_me_adjustments]
+    # post_me_adjustments = TripEndAdjustmentFactors(
+    #     file=pathlib.Path(
+    #         r"T:\MidMITs Demand\MiHAM Assignments\Post ME Trip Rate Adjustments"
+    #         r"\iter9.6b.1\Adjustment Factors"
+    #         r"\prior_post_comparison_productions_lad_2020-hb_p_m_tp_week-CAR-cutoff0_2.csv.bz2"
+    #     ),
+    #     segmentation=nd.get_segmentation_level("hb_p_m_tp_week"),
+    #     zoning=nd.get_zoning_system("lad_2020"),
+    #     time_format=nd.TimeFormat.AVG_DAY,
+    # )
+    # trip_end_adjustments = [post_me_adjustments]
+    # No trip end adjustments
+    trip_end_adjustments = []
 
     import_builder = MiTEMImportPaths(
         import_home=mitem_import_home,
