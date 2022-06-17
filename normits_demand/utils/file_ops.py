@@ -39,6 +39,7 @@ import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand.utils import compress
 from normits_demand.utils import general as du
+from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.concurrency import multiprocessing
 from normits_demand.concurrency import multithreading
@@ -679,6 +680,81 @@ def copy_and_rename_files(
     keys = [('src', 'dst')] * len(files)
     kwarg_list = [dict(zip(ks, vs)) for ks, vs in zip(keys, files)]
 
+    multiprocessing.multiprocess(
+        fn=_copy_files_internal,
+        kwargs=kwarg_list,
+        process_count=process_count,
+    )
+
+def copy_defined_files(
+    copy_definition: pd.DataFrame,
+    src_dir: os.PathLike,
+    dst_dir: os.PathLike,
+    src_col: str = "input",
+    dst_col: str = "output",
+    process_count: int = consts.PROCESS_COUNT,
+) -> None:
+    """Copy files from source to destination as defined in a pandas DataFrame
+
+    Parameters
+    ----------
+    copy_definition:
+        A Pandas DataFrame defining how to copy the files. The dataframe MUST
+        contain at least 2 columns: `src_col` and `dst_col`
+
+    src_dir:
+        The directory to find the files in `copy_definition[src_col]`
+
+    dst_dir:
+        The directory to write the files in `copy_definition[dst_col]` to
+
+    src_col:
+        The name of the column in `copy_definition` containing the names of
+        the source files to copy.
+
+    dst_col:
+        The name of the column in `copy_definition` containing the names to
+        give to the copied files.
+
+    process_count:
+        The number of processes to use when copying the data over.
+        0 - use no multiprocessing, run as a loop.
+        +ve value - the number of processes to use.
+        -ve value - the number of processes less than the cpu count to use.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    ValueError:
+        If `src_col` or `dst_col` don't exist within copy_definition
+    """
+    # Convert paths
+    src_dir = pathlib.Path(src_dir)
+    dst_dir = pathlib.Path(dst_dir)
+
+    # Make sure the columns we need exist
+    df = pd_utils.reindex_cols(
+        df=copy_definition,
+        columns=[src_col, dst_col],
+        dataframe_name="copy_definition",
+    )
+
+    # Convert to a dictionary of kwargs
+    df = df.rename(columns={
+        src_col: "src",
+        dst_col: "dst",
+    })
+    kwarg_list = df.to_dict(orient="records")
+
+    # Attach directories to paths
+    for kwargs in kwarg_list:
+        kwargs["src"] = src_dir / kwargs["src"]
+        kwargs["dst"] = dst_dir / kwargs["dst"]
+
+    # Multiprocess the copy
     multiprocessing.multiprocess(
         fn=_copy_files_internal,
         kwargs=kwarg_list,

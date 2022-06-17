@@ -71,6 +71,21 @@ class IsValidEnum(enum.Enum):
         return success
 
 
+class IsValidEnumWithAutoNameLower(IsValidEnum):
+    """Enum class to combine IsValidEnum and AutoName
+
+    Must be a better way to do this, but inheriting both classes seems to not
+    produce the expected results
+
+    TODO(BT): Investigate a better way to combine these classes
+    """
+
+    @staticmethod
+    def _generate_next_value_(name, start, count, last_values):
+        del start, count, last_values  # Unused
+        return name.lower()
+
+
 @enum.unique
 class Mode(IsValidEnum):
     """Collection of valid modes and their values/names"""
@@ -194,6 +209,53 @@ class TripOrigin(IsValidEnum):
         raise ValueError(
             f"No TripOrigin exists with the value '{val}'. " f"Expected one of: {valid_values}"
         )
+
+
+@enum.unique
+class UserClass(IsValidEnumWithAutoNameLower):
+    """Collection of valid User Classes and linked purposes"""
+
+    COMMUTE = enum.auto()
+    BUSINESS = enum.auto()
+    OTHER = enum.auto()
+
+    HB_COMMUTE = enum.auto()
+    HB_BUSINESS = enum.auto()
+    HB_OTHER = enum.auto()
+    NHB_BUSINESS = enum.auto()
+    NHB_OTHER = enum.auto()
+
+    def get_purposes(self):
+        """Returns a list of purposes for this UserClass"""
+        p_dict = UserClass.get_purpose_dict()
+
+        if self not in p_dict:
+            raise ValueError(
+                f"Internal error. There doesn't seem to be a purpose "
+                f"definition for UserClass {self.value!r}"
+            )
+
+        return p_dict[self]
+
+    @staticmethod
+    def get_purpose_dict() -> Dict[UserClass, List[int]]:
+        """Returns a dictionary of purposes for each UserClass"""
+        p_dict = {
+            UserClass.HB_COMMUTE: [1],
+            UserClass.HB_BUSINESS: [2],
+            UserClass.HB_OTHER: [3, 4, 5, 6, 7, 8],
+            UserClass.NHB_BUSINESS: [12],
+            UserClass.NHB_OTHER: [13, 14, 15, 16, 18],
+        }
+
+        # Add combinations of other values
+        b_val = p_dict[UserClass.HB_BUSINESS] + p_dict[UserClass.NHB_BUSINESS]
+        p_dict[UserClass.BUSINESS] = b_val
+
+        p_dict[UserClass.COMMUTE] = p_dict[UserClass.HB_COMMUTE]
+        p_dict[UserClass.OTHER] = p_dict[UserClass.HB_OTHER] + p_dict[UserClass.NHB_OTHER]
+
+        return p_dict
 
 
 @enum.unique

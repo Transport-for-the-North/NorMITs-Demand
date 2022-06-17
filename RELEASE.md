@@ -87,6 +87,8 @@ Below, a brief summary of patches made since the previous version can be found.
 - Tools
   - Updated the Trip Length Distribution (TLD) code to become a tool for 
     generating TLDs for Demand Models
+    - Further updates to integrate a new classified build of NTS data so make
+      TLD generation more consistent with Trip End data in NoTEM.
   - Created a NoRMS output converter tool which takes outputs from NoRMS
     CUBE model and uses them to create OD matrices which can be used by
     other Analytical Framework tools. Note that this is a work in progress
