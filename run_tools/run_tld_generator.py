@@ -111,6 +111,10 @@ def run_test():
 def build_new_dimo_tlds():
     """Build a new version of all the TLDs needed for the distribution model"""
 
+    # ## DEFINE
+
+    # ## GENERATE GB TLDS ## #
+
     # A full DiMo run requires:
     # ## run at north_and_mids, trip_OD ## #
     #
@@ -166,11 +170,11 @@ def build_new_traveller_segment_tlds():
 
     # Generate with CA combined and then split out
     # Generate with HB and NHB combined and then split out
-    # extract.tld_generator(
-    #     bands_name="dia_gb_rail_bands",
-    #     segmentation_name="uc_m_seg_m6",
-    #     **generate_kwargs,
-    # )
+    extract.tld_generator(
+        bands_name="dia_gb_rail_bands",
+        segmentation_name="uc_m_seg_m6",
+        **generate_kwargs,
+    )
 
     # Copy back out!
     extract.copy_tlds(
@@ -191,27 +195,6 @@ def build_new_traveller_segment_tlds():
     #       nhb_business
     #       nhb_other
     #
-
-
-    pass
-
-
-def copy_across_tps():
-    in_dir = ''
-    out_dir = ''
-
-    for fname in os.listdir(in_dir):
-        if fname == 'full_export.csv':
-            continue
-
-        for tp in [1, 2, 3, 4]:
-            out_name = fname.replace('.csv', '_tp%s.csv' % tp)
-
-            shutil.copy(
-                src=os.path.join(in_dir, fname),
-                dst=os.path.join(out_dir, out_name),
-            )
-
 
 if __name__ == '__main__':
     # run_test()

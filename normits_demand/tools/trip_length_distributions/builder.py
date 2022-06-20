@@ -25,11 +25,14 @@ import normits_demand as nd
 
 from normits_demand import core as nd_core
 from normits_demand.utils import file_ops
+from normits_demand.utils import timing
+from normits_demand.utils import string_utils as str_utils
 from normits_demand.tools.trip_length_distributions import enumerations as tld_enums
 
 
 class TripLengthDistributionBuilder:
     # Class constants
+    _running_log_fname = "1. input_params.txt"
 
     # HB/NHB definitions
     _hb_purposes = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -697,7 +700,7 @@ class TripLengthDistributionBuilder:
         )
 
         # Build the output path
-        output_path = os.path.join(base_path, copy_definition_name)
+        output_path = base_path / copy_definition_name
         file_ops.create_folder(output_path)
 
         file_ops.copy_defined_files(
@@ -705,6 +708,21 @@ class TripLengthDistributionBuilder:
             src_dir=base_path,
             dst_dir=output_path,
         )
+
+        # Write out a log of what happened
+        run_log_str = self.generate_run_log(
+            geo_area=geo_area,
+            trip_filter_type=trip_filter_type,
+            bands_name=bands_name,
+            segmentation_name=segmentation_name,
+            sample_period=sample_period,
+            cost_units=cost_units,
+            copy_definition_name=copy_definition_name,
+        )
+
+        output_path = output_path / self._running_log_fname
+        with open(output_path, "w") as f:
+            f.write(run_log_str)
 
     def build_tld(
         self,
@@ -799,6 +817,72 @@ class TripLengthDistributionBuilder:
 
         return tld_dict, loc_segs
 
+    def generate_run_log(
+        self,
+        geo_area: tld_enums.GeoArea,
+        trip_filter_type: tld_enums.TripFilter,
+        bands_name: str,
+        segmentation_name: str,
+        sample_period: tld_enums.SampleTimePeriods,
+        cost_units: tld_enums.CostUnits,
+        copy_definition_name: str = None,
+    ) -> str:
+        """Writes out a file of the params used to run
+
+        Parameters
+        ----------
+        geo_area:
+            The geographical area the TLD is constrained to.
+
+        trip_filter_type:
+            How to filter the trips into given `geo_area`.
+
+        bands_name:
+            The name of the bands being used in the TLD.
+
+        segmentation_name:
+            The name of the segmentation being used in the TLD.
+
+        sample_period:
+            Which time periods the TLD is restricted to.
+
+        cost_units:
+            The cost units used in the output of the TLDs.
+
+        copy_definition_name:
+            Used when running `self.copy_tlds()` adds a subfolder
+
+        Returns
+        -------
+        None
+        """
+        # Generate the lines of the log
+        lines = list()
+        lines.append(f"{str_utils.title_padding('TLD Tool Input Params and Run Log')}\n")
+        lines.append(f"Code Version: {nd.__version__}")
+        lines.append(f"Ran at: {timing.get_datetime()}\n")
+        lines.append(f"Using the Classified Build from:\n{self.tlb_import_path}\n")
+        lines.append("Input Params")
+        lines.append("-" * 12)
+        lines.append(f"Geo Area: {geo_area.value}")
+        lines.append(f"Trip Filter Type: {trip_filter_type.value}")
+        lines.append(f"Bands Name: {bands_name}")
+        lines.append(f"Segmentation Name: {segmentation_name}")
+        lines.append(f"Sample Time Periods: {sample_period.value}")
+        lines.append(f"Output Cost Units: {cost_units.value}")
+
+        if copy_definition_name is not None:
+            fname, copy_definition_name = self._get_name_and_fname(copy_definition_name)
+            copy_def_path = os.path.join(self.segment_copy_definition_dir, fname)
+
+            lines.append(
+                f"\nFiles were then copied to {copy_definition_name} segmentation "
+                "using the definition:"
+            )
+            lines.append(f"{copy_def_path}")
+
+        return "\n".join(lines)
+
     def tld_generator(
         self,
         bands_name: str,
@@ -864,7 +948,7 @@ class TripLengthDistributionBuilder:
         Add more functionality for time period handling.
         Add better error control and type limiting for inputs.
         """
-
+        # Init??
         input_dat = self.nts_import.copy()
         records = list()
         records.append(len(input_dat))
@@ -914,29 +998,40 @@ class TripLengthDistributionBuilder:
             sample_period=sample_period,
             cost_units=cost_units,
         )
+        file_ops.create_folder(tld_out_path)
 
-        # Build full export
+        # ## WRITE OUT A RUN LOG ## #
+        run_log_str = self.generate_run_log(
+            geo_area=geo_area,
+            trip_filter_type=trip_filter_type,
+            bands_name=bands_name,
+            segmentation_name=segmentation_name,
+            sample_period=sample_period,
+            cost_units=cost_units,
+        )
+
+        output_path = tld_out_path / self._running_log_fname
+        with open(output_path, "w") as f:
+            f.write(run_log_str)
+
+        # ## BUILD A FULL EXPORT ## #
         full_export = list()
         for desc, dat in tld_dict.items():
             full_export.append(dat)
         full_export = pd.concat(full_export, ignore_index=True)
 
-        if write:
-            # for csv in mat
-            file_ops.create_folder(tld_out_path)
+        # Write report
+        report_path = os.path.join(tld_out_path, f"{segmentation_name}_report.csv")
+        file_ops.safe_dataframe_to_csv(report, report_path, index=False)
 
-            # Write report
-            report_path = os.path.join(tld_out_path, f"{segmentation_name}_report.csv")
-            file_ops.safe_dataframe_to_csv(report, report_path, index=False)
+        # Write final compiled tld
+        full_export_path = os.path.join(tld_out_path, "full_export.csv")
+        file_ops.safe_dataframe_to_csv(full_export, full_export_path, index=False)
 
-            # Write final compiled tld
-            full_export_path = os.path.join(tld_out_path, "full_export.csv")
-            file_ops.safe_dataframe_to_csv(full_export, full_export_path, index=False)
-
-            # Write individual tlds
-            for path, df in tld_dict.items():
-                csv_path = path + ".csv"
-                individual_file = os.path.join(tld_out_path, csv_path)
-                file_ops.safe_dataframe_to_csv(df, individual_file, index=False)
+        # Write individual tlds
+        for path, df in tld_dict.items():
+            csv_path = path + ".csv"
+            individual_file = os.path.join(tld_out_path, csv_path)
+            file_ops.safe_dataframe_to_csv(df, individual_file, index=False)
 
         return tld_dict, full_export
