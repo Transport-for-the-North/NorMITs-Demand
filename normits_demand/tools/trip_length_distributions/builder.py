@@ -12,6 +12,7 @@ File purpose:
 """
 # Built-Ins
 import os
+import warnings
 import pathlib
 
 from typing import Any
@@ -23,6 +24,7 @@ import pandas as pd
 # Local Imports
 import normits_demand as nd
 
+from normits_demand import constants as nd_consts
 from normits_demand import core as nd_core
 from normits_demand.utils import file_ops
 from normits_demand.utils import timing
@@ -33,6 +35,8 @@ from normits_demand.tools.trip_length_distributions import enumerations as tld_e
 class TripLengthDistributionBuilder:
     # Class constants
     _running_log_fname = "1. input_params.txt"
+    _full_export_fname = "2. full_export.csv"
+    _seg_report_fname = "3. {seg_name}_report.csv"
 
     # HB/NHB definitions
     _hb_purposes = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -61,9 +65,6 @@ class TripLengthDistributionBuilder:
         "tfn_at": [1, 2, 3, 4, 5, 6, 7, 8],
         "agg_tfn_at": [1, 1, 2, 2, 3, 3, 4, 4],
     }
-
-    # Define weekdays
-    _weekday_tps = [1, 2, 3, 4]
 
     segment_treatment = {
         "trip_origin": "trip_origin",
@@ -126,10 +127,10 @@ class TripLengthDistributionBuilder:
         self.tlb_folder = tlb_folder
         self.tlb_version = tlb_version
         self.tlb_import_path = os.path.join(tlb_folder, tlb_version)
-        print(f"Loading processed NTS trip length data from {self.tlb_import_path}")
-        self.nts_import = pd.read_csv(self.tlb_import_path)
         self.output_folder = output_folder
 
+        print(f"Loading processed NTS trip length data from {self.tlb_import_path}...")
+        self.nts_import = pd.read_csv(self.tlb_import_path)
         if trip_miles_col in list(self.nts_import):
             self.trip_miles_col = trip_miles_col
         else:
@@ -153,7 +154,7 @@ class TripLengthDistributionBuilder:
         dest_gor_col = "TripDestGOR_B02ID"
 
         # Transpose origin and destination for OD_to trip ends (Makes them "PA")
-        mask = (output_data["trip_direction"] == "hb_to")
+        mask = output_data["trip_direction"] == "hb_to"
         temp_orig = output_data[mask][orig_gor_col].copy()
         temp_dest = output_data[mask][dest_gor_col].copy()
         output_data.loc[mask, orig_gor_col] = temp_dest
@@ -170,9 +171,7 @@ class TripLengthDistributionBuilder:
             filter_orig = False
             filter_dest = True
         else:
-            raise ValueError(
-                f"Don't know how to apply the OD filter {trip_filter_type}"
-            )
+            raise ValueError(f"Don't know how to apply the OD filter {trip_filter_type}")
 
         # Finally, filter the data
         if filter_orig:
@@ -219,9 +218,7 @@ class TripLengthDistributionBuilder:
                 trip_filter_type=trip_filter_type,
             )
 
-        raise ValueError(
-            f"Don't know how to apply to filter '{trip_filter_type}'"
-        )
+        raise ValueError(f"Don't know how to apply to filter '{trip_filter_type}'")
 
     @staticmethod
     def _map_dict(output_dat: pd.DataFrame, map_dict: dict, key: str):
@@ -236,17 +233,6 @@ class TripLengthDistributionBuilder:
         map_frame = pd.DataFrame(map_dict)
 
         output_dat = output_dat.merge(map_frame, how="left", on=key)
-
-        return output_dat
-
-    def _filter_to_weekday(self, output_dat):
-        """
-        Subset a NTS table to weekdays only using 'TravelWeekDay'
-        Correct weekdays defined in class
-        """
-        w_d = self._weekday_tps
-        output_dat = output_dat[output_dat["start_time"].isin(w_d)]
-        output_dat = output_dat.reset_index(drop=True)
 
         return output_dat
 
@@ -270,7 +256,7 @@ class TripLengthDistributionBuilder:
         bands: pd.DataFrame
             DataFrame of target bands
 
-        cost_units:
+        output_cost_units:
             The cost units to use in the output. The data will be multiplied
             by a constant to convert.
 
@@ -402,9 +388,7 @@ class TripLengthDistributionBuilder:
                 nts_sub = nts_sub[nts_sub[nts_seg_col] == filter_value]
 
         else:
-            raise ValueError(
-                f"Don't know how to filter method {method!r}"
-            )
+            raise ValueError(f"Don't know how to filter method {method!r}")
 
         return nts_sub
 
@@ -461,6 +445,12 @@ class TripLengthDistributionBuilder:
 
         name_parts = list()
 
+        if "trip_origin" in seg_descs:
+            name_parts += [f"{seg_descs['trip_origin']}"]
+
+        # Add fname descriptor
+        name_parts += ["cost_distribution"]
+
         for valid_name in self.segment_order:
             if valid_name in list(seg_descs.keys()):
                 seg_value = seg_descs[valid_name]
@@ -468,9 +458,9 @@ class TripLengthDistributionBuilder:
                 method = self.segment_treatment[str(valid_name)]
 
                 if method == "trip_origin":
-                    name_parts += [f"{seg_value}"]
+                    continue
 
-                elif method == 'uc':
+                if method == "uc":
                     name_parts += [f"{seg_value}"]
 
                 elif method == "seg":
@@ -483,23 +473,24 @@ class TripLengthDistributionBuilder:
                 else:
                     name_parts += [f"{valid_name}{seg_value}"]
 
-        fname = '_'.join(name_parts)
+        fname = "_".join(name_parts)
 
         if csv:
             fname = f"{fname}.csv"
 
         return fname
 
-    def _handle_sample_period(self, input_dat, sample_period):
+    @staticmethod
+    def _handle_sample_period(
+        input_dat: pd.DataFrame, sample_period: tld_enums.SampleTimePeriods
+    ):
         """
         Function to subset whole dataset for time periods
         """
-        # TODO: Needs to be expanded to work for other time periods
-
-        if sample_period == "weekday":
-            input_dat = self._filter_to_weekday(input_dat)
-
-        return input_dat
+        keep_tps = sample_period.get_time_periods()
+        output_dat = input_dat[input_dat["start_time"].isin(keep_tps)]
+        output_dat = output_dat.reset_index(drop=True)
+        return output_dat
 
     def _correct_defaults(self, segments):
         """
@@ -572,15 +563,17 @@ class TripLengthDistributionBuilder:
         _, bands_name = self._get_name_and_fname(bands_name)
         _, segmentation_name = self._get_name_and_fname(segmentation_name)
 
-        return pathlib.Path(os.path.join(
-            self.output_folder,
-            geo_area.value,
-            trip_filter_type.value,
-            bands_name,
-            segmentation_name,
-            sample_period.value,
-            cost_units.value,
-        ))
+        return pathlib.Path(
+            os.path.join(
+                self.output_folder,
+                geo_area.value,
+                trip_filter_type.value,
+                bands_name,
+                segmentation_name,
+                sample_period.value,
+                cost_units.value,
+            )
+        )
 
     def generate_output_paths(
         self,
@@ -640,6 +633,96 @@ class TripLengthDistributionBuilder:
 
         return base_path, fnames
 
+    def copy_across_tps(
+        self,
+        geo_area: tld_enums.GeoArea,
+        trip_filter_type: tld_enums.TripFilter,
+        bands_name: str,
+        segmentation_name: str,
+        sample_period: tld_enums.SampleTimePeriods,
+        cost_units: nd_core.CostUnits,
+        process_count: int = nd_consts.PROCESS_COUNT,
+    ) -> None:
+        """Copies generated TLDs across time period segments
+
+        This is useful when segments have had to be aggregated due to sample
+        sizes, but other models and tools expect the inputs to be at
+        a time period segmentation.
+
+        Parameters
+        ----------
+        geo_area:
+            The geographical area the TLD is constrained to.
+
+        trip_filter_type:
+            How to filter the trips into given `geo_area`.
+
+        bands_name:
+            The name of the bands being used in the TLD.
+
+        segmentation_name:
+            The name of the segmentation being used in the TLD.
+
+        sample_period:
+            Which time periods the TLD is restricted to.
+
+        cost_units:
+            The cost units used in the output of the TLDs.
+
+        process_count:
+            The number of processes to use when copying the data over.
+            0 - use no multiprocessing, run as a loop.
+            +ve value - the number of processes to use.
+            -ve value - the number of processes less than the cpu count to use.
+
+        Returns
+        -------
+        None
+        """
+        # Generate the needed paths
+        base_path, fnames = self.generate_output_paths(
+            geo_area=geo_area,
+            trip_filter_type=trip_filter_type,
+            bands_name=bands_name,
+            segmentation_name=segmentation_name,
+            sample_period=sample_period,
+            cost_units=cost_units,
+        )
+
+        output_path = base_path / "tp_copied"
+        file_ops.create_folder(output_path)
+
+        # Copy across time periods
+        copy_files = list()
+        for fname in fnames:
+            for tp in sample_period.get_time_periods():
+                out_name = fname.replace(".csv", f"_tp{tp}.csv")
+
+                # Tuple of src, dst files
+                copy_files.append(
+                    (
+                        base_path / fname,
+                        output_path / out_name,
+                    )
+                )
+
+        file_ops.copy_and_rename_files(files=copy_files, process_count=process_count)
+
+        # Write out a log of what happened
+        run_log_str = self.generate_run_log(
+            geo_area=geo_area,
+            trip_filter_type=trip_filter_type,
+            bands_name=bands_name,
+            segmentation_name=segmentation_name,
+            sample_period=sample_period,
+            cost_units=cost_units,
+            tp_copy=True,
+        )
+
+        output_path = output_path / self._running_log_fname
+        with open(output_path, "w") as f:
+            f.write(run_log_str)
+
     def copy_tlds(
         self,
         copy_definition_name: str,
@@ -649,6 +732,7 @@ class TripLengthDistributionBuilder:
         segmentation_name: str,
         sample_period: tld_enums.SampleTimePeriods,
         cost_units: nd_core.CostUnits,
+        process_count: int = nd_consts.PROCESS_COUNT,
     ) -> None:
         """Copies generated TLDs across multiple segments
 
@@ -679,6 +763,12 @@ class TripLengthDistributionBuilder:
         cost_units:
             The cost units used in the output of the TLDs.
 
+        process_count:
+            The number of processes to use when copying the data over.
+            0 - use no multiprocessing, run as a loop.
+            +ve value - the number of processes to use.
+            -ve value - the number of processes less than the cpu count to use.
+
         Returns
         -------
         None
@@ -705,6 +795,7 @@ class TripLengthDistributionBuilder:
             copy_definition=copy_def,
             src_dir=base_path,
             dst_dir=output_path,
+            process_count=process_count,
         )
 
         # Write out a log of what happened
@@ -772,7 +863,7 @@ class TripLengthDistributionBuilder:
         loc_segs = segments.copy()
 
         # Iterate over each individual segment descriptions
-        for row_num, segment_params in enumerate(segments.to_dict(orient='records')):
+        for row_num, segment_params in enumerate(segments.to_dict(orient="records")):
             seg_sub = input_dat.copy()
             for segment, seg_value in segment_params.items():
                 method = self.segment_treatment[str(segment)]
@@ -793,8 +884,12 @@ class TripLengthDistributionBuilder:
 
             # Do no more, move onto next segment
             if n_records <= sample_threshold:
-                print("No data returned to build tld")
                 loc_segs.loc[row_num, "status"] = "Failed"
+                warnings.warn(
+                    "Not enough data was returned to create a TLD for segment "
+                    f"{segment_params}. Lower limit set to {sample_threshold}, "
+                    f"but only {n_records} were found. No TLD will be generated."
+                )
                 continue
             loc_segs.loc[row_num, "status"] = "Passed"
 
@@ -824,6 +919,7 @@ class TripLengthDistributionBuilder:
         sample_period: tld_enums.SampleTimePeriods,
         cost_units: nd_core.CostUnits,
         copy_definition_name: str = None,
+        tp_copy: bool = False,
     ) -> str:
         """Writes out a file of the params used to run
 
@@ -848,7 +944,12 @@ class TripLengthDistributionBuilder:
             The cost units used in the output of the TLDs.
 
         copy_definition_name:
-            Used when running `self.copy_tlds()` adds a subfolder
+            Used when running `self.copy_tlds()` adds a line detailing the
+            copy
+
+        tp_copy:
+            Used when running `self.copy_across_tps()`. Adds a line detailing
+            the copy.
 
         Returns
         -------
@@ -878,6 +979,9 @@ class TripLengthDistributionBuilder:
                 "using the definition:"
             )
             lines.append(f"{copy_def_path}")
+
+        if tp_copy:
+            lines.append("\nFiles were then copied across all time periods")
 
         return "\n".join(lines)
 
@@ -930,9 +1034,6 @@ class TripLengthDistributionBuilder:
         verbose: bool = True,
             Echo to terminal or not
 
-        write: bool = True:
-            Write export to class export folder
-
         Returns
         ----------
         tld_dict: dict
@@ -950,6 +1051,18 @@ class TripLengthDistributionBuilder:
         records = list()
         records.append(len(input_dat))
 
+        # Build output path
+        tld_out_path = self.build_output_path(
+            geo_area=geo_area,
+            trip_filter_type=trip_filter_type,
+            bands_name=bands_name,
+            segmentation_name=segmentation_name,
+            sample_period=sample_period,
+            cost_units=cost_units,
+        )
+        file_ops.create_folder(tld_out_path, verbose_create=False)
+        print(f"Generating TLD at: {tld_out_path}...")
+
         # Try read in the bands and segmentation
         fname, bands_name = self._get_name_and_fname(bands_name)
         bands = pd.read_csv(os.path.join(self.bands_definition_dir, fname))
@@ -963,7 +1076,9 @@ class TripLengthDistributionBuilder:
         # Car availability
         # TODO: This should be handled upstream, in inputs
         input_dat = self._map_dict(
-            output_dat=input_dat, map_dict=self._household_type_to_ca, key="hh_type",
+            output_dat=input_dat,
+            map_dict=self._household_type_to_ca,
+            key="hh_type",
         )
 
         # Filter to weekdays only
@@ -986,17 +1101,6 @@ class TripLengthDistributionBuilder:
             verbose=verbose,
         )
 
-        # Build output path
-        tld_out_path = self.build_output_path(
-            geo_area=geo_area,
-            trip_filter_type=trip_filter_type,
-            bands_name=bands_name,
-            segmentation_name=segmentation_name,
-            sample_period=sample_period,
-            cost_units=cost_units,
-        )
-        file_ops.create_folder(tld_out_path)
-
         # ## WRITE OUT A RUN LOG ## #
         run_log_str = self.generate_run_log(
             geo_area=geo_area,
@@ -1013,16 +1117,17 @@ class TripLengthDistributionBuilder:
 
         # ## BUILD A FULL EXPORT ## #
         full_export = list()
-        for desc, dat in tld_dict.items():
+        for dat in tld_dict.values():
             full_export.append(dat)
         full_export = pd.concat(full_export, ignore_index=True)
 
         # Write report
-        report_path = os.path.join(tld_out_path, f"{segmentation_name}_report.csv")
+        _seg_report_fname = self._seg_report_fname.format(seg_name=segmentation_name)
+        report_path = os.path.join(tld_out_path, _seg_report_fname)
         file_ops.safe_dataframe_to_csv(report, report_path, index=False)
 
         # Write final compiled tld
-        full_export_path = os.path.join(tld_out_path, "full_export.csv")
+        full_export_path = os.path.join(tld_out_path, self._full_export_fname)
         file_ops.safe_dataframe_to_csv(full_export, full_export_path, index=False)
 
         # Write individual tlds
