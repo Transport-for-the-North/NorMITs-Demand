@@ -117,7 +117,7 @@ class TripLengthDistributionBuilder:
             Which column to use as the count of trips in the import data
         """
         # TODO(BT): Pass this in
-        self.input_cost_units = tld_enums.CostUnits.MILES
+        self.input_cost_units = nd_core.CostUnits.MILES
 
         self.bands_definition_dir = bands_definition_dir
         self.segment_definition_dir = segment_definition_dir
@@ -254,7 +254,7 @@ class TripLengthDistributionBuilder:
         self,
         seg_sub: pd.DataFrame,
         bands: pd.DataFrame,
-        output_cost_units: tld_enums.CostUnits,
+        output_cost_units: nd_core.CostUnits,
         band_rounding: int = 2,
     ):
         """
@@ -538,7 +538,7 @@ class TripLengthDistributionBuilder:
         bands_name: str,
         segmentation_name: str,
         sample_period: tld_enums.SampleTimePeriods,
-        cost_units: tld_enums.CostUnits,
+        cost_units: nd_core.CostUnits,
     ) -> pathlib.Path:
         """Generates the output path for the TLD params
 
@@ -589,7 +589,7 @@ class TripLengthDistributionBuilder:
         bands_name: str,
         segmentation_name: str,
         sample_period: tld_enums.SampleTimePeriods,
-        cost_units: tld_enums.CostUnits,
+        cost_units: nd_core.CostUnits,
     ) -> tuple[pathlib.Path, list[str]]:
         """Generates all the file output paths for the TLD params
 
@@ -648,8 +648,8 @@ class TripLengthDistributionBuilder:
         bands_name: str,
         segmentation_name: str,
         sample_period: tld_enums.SampleTimePeriods,
-        cost_units: tld_enums.CostUnits,
-    ) -> tuple[pathlib.Path, list[str]]:
+        cost_units: nd_core.CostUnits,
+    ) -> None:
         """Copies generated TLDs across multiple segments
 
         This is useful when segments have had to be aggregated due to sample
@@ -681,9 +681,7 @@ class TripLengthDistributionBuilder:
 
         Returns
         -------
-        path_string:
-            A string. The full path to a folder where this collection of TLDs
-            should be stored.
+        None
         """
         # Read in the copy definition
         fname, copy_definition_name = self._get_name_and_fname(copy_definition_name)
@@ -729,7 +727,7 @@ class TripLengthDistributionBuilder:
         input_dat: pd.DataFrame,
         bands: pd.DataFrame,
         segments: pd.DataFrame,
-        cost_units: tld_enums.CostUnits,
+        cost_units: nd_core.CostUnits,
         sample_threshold: int = 10,
         verbose: bool = True,
     ):
@@ -824,7 +822,7 @@ class TripLengthDistributionBuilder:
         bands_name: str,
         segmentation_name: str,
         sample_period: tld_enums.SampleTimePeriods,
-        cost_units: tld_enums.CostUnits,
+        cost_units: nd_core.CostUnits,
         copy_definition_name: str = None,
     ) -> str:
         """Writes out a file of the params used to run
@@ -890,10 +888,9 @@ class TripLengthDistributionBuilder:
         geo_area: tld_enums.GeoArea,
         sample_period: tld_enums.SampleTimePeriods,
         trip_filter_type: tld_enums.TripFilter,
-        cost_units: tld_enums.CostUnits = tld_enums.CostUnits.MILES,
+        cost_units: nd_core.CostUnits = nd_core.CostUnits.MILES,
         sample_threshold: int = 10,
         verbose: bool = True,
-        write=True,
     ) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
         """Generate a trip length distribution
 
