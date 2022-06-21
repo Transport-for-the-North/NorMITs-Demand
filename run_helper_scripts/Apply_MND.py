@@ -29,9 +29,9 @@ SEGS = {
 }
 PA_LOOKUP = {"origin": "productions", "destination": "attractions"}
 FACTORS_FOLDER = pathlib.Path(r"T:\MidMITs Demand\Inputs\MND Adjustment")
-TRIP_ENDS_FOLDER = pathlib.Path(r"T:\MidMITs Demand\MiTEM\iter9.6c\NTEM")
-OUTPUT_FOLDER = pathlib.Path(r"T:\MidMITs Demand\MiTEM\iter9.6c-COVID\NTEM")
-YEARS = [2030, 2040]
+TRIP_ENDS_FOLDER = pathlib.Path(r"T:\MidMITs Demand\MiTEM\iter9.7\NTEM")
+OUTPUT_FOLDER = pathlib.Path(r"T:\MidMITs Demand\MiTEM\iter9.7-COVID\NTEM")
+YEARS = [2021, 2030, 2040]
 CONVERGENCE = 10
 MAX_ITER = 20
 
@@ -206,7 +206,16 @@ def balance(production: DVector, attraction: DVector, hb_nhb: str) -> DVector:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(filename="log.log", level=logging.INFO)
+    log_file = OUTPUT_FOLDER / "Apply_MND.log"
+    logging.basicConfig(filename=log_file, level=logging.INFO)
+    print(f"Writing log file: {log_file}")
+    logging.info(
+        "Parameters:\nFactors folder: %s\nTrip ends folder: %s\nOutput folder: %s\nYears: %s",
+        FACTORS_FOLDER,
+        TRIP_ENDS_FOLDER,
+        OUTPUT_FOLDER,
+        ", ".join(str(i) for i in YEARS),
+    )
 
     for k in YEARS:
         for j in ["nhb", "hb"]:
