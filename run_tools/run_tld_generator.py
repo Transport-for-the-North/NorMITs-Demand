@@ -243,5 +243,5 @@ if __name__ == "__main__":
     # run_test()
 
     # run_all_combinations()
-    build_new_dimo_tlds()
-    # build_new_traveller_segment_tlds()
+    # build_new_dimo_tlds()
+    build_new_traveller_segment_tlds()

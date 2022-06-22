@@ -24,6 +24,7 @@ import pandas as pd
 # Local Imports
 from normits_demand import core as nd_core
 from normits_demand.utils import file_ops
+from normits_demand.cost import utils as cost_utils
 
 # TODO(BT): Build class to handle a segmentationLevel collection of these
 
@@ -71,6 +72,13 @@ class CostDistribution:
         self.band_means = band_mean_cost
         self.band_trips = band_trips
         self.band_shares = band_trips / np.sum(band_trips)
+
+        # Band means to use when plotting - can't be -1
+        self._plot_band_means = np.where(
+            self.band_means > 0,
+            self.band_means,
+            self.mid_bounds,
+        )
 
         self._set_col_names()
 
@@ -162,16 +170,85 @@ class CostDistribution:
             df_dict.update(additional_cols)
 
         # Add in the defined columns
-        df_dict.update({
-            self.min_bounds_col: self.min_bounds,
-            self.max_bounds_col: self.max_bounds,
-            self.mid_bounds_col: self.mid_bounds,
-            self.mean_col: self.band_means,
-            self.trips_col: self.band_trips,
-            self.shares_col: self.band_shares,
-        })
+        df_dict.update(
+            {
+                self.min_bounds_col: self.min_bounds,
+                self.max_bounds_col: self.max_bounds,
+                self.mid_bounds_col: self.mid_bounds,
+                self.mean_col: self.band_means,
+                self.trips_col: self.band_trips,
+                self.shares_col: self.band_shares,
+            }
+        )
 
         return pd.DataFrame(df_dict)
+
+    def to_graph(
+        self,
+        path: os.PathLike,
+        band_shares: bool = False,
+        label: str = "Cost Distribution",
+        **graph_kwargs,
+    ) -> None:
+        """Writes a graph of this CostDistribution to disk
+
+        Parameters
+        ----------
+        path:
+            The path to write the generated graph out to.
+
+        band_shares:
+            Whether to output the graph as band shares or not. If False, graph
+            will use band trips.
+
+        label:
+            The label to put on the legend of the generated graph.
+
+        graph_kwargs:
+            Any other kwargs to pass through to
+            `normits_demand.cost.utils.plot_cost_distributions()`
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        `normits_demand.cost.utils.plot_cost_distributions()`
+        """
+        # Set default values
+        y_values = self.band_trips
+        y_axis_label = "Band Trips"
+        if band_shares:
+            y_values = self.band_shares
+            y_axis_label = "Band Share (%)"
+
+        # Infill any missing kwargs with defaults
+        default_graph_kwargs = {
+            "plot_title": "Cost Distribution",
+            "x_axis_label": f"Distance ({self.cost_units.value})",
+            "y_axis_label": y_axis_label,
+            "band_share_cutoff": 0,
+            "aspect_ratio": 9 / 16,
+            "dpi": 300,
+        }
+
+        default_graph_kwargs.update(graph_kwargs)
+        graph_kwargs = default_graph_kwargs
+
+        # Gather plotting data
+        plot_data = cost_utils.PlotData(
+            x_values=self._plot_band_means,
+            y_values=y_values,
+            label=label,
+        )
+
+        # Plot
+        cost_utils.plot_cost_distributions(
+            plot_data=plot_data,
+            path=path,
+            **graph_kwargs,
+        )
 
     def to_csv(self, path: os.PathLike, **kwargs) -> None:
         """Builds a csv of this cost distribution and writes to disk
@@ -246,7 +323,7 @@ class CostDistribution:
         trips_col = default_col_names[4] if trips_col is None else trips_col
 
         needed_cols = [min_bounds_col, max_bounds_col, trips_col]
-        
+
         # Read in the data and validate
         df = pd.read_csv(path)
         assert isinstance(df, pd.DataFrame)

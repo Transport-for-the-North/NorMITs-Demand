@@ -11,11 +11,12 @@ File purpose:
 
 """
 # Built-Ins
+import os
 import dataclasses
+
 from typing import List
 from typing import Tuple
 from typing import Union
-from typing import Optional
 
 # Third Party
 import numpy as np
@@ -24,6 +25,7 @@ import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
 from matplotlib.ticker import PercentFormatter
+from matplotlib.ticker import ScalarFormatter
 from matplotlib.ticker import AutoMinorLocator
 
 # Local Imports
@@ -283,7 +285,7 @@ def _get_cutoff_idx(lst: np.ndarray, cutoff: float) -> int:
     i = 0
 
     # Loop until we pass the cutoff
-    for i, item in enumerate(reversed(lst)):
+    for i, item in enumerate(reversed(lst)):  # type: ignore
         if item > cutoff:
             break
 
@@ -299,14 +301,15 @@ def _get_cutoff_idx(lst: np.ndarray, cutoff: float) -> int:
 
 
 def plot_cost_distributions(
-    plot_data: List[PlotData],
+    plot_data: Union[PlotData, List[PlotData]],
     plot_title: str,
     band_share_cutoff: float = 0,
     aspect_ratio: float = 9 / 16,
-    path: nd.PathLike = None,
+    path: os.PathLike = None,
     close_plot: bool = True,
     x_axis_label: str = None,
     y_axis_label: str = None,
+    percent_data: bool = False,
     **save_kwargs,
 ) -> None:
     """Plots cost distributions onto a graph
@@ -343,6 +346,10 @@ def plot_cost_distributions(
     y_axis_label:
         The label to give to the y axis in the output graph
 
+    percent_data:
+        Whether the y-axis values are percentages or not. If True, a percentage
+        formatting is added to the y axis
+
     save_kwargs:
         Any additional kwargs to pass through when saving the graph. See:
         https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.savefig.html?highlight=savefig#matplotlib-pyplot-savefig
@@ -357,6 +364,7 @@ def plot_cost_distributions(
     """
     # Init
     plt.clf()
+    plot_data = [plot_data] if isinstance(plot_data, PlotData) else plot_data
 
     if len(plot_data) < 0:
         return
@@ -387,8 +395,12 @@ def plot_cost_distributions(
     axis.set_title(plot_title)
 
     # Format the plot
+    if percent_data:
+        axis.yaxis.set_major_formatter(PercentFormatter(1.0))
+    else:
+        axis.yaxis.set_major_formatter(ScalarFormatter())
+
     plt.legend(loc="upper right")
-    axis.yaxis.set_major_formatter(PercentFormatter(1.0))
     axis.set_ylim(0, None)
     axis.set_xlim(0, upper_x_lim)
     axis.yaxis.set_minor_locator(AutoMinorLocator())

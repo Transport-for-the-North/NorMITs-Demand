@@ -1083,9 +1083,13 @@ class TripLengthDistributionBuilder:
         file_ops.safe_dataframe_to_csv(full_export, full_export_path, index=False)
 
         # Write individual tlds
-        for path, df in name_to_distribution.items():
-            csv_path = path + ".csv"
-            individual_file = os.path.join(tld_out_path, csv_path)
-            file_ops.safe_dataframe_to_csv(df, individual_file, index=False)
+        for name, tld in name_to_distribution.items():
+            # Csv
+            path = tld_out_path / f"{name}.csv"
+            tld.to_csv(path)
+
+            # Graph
+            path = tld_out_path / f"{name}.png"
+            tld.to_graph(path)
 
         return name_to_distribution, full_export

@@ -510,6 +510,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
             x_axis_label=x_label,
             y_axis_label=y_label,
             band_share_cutoff=0.005,
+            percent_data=True,
             **graph_kwargs,
         )
 
