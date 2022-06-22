@@ -13,9 +13,9 @@ File purpose:
 # Built-Ins
 import dataclasses
 from typing import List
-from typing import Dict
 from typing import Tuple
 from typing import Union
+from typing import Optional
 
 # Third Party
 import numpy as np
@@ -34,6 +34,8 @@ sns.set_theme(style="darkgrid")
 
 @dataclasses.dataclass
 class DistributionReportCols:
+    cost_units: str
+
     min: str = "Min"
     max: str = "Max"
     mid: str = "Mid"
@@ -46,8 +48,6 @@ class DistributionReportCols:
     cell_count: str = "Cell Count"
     cell_proportion: str = "Cell Proportion"
     convergence: str = "Convergence"
-
-    cost_units: str = None
 
     def __post_init__(self):
         # Attach cost_units where relevant
@@ -63,13 +63,21 @@ class DistributionReportCols:
         ]
 
         for col in relevant_cols:
-            col += " (%s)" % self.cost_units
+            col += f" ({self.cost_units})"
 
     def col_order(self):
         """Return a list of columns, in their expected output order"""
         order = list(dataclasses.astuple(self))
         order.remove(self.cost_units)
         return order
+
+
+@dataclasses.dataclass
+class PlotData:
+    """Packages up plot data for easy access"""
+    x_values: np.ndarray
+    y_values: np.ndarray
+    label: str
 
 
 def cells_in_bounds(
@@ -173,7 +181,7 @@ def normalised_cost_distribution(
 
     normalised_cost_distribution:
         Similar to `cost_distribution`, however the values in each band
-        have been normalised to 1.
+        have been normalised to sum to 1.
 
     See Also
     --------
@@ -262,7 +270,7 @@ def cost_distribution(
     return distribution
 
 
-def _get_cutoff_idx(lst: List[float], cutoff: float) -> int:
+def _get_cutoff_idx(lst: np.ndarray, cutoff: float) -> int:
     """Get the index of the cutoff point in lst
 
     Returns the index of the first value in lst that is
@@ -290,60 +298,96 @@ def _get_cutoff_idx(lst: List[float], cutoff: float) -> int:
     return -i
 
 
-def plot_cost_distribution(
-    target_x: List[float],
-    target_y: List[float],
-    achieved_x: List[float],
-    achieved_y: List[float],
-    convergence: float,
-    cost_params: Dict[str, float],
+def plot_cost_distributions(
+    plot_data: List[PlotData],
     plot_title: str,
-    band_share_cutoff: float = 0.005,
+    band_share_cutoff: float = 0,
+    aspect_ratio: float = 9 / 16,
     path: nd.PathLike = None,
     close_plot: bool = True,
-    x_label: str = None,
-    y_label: str = None,
+    x_axis_label: str = None,
+    y_axis_label: str = None,
     **save_kwargs,
-):
+) -> None:
+    """Plots cost distributions onto a graph
+
+    Parameters
+    ----------
+    plot_data:
+        A list of the data to plot
+
+    plot_title:
+        Title to label the plot with
+
+    band_share_cutoff:
+        The value on the y-axis that all data points must hit before no more
+        data is shown on the x-axis.
+
+    aspect_ratio:
+        Aspect ratio to give the output graph. This is the ratio of the height
+        of the graph to its width. i.e. A value of 2 means the graph will be
+        twice as tall as it is wide.
+
+    path:
+        The path to output the graph to. Passed straight to matplotlib
+        to save. For more detail:
+        https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.savefig.html?highlight=savefig#matplotlib-pyplot-savefig
+
+    close_plot:
+        Whether to close the plot before returning. If True,
+        `matplotlib.pyplot.close()` is called.
+
+    x_axis_label:
+        The label to give to the x axis in the output graph
+
+    y_axis_label:
+        The label to give to the y axis in the output graph
+
+    save_kwargs:
+        Any additional kwargs to pass through when saving the graph. See:
+        https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.savefig.html?highlight=savefig#matplotlib-pyplot-savefig
+
+    Returns
+    -------
+    None
+
+    See Also
+    --------
+    `matplotlib.pyplot.savefig`
+    """
     # Init
     plt.clf()
 
-    # Plot the target data
-    label = "Target | [R2=%.4f]" % convergence
-    sns.lineplot(x=target_x, y=target_y, label=label)
+    if len(plot_data) < 0:
+        return
+    
+    # Plot each data chunk in turn
+    cutoff_vals = list()
+    for data in plot_data:
+        # Plot data
+        axis = sns.lineplot(x=data.x_values, y=data.y_values, label=data.label)
 
-    # Plot the achieved data
-    label = "Achieved |"
-    for name, value in cost_params.items():
-        label += " %s=%.2f" % (name, value)
+        # Figure out graph cutoff
+        if band_share_cutoff > 0:
+            cutoff_idx = _get_cutoff_idx(data.y_values, band_share_cutoff)
+            cutoff_vals.append(data.x_values[cutoff_idx + 1])
+        else:
+            cutoff_vals.append(np.nan)
 
-    axis = sns.lineplot(x=achieved_x, y=achieved_y, label=label)
-    plt.legend(loc="upper right")
-
-    # Figure out where we need to plot up until
-    if band_share_cutoff <= 0:
-        upper_x_lim = None
-    else:
-        # Get the cutoff point indexes
-        target_idx = _get_cutoff_idx(target_y, band_share_cutoff)
-        achieved_idx = _get_cutoff_idx(achieved_y, band_share_cutoff)
-
-        # Keep the larger of the two
-        target_max_x = target_x[target_idx + 1]
-        achieved_max_x = achieved_x[achieved_idx + 1]
-        upper_x_lim = max([target_max_x, achieved_max_x])
-
-        if np.isnan(upper_x_lim) or np.isinf(upper_x_lim):
-            upper_x_lim = None
+    # Finalise cutoff point
+    upper_x_lim = max(cutoff_vals)
+    if np.isnan(upper_x_lim) or np.isinf(upper_x_lim):
+        upper_x_lim = None      # type: ignore
 
     # Label the plot
-    if x_label is not None:
-        axis.set_xlabel(x_label)
-    if y_label is not None:
-        axis.set_ylabel(y_label)
+    if x_axis_label is not None:
+        axis.set_xlabel(x_axis_label)
+    if y_axis_label is not None:
+        axis.set_ylabel(y_axis_label)
     axis.set_title(plot_title)
 
     # Format the plot
+    plt.legend(loc="upper right")
     axis.yaxis.set_major_formatter(PercentFormatter(1.0))
     axis.set_ylim(0, None)
     axis.set_xlim(0, upper_x_lim)
@@ -353,10 +397,9 @@ def plot_cost_distribution(
     axis.grid(which="minor", ls=":")
 
     # Set the aspect ratio
-    ratio = 9 / 16
     x_left, x_right = axis.get_xlim()
     y_low, y_high = axis.get_ylim()
-    axis.set_aspect(abs((x_right - x_left) / (y_low - y_high)) * ratio)
+    axis.set_aspect(abs((x_right - x_left) / (y_low - y_high)) * aspect_ratio)
 
     # Save if a path is given
     if path is not None:
