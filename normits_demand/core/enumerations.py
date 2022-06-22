@@ -162,6 +162,32 @@ class AssignmentModel(enum.Enum):
     NOHAM = "NoHAM"
     NORMS = "NoRMS"
 
+    @classmethod
+    def from_str(cls, model_name: str) -> AssignmentModel:
+        """Parse string and return AssignmentModel if valid.
+
+        Parameters
+        ----------
+        model_name : str
+            Name of the assignment model.
+
+        Returns
+        -------
+        AssignmentModel
+            AssignmentModel enum with the given name.
+
+        Raises
+        ------
+        ValueError
+            If no assignment models exist with `model_name`.
+        """
+        name = model_name.strip().lower()
+        for model in cls:
+            if model.value.lower() == name:
+                return model
+
+        raise ValueError(f"'{model_name}' isn't a valid AssignmentModel")
+
     def get_name(self) -> str:
         """Return the model name."""
         return self.value
