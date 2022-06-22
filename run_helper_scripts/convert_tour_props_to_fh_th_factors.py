@@ -37,7 +37,7 @@ from normits_demand.utils import file_ops
 # ## GLOBALS ## #
 # Running variables
 MODEL_NAME = 'miham'
-NOTEM_ITER = '9.6c-COVID'
+NOTEM_ITER = '9.7-COVID'
 MODE = nd.Mode.CAR
 
 TOUR_PROP_DIR = (

@@ -68,7 +68,6 @@ def main():
     # )
     # trip_end_adjustments = [post_me_adjustments]
     # No trip end adjustments
-    trip_end_adjustments = []
 
     import_builder = MiTEMImportPaths(
         import_home=mitem_import_home,
@@ -90,7 +89,6 @@ def main():
         export_home=mitem_export_home,
         hb_attraction_balance_zoning=hb_attraction_balance_zoning,
         nhb_attraction_balance_zoning=nhb_attraction_balance_zoning,
-        trip_end_adjustments=trip_end_adjustments,
     )
     m.run(
         generate_all=True,
