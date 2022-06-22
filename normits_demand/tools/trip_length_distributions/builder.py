@@ -12,8 +12,8 @@ File purpose:
 """
 # Built-Ins
 import os
-import warnings
 import pathlib
+import warnings
 
 from typing import Any
 
@@ -26,8 +26,10 @@ import normits_demand as nd
 
 from normits_demand import constants as nd_consts
 from normits_demand import core as nd_core
+from normits_demand import cost
 from normits_demand.utils import file_ops
 from normits_demand.utils import timing
+from normits_demand.utils import functional as func_utils
 from normits_demand.utils import string_utils as str_utils
 from normits_demand.tools.trip_length_distributions import enumerations as tld_enums
 
@@ -46,24 +48,6 @@ class TripLengthDistributionBuilder:
     _household_type_to_ca = {
         "hh_type": [1, 2, 3, 4, 5, 6, 7, 8],
         "ca": [1, 2, 1, 2, 2, 1, 2, 2],
-    }
-
-    _a_gor_from = pd.DataFrame(
-        {
-            "agg_gor_from": [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
-            "TripOrigGOR_B02ID": [1, 2, 3, 4, 6, 7, 8, 5, 9, 10, 11],
-        }
-    )
-    _a_gor_to = pd.DataFrame(
-        {
-            "agg_gor_to": [1, 2, 3, 4, 4, 4, 4, 5, 5, 5, 6],
-            "TripDestGOR_B02ID": [1, 2, 3, 4, 6, 7, 8, 5, 9, 10, 11],
-        }
-    )
-
-    _tfn_at_to_agg_at = {
-        "tfn_at": [1, 2, 3, 4, 5, 6, 7, 8],
-        "agg_tfn_at": [1, 1, 2, 2, 3, 3, 4, 4],
     }
 
     segment_treatment = {
@@ -131,15 +115,15 @@ class TripLengthDistributionBuilder:
 
         print(f"Loading processed NTS trip length data from {self.tlb_import_path}...")
         self.nts_import = pd.read_csv(self.tlb_import_path)
-        if trip_miles_col in list(self.nts_import):
-            self.trip_miles_col = trip_miles_col
-        else:
-            raise ValueError(f"Given trip miles col {trip_miles_col} not in NTS data")
 
-        if trip_count_col in list(self.nts_import):
-            self.trip_count_col = trip_count_col
-        else:
+        # Validate needed columns exist
+        if trip_miles_col not in list(self.nts_import):
+            raise ValueError(f"Given trip miles col {trip_miles_col} not in NTS data")
+        if trip_count_col not in list(self.nts_import):
             raise ValueError(f"Given trip count col {trip_count_col} not in NTS data")
+
+        self.trip_distance_col = trip_miles_col
+        self.trip_count_col = trip_count_col
 
     @staticmethod
     def _apply_od_geo_filter(
@@ -236,83 +220,81 @@ class TripLengthDistributionBuilder:
 
         return output_dat
 
-    def _build_band_subset(
+    def _build_cost_distribution(
         self,
-        seg_sub: pd.DataFrame,
-        bands: pd.DataFrame,
+        data: pd.DataFrame,
+        band_edges: np.ndarray,
         output_cost_units: nd_core.CostUnits,
-        band_rounding: int = 2,
-    ):
-        """
-        Take a set of NTS data and distribute it to a set of given bands,
+        trip_count_col: str = None,
+        trip_dist_col: str = None,
+    ) -> cost.CostDistribution:
+        """Generates a CostDistribution from a dataframe of data and bands
+
+        Distributes `data` between `band_edges`,
         counting trips per band and mean trip length per band.
 
         Parameters
         ----------
-        seg_sub: pd.DataFrame
-            DataFrame of NTS data, sub refers to the fact this should have
-            been filtered down by this point in the process
+        data:
+            The data to convert into a `CostDistribution`. Must contain the
+            columns: `trip_count_col`, `trip_miles_col`
 
-        bands: pd.DataFrame
-            DataFrame of target bands
+        band_edges:
+            The edges to use for each band in the distribution. E.g.
+            `[1, 2, 3]` defines 2 bands: 1->2 and 2->3
 
         output_cost_units:
-            The cost units to use in the output. The data will be multiplied
-            by a constant to convert.
+            The cost units to convert the data to from `self.input_cost_units`
 
-        band_rounding: int:
-            Number of decimal places to round bands to after conversion
-            Currently not handled outside of private function so essentially
-            hard coded with a toggle option for future
+        trip_count_col:
+            The name of the column in `data` containing the count of trips
+            being made.
+
+        trip_dist_col:
+            The name of the column in `data` containing the distance of trips
+            being made. This should be in `self.input_cost_units`
 
         Returns
-        ----------
-        out_frame:
-            Import bands DataFrame with appended trip and distance totals
+        -------
+        cost_distribution:
+            A `CostDistribution` storing all the cost distribution data
         """
-        # Rename to output units
+        # Init
+        data = data.copy()
+        trip_count_col = self.trip_count_col if trip_count_col is None else trip_count_col
+        trip_dist_col = self.trip_distance_col if trip_dist_col is None else trip_dist_col
+
+        # Convert distances to output cost
         conv_factor = self.input_cost_units.get_conversion_factor(output_cost_units)
+        data[trip_dist_col] *= conv_factor
 
-        loc_bands = bands.copy()
+        # Calculate values for each band
+        all_band_trips = list()
+        all_band_mean_cost = list()
+        for lower, upper in func_utils.pairwise(band_edges):
+            # Filter to trips in this band
+            mask = (data[trip_dist_col] > lower) & (data[trip_dist_col] < upper)
+            band_data = data[mask].copy()
 
-        # Iterate over lines in target bands copy (don't change master)
-        for line, threshold in loc_bands.iterrows():
-            tlb_sub = seg_sub.copy()
-
-            lower = threshold["lower"]
-            upper = threshold["upper"]
-
-            # Simple filter subset to get trip pots
-            tlb_sub = tlb_sub[tlb_sub[self.trip_miles_col] >= lower].reset_index(drop=True)
-            tlb_sub = tlb_sub[tlb_sub[self.trip_miles_col] < upper].reset_index(drop=True)
-
-            # total trips is row wise sum
-            total_trips = tlb_sub[self.trip_count_col].sum()
-
-            # mean miles is a sum product of trips * distance
-            mean_miles = sum(tlb_sub[self.trip_miles_col] * tlb_sub[self.trip_count_col])
-            if total_trips <= 0:
-                mean_miles = np.mean([lower, upper])
+            # Calculate mean miles and total trips
+            band_trips = band_data[trip_count_col].values.sum()
+            band_distance = np.sum(
+                band_data[trip_count_col].values * band_data[trip_dist_col].values
+            )
+            if band_distance <= 0:
+                band_mean_cost = np.mean([lower, upper])
             else:
-                mean_miles /= total_trips
-            # Value adjusted for target distance
-            mean_val = mean_miles * conv_factor
+                band_mean_cost = band_distance / band_trips
 
-            loc_bands.loc[line, f"mean_{output_cost_units.value}"] = mean_val
-            loc_bands.loc[line, "total_trips"] = total_trips
+            all_band_trips.append(band_trips)
+            all_band_mean_cost.append(band_mean_cost)
 
-        # Derive distribution factors
-        loc_bands["dist"] = loc_bands["total_trips"] / loc_bands["total_trips"].sum()
-
-        # Multiply bands by dist constant to get target units
-        loc_bands["lower"] *= conv_factor
-        loc_bands["upper"] *= conv_factor
-
-        # Round by target value
-        loc_bands["lower"] = loc_bands["lower"].round(decimals=band_rounding)
-        loc_bands["upper"] = loc_bands["upper"].round(decimals=band_rounding)
-
-        return loc_bands
+        return cost.CostDistribution(
+            edges=band_edges,
+            band_trips=np.array(all_band_trips),
+            cost_units=output_cost_units,
+            band_mean_cost=np.array(all_band_mean_cost),
+        )
 
     def _filter_segment(
         self,
@@ -391,40 +373,6 @@ class TripLengthDistributionBuilder:
             raise ValueError(f"Don't know how to filter method {method!r}")
 
         return nts_sub
-
-    @staticmethod
-    def _append_segment_names(tld: pd.DataFrame, seg_descs):
-        """
-        Add the segment descriptions and names back into the distribution,
-        so they're readable in aggregate and auditable against what the
-        folder says they are
-
-        Parameters
-        ----------
-        tld:
-            Run dataframe of a distribution
-        seg_descs:
-            Dictionary of segment names and classifications
-
-        Returns
-        -------
-        tld: pd.DataFrame
-            input TLD with description columns
-        """
-
-        # Append segment sub-categories to tld matrix
-        # retain order
-        index_order = ["lower", "upper"]
-        end_cols = list(tld)[2:]
-        for segment, seg_val in seg_descs.items():
-            tld[segment] = seg_val
-            index_order.append(segment)
-
-        index_order += end_cols
-
-        tld = tld.reindex(index_order, axis=1)
-
-        return tld
 
     def _build_single_tld_name(self, seg_descs: dict[str, Any], csv: bool = False) -> str:
 
@@ -821,7 +769,7 @@ class TripLengthDistributionBuilder:
         cost_units: nd_core.CostUnits,
         sample_threshold: int = 10,
         verbose: bool = True,
-    ):
+    ) -> tuple[dict[str, cost.CostDistribution], pd.DataFrame, pd.DataFrame]:
         """
         Build a set of trip length distributions
 
@@ -848,21 +796,25 @@ class TripLengthDistributionBuilder:
 
         Returns
         ----------
-        tld_dict: dict
-            A dictionary with {description of tld: tld DataFrame}
-        loc_segs: str
-            input segments with reported number of records and status
-        """
+        name_to_distribution:
+            A dictionary with {tld_name: CostDistribution}
 
-        tld_dict = dict()
+        sample_size_log:
+            input segments with reported number of records and status
+
+        full_export:
+            A pandas dataframe containing all the generated TLDs alongside
+            their segment_params
+        """
+        # Init
+        name_to_distribution = dict()
+        sample_size_log = segments.copy()
 
         # Handle lookup exceptions
         self._correct_defaults(segments)
 
-        # create copy of master segments
-        loc_segs = segments.copy()
-
-        # Iterate over each individual segment descriptions
+        # Generate a TLD for each segment
+        full_export = list()
         for row_num, segment_params in enumerate(segments.to_dict(orient="records")):
             seg_sub = input_dat.copy()
             for segment, seg_value in segment_params.items():
@@ -876,7 +828,7 @@ class TripLengthDistributionBuilder:
                 )
 
             n_records = len(seg_sub)
-            loc_segs.loc[row_num, "records"] = n_records
+            sample_size_log.loc[row_num, "records"] = n_records
 
             if verbose:
                 print(f"Filtered for {segment_params}")
@@ -884,31 +836,36 @@ class TripLengthDistributionBuilder:
 
             # Do no more, move onto next segment
             if n_records <= sample_threshold:
-                loc_segs.loc[row_num, "status"] = "Failed"
+                sample_size_log.loc[row_num, "status"] = "Failed"
                 warnings.warn(
                     "Not enough data was returned to create a TLD for segment "
                     f"{segment_params}. Lower limit set to {sample_threshold}, "
                     f"but only {n_records} were found. No TLD will be generated."
                 )
                 continue
-            loc_segs.loc[row_num, "status"] = "Passed"
+            sample_size_log.loc[row_num, "status"] = "Passed"
 
-            # build tld
-            tld = self._build_band_subset(
-                seg_sub=seg_sub,
-                bands=bands,
+            # Build into a cost distribution
+            min_bounds = bands["lower"].values
+            max_bounds = bands["upper"].values
+            tld = self._build_cost_distribution(
+                data=seg_sub,
+                band_edges=np.array([min_bounds[0]] + max_bounds.tolist()),
                 output_cost_units=cost_units,
             )
 
-            # Append segment names to output frame
-            tld = self._append_segment_names(tld, segment_params)
+            # Add to the full export
+            full_export.append(tld.to_df(additional_cols=segment_params))
 
             # build single tld name
             tld_name = self._build_single_tld_name(segment_params)
 
-            tld_dict.update({tld_name: tld})
+            name_to_distribution.update({tld_name: tld})
 
-        return tld_dict, loc_segs
+        # consolidate the full export into one DF
+        full_export = pd.concat(full_export, ignore_index=True)
+
+        return name_to_distribution, sample_size_log, full_export
 
     def generate_run_log(
         self,
@@ -1029,17 +986,17 @@ class TripLengthDistributionBuilder:
         sample_threshold: int = 10:
             Sample below which to not bother running an application to bands
             Smallest possible number you would consider representative
-            Failures captured in output report
+            Failures captured in output sample_size_log
 
         verbose: bool = True,
             Echo to terminal or not
 
         Returns
         ----------
-        tld_dict: dict
+        name_to_distribution: dict
             A dictionary with {description of tld: tld DataFrame}
         full_export: pd.DataFrame
-            A compiled, concatenated version of the DataFrames in tld_dict
+            A compiled, concatenated version of the DataFrames in name_to_distribution
 
         Future Improvements
         ----------
@@ -1092,7 +1049,7 @@ class TripLengthDistributionBuilder:
         )
 
         # Build tld dictionary, return a proper name for the distributions
-        tld_dict, report = self.build_tld(
+        name_to_distribution, sample_size_log, full_export = self.build_tld(
             input_dat=input_dat,
             bands=bands,
             segments=segments,
@@ -1101,7 +1058,8 @@ class TripLengthDistributionBuilder:
             verbose=verbose,
         )
 
-        # ## WRITE OUT A RUN LOG ## #
+        # ## WRITE THINGS OUT ## #
+        # Write the run log
         run_log_str = self.generate_run_log(
             geo_area=geo_area,
             trip_filter_type=trip_filter_type,
@@ -1115,25 +1073,19 @@ class TripLengthDistributionBuilder:
         with open(output_path, "w") as f:
             f.write(run_log_str)
 
-        # ## BUILD A FULL EXPORT ## #
-        full_export = list()
-        for dat in tld_dict.values():
-            full_export.append(dat)
-        full_export = pd.concat(full_export, ignore_index=True)
-
-        # Write report
+        # Write sample_size_log
         _seg_report_fname = self._seg_report_fname.format(seg_name=segmentation_name)
-        report_path = os.path.join(tld_out_path, _seg_report_fname)
-        file_ops.safe_dataframe_to_csv(report, report_path, index=False)
+        report_path = tld_out_path / _seg_report_fname
+        file_ops.safe_dataframe_to_csv(sample_size_log, report_path, index=False)
 
         # Write final compiled tld
-        full_export_path = os.path.join(tld_out_path, self._full_export_fname)
+        full_export_path = tld_out_path / self._full_export_fname
         file_ops.safe_dataframe_to_csv(full_export, full_export_path, index=False)
 
         # Write individual tlds
-        for path, df in tld_dict.items():
+        for path, df in name_to_distribution.items():
             csv_path = path + ".csv"
             individual_file = os.path.join(tld_out_path, csv_path)
             file_ops.safe_dataframe_to_csv(df, individual_file, index=False)
 
-        return tld_dict, full_export
+        return name_to_distribution, full_export

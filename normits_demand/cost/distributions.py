@@ -15,12 +15,15 @@ from __future__ import annotations
 # Built-Ins
 import os
 
+from typing import Any
+
 # Third Party
 import numpy as np
 import pandas as pd
 
 # Local Imports
 from normits_demand import core as nd_core
+from normits_demand.utils import file_ops
 
 # TODO(BT): Build class to handle a segmentationLevel collection of these
 
@@ -129,13 +132,20 @@ class CostDistribution:
         self.trips_col = col_names[4]
         self.shares_col = col_names[5]
 
-    def to_df(self) -> pd.DataFrame:
+    def to_df(self, additional_cols: dict[str, Any] = None) -> pd.DataFrame:
         """Builds a pandas DataFrame of this cost distribution
+
+        Parameters
+        ----------
+        additional_cols:
+            A dictionary of columns to additionally add to the generated
+            DataFrame. Dictionary should be {col_name: col_value}.
 
         Returns
         -------
         cost_distribution_df:
-            A pandas DataFrame of the cost distribution data being used.
+            A pandas DataFrame of the cost distribution data being used. If
+            `additional_cols` is set, those columns are also included.
             Columns are named after internal variables:
                 self.min_bounds_col
                 self.max_bounds_col
@@ -144,19 +154,32 @@ class CostDistribution:
                 self.trips_col
                 self.shares_col
         """
-        return pd.DataFrame(
-            {
-                self.min_bounds_col: self.min_bounds,
-                self.max_bounds_col: self.max_bounds,
-                self.mid_bounds_col: self.mid_bounds,
-                self.mean_col: self.band_means,
-                self.trips_col: self.band_trips,
-                self.shares_col: self.band_shares,
-            }
-        )
+        # Init
+        df_dict = dict()
 
-    def to_csv(self, path: os.PathLike) -> None:
+        # Add in additional cols if defined
+        if additional_cols is not None:
+            df_dict.update(additional_cols)
+
+        # Add in the defined columns
+        df_dict.update({
+            self.min_bounds_col: self.min_bounds,
+            self.max_bounds_col: self.max_bounds,
+            self.mid_bounds_col: self.mid_bounds,
+            self.mean_col: self.band_means,
+            self.trips_col: self.band_trips,
+            self.shares_col: self.band_shares,
+        })
+
+        return pd.DataFrame(df_dict)
+
+    def to_csv(self, path: os.PathLike, **kwargs) -> None:
         """Builds a csv of this cost distribution and writes to disk
+
+        Internally, translates into a pandas DataFrame using `self.to_df()`,
+        then uses pandas functionality to write to disk.
+        **kwargs are used to pass any additional arguments to the
+        `df.to_csv()` call.
 
         Parameters
         ----------
@@ -167,7 +190,11 @@ class CostDistribution:
         -------
         None
         """
-        self.to_df().to_csv(path, index=False)
+        file_ops.safe_dataframe_to_csv(
+            df=self.to_df(),
+            out_path=path,
+            **dict(kwargs, index=False),
+        )
 
     @staticmethod
     def from_csv(
