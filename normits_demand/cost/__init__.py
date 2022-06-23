@@ -12,3 +12,5 @@ File purpose:
 """
 from normits_demand.cost.cost_functions import BuiltInCostFunction
 from normits_demand.cost.cost_functions import CostFunction
+
+from normits_demand.cost.distributions import CostDistribution

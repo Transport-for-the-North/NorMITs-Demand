@@ -29,6 +29,7 @@ from typing import List
 from typing import Tuple
 from typing import Union
 from typing import Iterable
+from typing import Sequence
 
 # Third Party
 import numpy as np
@@ -652,7 +653,7 @@ def _copy_files_internal(
 
 
 def copy_and_rename_files(
-    files: List[Tuple[os.PathLike, os.PathLike]],
+    files: Sequence[Tuple[os.PathLike, os.PathLike]],
     process_count: int = consts.PROCESS_COUNT,
 ) -> None:
     """
@@ -685,6 +686,7 @@ def copy_and_rename_files(
         kwargs=kwarg_list,
         process_count=process_count,
     )
+
 
 def copy_defined_files(
     copy_definition: pd.DataFrame,
