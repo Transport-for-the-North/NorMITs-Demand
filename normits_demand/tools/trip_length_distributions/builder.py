@@ -13,7 +13,6 @@ File purpose:
 # Built-Ins
 import os
 import pathlib
-import warnings
 
 from typing import Any
 
@@ -45,37 +44,10 @@ class TripLengthDistributionBuilder:
     _full_export_fname = "2. full_export.csv"
     _seg_report_fname = "3. {seg_name}_report.csv"
 
-    # HB/NHB definitions
-    _hb_purposes = [1, 2, 3, 4, 5, 6, 7, 8]
-    _nhb_purposes = [11, 12, 13, 14, 15, 16, 18]
-
     # Maps for non-classified categories
     _household_type_to_ca = {
         "hh_type": [1, 2, 3, 4, 5, 6, 7, 8],
         "ca": [1, 2, 1, 2, 2, 1, 2, 2],
-    }
-
-    segment_treatment = {
-        "trip_origin": "trip_origin",
-        "uc": "uc",
-        "p": "int",
-        "m": "int",
-        "soc": "seg",
-        "ns": "seg",
-        "ca": "int",
-        "tp": "tp",
-    }
-    segment_order = list(segment_treatment.keys())
-
-    # Correspondences between segment names and NTS data names
-    tld_to_nts_names = {
-        "m": "main_mode",
-        "uc": "p",
-        "p": "p",
-        "soc": "soc",
-        "ns": "ns",
-        "tp": "start_time",
-        "trip_origin": "trip_direction",
     }
 
     def __init__(
@@ -353,7 +325,11 @@ class TripLengthDistributionBuilder:
         # Apply
         return pd_utils.filter_df(df=nts_data, df_filter=df_filter)
 
-    def _generate_tld_name(self, segmentation: nd_core.SegmentationLevel, segment_params: dict[str, Any],) -> str:
+    @staticmethod
+    def _generate_tld_name(
+        segmentation: nd_core.SegmentationLevel,
+        segment_params: dict[str, Any],
+    ) -> str:
         """Wrapper around `segmentation.generate_file_name()` for consistent filenames"""
         return segmentation.generate_file_name(
             segment_params,
@@ -361,7 +337,9 @@ class TripLengthDistributionBuilder:
         )
 
     def _handle_sample_period(
-        self, input_dat: pd.DataFrame, sample_period: tld_enums.SampleTimePeriods,
+        self,
+        input_dat: pd.DataFrame,
+        sample_period: tld_enums.SampleTimePeriods,
     ) -> pd.DataFrame:
         """
         Function to subset whole dataset for time periods
@@ -482,8 +460,9 @@ class TripLengthDistributionBuilder:
 
         # Generate the filenames
         fnames = list()
-        for segment_params in segments.to_dict(orient="records"):
-            fnames.append(self._build_single_tld_name(segment_params, csv=True))
+        for segment_params in segmentation:
+            tld_name = self._generate_tld_name(segmentation, segment_params)
+            fnames.append(f"{tld_name}.csv")
 
         return base_path, fnames
 
@@ -890,7 +869,7 @@ class TripLengthDistributionBuilder:
         Add more functionality for time period handling.
         Add better error control and type limiting for inputs.
         """
-        # TODO: Pass in
+        # TODO(BT): Pass in - NEED to rewrite class first!
         self.purpose_col = "p"
         self.tp_col = "tp"
         self.trip_origin_col = "trip_origin"
@@ -981,6 +960,6 @@ class TripLengthDistributionBuilder:
 
             # Graph
             path = graph_out_path / f"{name}.png"
-            tld.to_graph(path, band_shares=True, label=name)
+            tld.to_graph(path, band_shares=True, plot_title=name)
 
         return name_to_distribution, full_export
