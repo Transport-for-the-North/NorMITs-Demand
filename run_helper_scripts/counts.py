@@ -20,8 +20,8 @@ class Constants:
     LAD: Local authority districts shapefile
     dash_counts: The existing counts to be scaled up using this process
     """
-    years = {'base year':2015,
-            'target_year':2018}
+
+    years = {"base year": 2015, "target_year": 2018}
     folder = r"C:\Projects\MidMITS"
     LAD = gpd.read_file(os.path.join(folder, r"GIS\LAD\Midlands_LAD.shp"))
     county = gpd.read_file(
@@ -68,6 +68,7 @@ class Constants:
         "PM HGV": "PM_HGV_growth",
     }
 
+
 def csv_as_gdf(path: str, name: str, crs: int) -> gpd.GeoDataFrame:
     """
     Function to read in a csv with coordinate columns and output a geodataframe
@@ -85,7 +86,12 @@ def csv_as_gdf(path: str, name: str, crs: int) -> gpd.GeoDataFrame:
     return gdf
 
 
-def growthfactors(month: int, zone_system: dict, base_year: int = Constants.years['base year'], target_year: int = Constants.years['target year']):
+def growthfactors(
+    month: int,
+    zone_system: dict,
+    base_year: int = Constants.years["base year"],
+    target_year: int = Constants.years["target year"],
+):
     """
     Need to read in counts data for 2018 and 2021, from wherever possible - webTRIS, dashboard, DfT etc.
     Seperate data by LAD the counts are located within, and calculate growth factors between years for all
@@ -127,7 +133,9 @@ def growthfactors(month: int, zone_system: dict, base_year: int = Constants.year
     )
     gdf_base.columns = combined
     gdf_target.columns = combined
-    df = pd.concat([gdf_base, gdf_target], keys=[str(base_year), str(target_year)], axis=1, join="inner")
+    df = pd.concat(
+        [gdf_base, gdf_target], keys=[str(base_year), str(target_year)], axis=1, join="inner"
+    )
     diff = df.stack([1, 2]).groupby(["NAME", "Time Period", "Vehicle Type"]).sum()
     diff["Growth"] = (diff[str(target_year)] - diff[str(base_year)]) / diff[str(base_year)]
     diff.to_csv(
@@ -139,7 +147,10 @@ def growthfactors(month: int, zone_system: dict, base_year: int = Constants.year
         mode="w",
     )
     writer_full = pd.ExcelWriter(
-        os.path.join(c.folder, f"WebTRIS_summary_{base_year}_to_{target_year}_{month}_{zone_system['file name']}.xlsx"),
+        os.path.join(
+            c.folder,
+            f"WebTRIS_summary_{base_year}_to_{target_year}_{month}_{zone_system['file name']}.xlsx",
+        ),
         engine="openpyxl",
         mode="w",
     )
