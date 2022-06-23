@@ -1017,7 +1017,8 @@ class TripLengthDistributionBuilder:
             sample_period=sample_period,
             cost_units=cost_units,
         )
-        file_ops.create_folder(tld_out_path, verbose_create=False)
+        graph_out_path = tld_out_path / "graphs"
+        file_ops.create_folder(graph_out_path, verbose_create=False)
         print(f"Generating TLD at: {tld_out_path}...")
 
         # Try read in the bands and segmentation
@@ -1089,7 +1090,7 @@ class TripLengthDistributionBuilder:
             tld.to_csv(path)
 
             # Graph
-            path = tld_out_path / f"{name}.png"
-            tld.to_graph(path)
+            path = graph_out_path / f"{name}.png"
+            tld.to_graph(path, band_shares=True)
 
         return name_to_distribution, full_export
