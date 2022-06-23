@@ -431,7 +431,7 @@ class ZoningSystem:
         # Instantiate a new object
         return ZoningSystem(**instance_dict)
     
-    def get_metadata(self) -> MetaData:
+    def get_metadata(self) -> ZoningSystemMetaData:
         """
         Gets metadata for a zoning system's shapefile.  At the moment this only consists of
         the name of the zone ID column and the path to where the shapefile is saved
@@ -439,7 +439,7 @@ class ZoningSystem:
             MetaData: The metadata for the zoning system
         """
         import_home = os.path.join(ZoningSystem._zoning_definitions_path, self.name, 'metadata.yml')
-        metadata = MetaData.load_yaml(import_home)
+        metadata = ZoningSystemMetaData.load_yaml(import_home)
         return metadata
 
 
@@ -870,11 +870,11 @@ def get_zoning_system(name: str) -> ZoningSystem:
         external_zones=external,
     )
 
-class MetaData(BaseConfig):
+class ZoningSystemMetaData(BaseConfig):
     """
     Class to store metadata relating to zoning systems in normits_demand
     Args:
         BaseConfig (_type_): _description_
     """
-    id_col: str
-    path: Path
+    shapefile_id_col: str
+    shapefile_path: Path
