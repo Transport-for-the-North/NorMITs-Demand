@@ -1289,7 +1289,10 @@ def _autoplot_func(
     years: list,
     df: pd.DataFrame,
     zone_shape: gpd.GeoDataFrame,
-    out_folder=Path,
+    out_folder: Path,
+    hb_nhb: str,
+    pa: str,
+    iter: str,
     level: str = None,
     pct=False,
     diff=False,
@@ -1301,7 +1304,7 @@ def _autoplot_func(
         elif diff:
             growth = df[years[i + 1]] - df[years[i]]
         with backend_pdf.PdfPages(
-            os.path.join(out_folder, f"pct_plot_{years[i]}_{level}.pdf")
+            os.path.join(out_folder, f'iter{iter}', 'NTEM', f'{hb_nhb}_{pa}','reports', f"pct_plot_{years[i]}_{level}.pdf")
         ) as pdf:
             if plot_type == "heatmap":
                 cols = growth.columns
@@ -1368,8 +1371,8 @@ def plot_tripend_iters(
     segments = seg.naming_order
     index = [zone_index] + segments
     zone_shape = (
-        gpd.read_file(metadata.shapefile_path)[[metadata.id_col, "geometry"]]
-        .rename(columns={metadata.id_col: f"{zone_name}_zone_id"})
+        gpd.read_file(metadata.shapefile_path)[[metadata.shapefile_id_col, "geometry"]]
+        .rename(columns={metadata.shapefile_id_col: f"{zone_name}_zone_id"})
         .set_index(f"{zone_name}_zone_id")
     )
     if years:
@@ -1380,10 +1383,10 @@ def plot_tripend_iters(
                     nd.DVector.load(
                         os.path.join(
                             path,
-                            scenario,
-                            "NTEM",
-                            f"{hb_nhb}_{pa}",
-                            f"{hb_nhb}_msoa_notem_segmented_{year}_dvec.pkl",
+                            f'iter{scenario}',
+                            'NTEM',
+                            f'{hb_nhb}_{pa}',
+                            f'{hb_nhb}_msoa_notem_segmented_{year}_dvec.pkl',
                         )
                     )
                     .translate_zoning(zone)
@@ -1416,14 +1419,15 @@ def plot_tripend_iters(
                 _autoplot_func(
                     years=years,
                     zone_shape=zone_shape,
-                    out_folder=Path(
-                        r"C:\Projects\MidMITS\Python\outputs\ApplyMND\iter9.7-COVID\NTEM\Plots"
-                    ),
+                    out_folder=os.path.join(path),
                     pct=pct,
                     diff=diff,
                     df=df,
                     level=level,
                     plot_type=plot_type,
+                    hb_nhb=hb_nhb,
+                    pa=pa,
+                    iter=scenario
                 )
         else:
             data = {}
@@ -1453,15 +1457,17 @@ def plot_tripend_iters(
                 data.values(),
             )
             _autoplot_func(
-                years=years,
-                zone_shape=zone_shape,
-                out_folder=Path(
-                    r"C:\Projects\MidMITS\Python\outputs\ApplyMND\iter9.7-COVID\NTEM\Plots"
-                ),
-                pct=pct,
-                diff=diff,
-                df=df,
-                plot_type=plot_type,
+            years=years,
+            zone_shape=zone_shape,
+            out_folder=os.path.join(path),
+            pct=pct,
+            diff=diff,
+            df=df,
+            level=level,
+            plot_type=plot_type,
+            hb_nhb=hb_nhb,
+            pa=pa,
+            iter=scenario,
             )
 
 
