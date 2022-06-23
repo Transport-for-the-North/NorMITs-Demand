@@ -29,6 +29,7 @@ from typing import Dict
 from typing import Tuple
 from typing import Union
 from typing import Optional
+from typing import Iterable
 
 # Third Party
 import pandas as pd
@@ -110,7 +111,7 @@ class SegmentationLevel:
         "segmentations",
     ))
     segment_group_dir = segment_definitions_path / "_segment_groups"
-    valid_segment_subdirs = ["notem", "tram", "dimo", "custom"]
+    valid_segment_subdirs = ["notem", "tram", "dimo", "user_class", "custom"]
 
     # Paths to specific files
     _multiply_definitions_path = segment_definitions_path / "multiply.csv"
@@ -172,10 +173,9 @@ class SegmentationLevel:
         for col in self.naming_order:
             if col not in valid_segments:
                 raise SegmentationError(
-                    "Error while instantiating a SegmentationLevel object."
-                    "Cannot find column '%s' of naming order in the given "
-                    "valid segments dataframe!"
-                    % col
+                    f"Error while instantiating a SegmentationLevel object. "
+                    f"Cannot find column '{col}' of naming order in the "
+                    f"given valid segments dataframe!"
                 )
 
         # Make sure the df is just the segment columns
@@ -185,22 +185,24 @@ class SegmentationLevel:
         missing_types = set(self.naming_order) - set(self._segment_types.keys())
         if len(missing_types) > 0:
             raise SegmentationError(
-                "Not all columns have been accounted for in segment types. "
-                "Missing defined types for the following segments: %s"
-                % missing_types
+                f"Not all columns have been accounted for in segment types. "
+                f"Missing defined types for the following segments: "
+                f"{missing_types}"
             )
 
         # Convert the segment types to the defined types
         for col, col_type in self._segment_types.items():
             try:
-                self._segments[col] = self._segments[col].astype(col_type)
+                if col_type in (int, float):
+                    self._segments[col] = pd.to_numeric(self._segments[col])
+                else:
+                    self._segments[col] = self._segments[col].astype(col_type)
             except ValueError:
                 raise ValueError(
-                    "Cannot convert segment values %s to type %s. "
+                    f"Cannot convert segment values {col} to type {col_type}. "
                     "Maybe the segment needs to be defined with a different "
-                    "type? See above for specific exception which "
-                    "caused this one."
-                    % (col, col_type)
+                    "type? See above for specific exception which caused "
+                    "this one."
                 )
 
         # ## BUILD SEGMENT NAMING ## #
@@ -1717,7 +1719,7 @@ class SegmentationLevel:
         # If we are here, then must be True
         return True
 
-    def validate_contains_all_segments(self, lst: List[str]) -> None:
+    def validate_contains_all_segments(self, lst: Iterable[str]) -> None:
         """Raises an error is lst is not valid
 
         Raises an error if lst is not a complete list of all segments in
@@ -2060,7 +2062,16 @@ class SegmentationLevel:
         # Generate the segment_params string
         segment_parts = list()
         for segment_name in self.naming_order:
-            segment_parts += [f"{segment_name}{segment_params[segment_name]}"]
+            seg_type = self._segment_types[segment_name]
+
+            if seg_type == str:
+                # Don't include the name when the value is a string too
+                segment_parts += [f"{seg_type(segment_params[segment_name])}"]
+
+            else:
+                # Only include if not NaN
+                if not np.isnan(segment_params[segment_name]):
+                    segment_parts += [f"{segment_name}{seg_type(segment_params[segment_name])}"]
 
         return template.format(segment_params='_'.join(segment_parts))
 
