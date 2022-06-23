@@ -29,7 +29,7 @@ ACCESSDRIVER = "{Microsoft Access Driver (*.mdb, *.accdb)}"
 
 
 @dataclass
-class params:
+class Params:
     """
     All of these constants should work as of 25/04/2022.  Updates may be necessary with newer versions of NTEM
     base_year:This is the year which you have TfN landuse data for and want to scale up
@@ -71,7 +71,7 @@ def read_tfn() -> dict:
         _dict_: A dictionary with keys "emp" and "pop" accessing necessary data on 
         employment and population landuse
     """
-    p = params
+    p = Params
     lookup_pop = pd.read_excel(
         path.join(p.data_source, p.lookup_dir),
         sheet_name="TfN Traveller Types",
@@ -127,7 +127,7 @@ def read_NTEM(year: int) -> pd.DataFrame:
     Returns:
         pd.DataFrame: The NTEM data for that year with "ZoneID" as index, and employment/population categories as columns
     """
-    p = params
+    p = Params
     file_name = f"CTripEnd7_{str(year)}_run_{NTEMFILES[str(year)]}.accdb"
     conn = pyodbc.connect(
         f"Driver={ACCESSDRIVER};DBQ={path.join(p.data_source,p.NTEM_input_dir,file_name)};"
@@ -156,7 +156,7 @@ def int_year(
     Returns:
         pd.DataFrame: NTEM data for target year
     """
-    p = params
+    p = Params
     if str(target_year) in NTEMFILES.keys():
         return pd.read_csv(
             path.join(p.data_source, p.NTEM_output_dir, f"{target_year}.csv")
@@ -211,7 +211,7 @@ def func(
     Returns:
         pd.DataFrame: NTEM dataframe in TfN zone system
     """
-    p = params
+    p = Params
     corr = (
         pd.read_csv(path.join(p.data_source, p.corr_dict[sector]))
         .set_index("ntem_zone_id")
@@ -227,10 +227,10 @@ def func(
 
 def apply_growth(
     df: pd.DataFrame,
-    base=params.years["base year"],
-    target=params.years["target year"],
-    low=params.years["base year lower"],
-    high=params.years["target year higher"],
+    base=Params.years["base year"],
+    target=Params.years["target year"],
+    low=Params.years["base year lower"],
+    high=Params.years["target year higher"],
 ) -> pd.DataFrame:
     """_summary_
         Reads a dataframe with data for base and target years and produces a 'factor' column used to apply growth to TfN landuse.
@@ -264,7 +264,7 @@ def process_df(sector: str) -> pd.DataFrame:
     Args:
         sector (str): 'pop' or 'emp'
     """
-    p = params
+    p = Params
 
     df_base = func(
         sector, p.years["base year"], p.years["base year lower"], p.years["base year higher"]
@@ -300,7 +300,7 @@ def process_df(sector: str) -> pd.DataFrame:
 
 
 def final(sector: str):
-    p = params
+    p = Params
     growth_df = process_df(sector).drop(["pct", "growth"], axis=1)
     tfn_dict = read_tfn()
     tfn_data = tfn_dict[sector]["df"]
@@ -325,7 +325,7 @@ def apply_abs(sector: str) -> pd.DataFrame:
     Returns:
         dataframe: returns a dataframe with more columns than necessary scaled to target year
     """
-    p = params
+    p = Params
     tfn_dict = read_tfn()[sector]
     tfn_data = tfn_dict["df"]
     NTEM = func(
@@ -361,7 +361,7 @@ def apply_abs(sector: str) -> pd.DataFrame:
 
 
 def main():
-    p = params
+    p = Params
     for sector in ["emp", "pop"]:
         dic = read_tfn()[sector]
         # cols = ["msoa_zone_id", "tfn_traveller_type", str(p.years['target year'])]

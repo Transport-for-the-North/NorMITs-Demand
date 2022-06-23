@@ -98,6 +98,17 @@ def growthfactors(month: int, seg_level: dict):
     combined = pd.MultiIndex.from_product(
         [period, veh_type], names=["Time Period", "Vehicle Type"]
     )
+    gdf_15 = (
+        gpd.sjoin(
+            csv_as_gdf(c.folder, f"counts\webtris\WebTRIS_Out_2015_{month}_NOM1.csv", 27700),
+            seg_level["shapefile"],
+            how="left",
+            op="within",
+        )
+        .drop(c.drop_cols, axis=1)
+        .set_index(["Id", "NAME"])
+        .drop_duplicates()
+    )
     gdf_18 = (
         gpd.sjoin(
             csv_as_gdf(c.folder, f"counts\webtris\WebTRIS_Out_2018_{month}_NOM1.csv", 27700),
@@ -109,24 +120,13 @@ def growthfactors(month: int, seg_level: dict):
         .set_index(["Id", "NAME"])
         .drop_duplicates()
     )
-    gdf_21 = (
-        gpd.sjoin(
-            csv_as_gdf(c.folder, f"counts\webtris\WebTRIS_Out_2021_{month}_NOM1.csv", 27700),
-            seg_level["shapefile"],
-            how="left",
-            op="within",
-        )
-        .drop(c.drop_cols, axis=1)
-        .set_index(["Id", "NAME"])
-        .drop_duplicates()
-    )
+    gdf_15.columns = combined
     gdf_18.columns = combined
-    gdf_21.columns = combined
-    df = pd.concat([gdf_18, gdf_21], keys=["18", "21"], axis=1, join="inner")
+    df = pd.concat([gdf_15, gdf_18], keys=["15", "18"], axis=1, join="inner")
     diff = df.stack([1, 2]).groupby(["NAME", "Time Period", "Vehicle Type"]).sum()
-    diff["Growth"] = (diff["21"] - diff["18"]) / diff["18"]
+    diff["Growth"] = (diff["18"] - diff["15"]) / diff["15"]
     diff.to_csv(
-        r"C:\Projects\MidMITS\counts\stacked_district" + str(month) + "NOM1.csv"
+        r"C:\Projects\MidMITS\counts\stacked_district_15" + str(month) + "NOM1.csv"
     )  # Outputs to stacked table
     writer = pd.ExcelWriter(
         os.path.join(c.folder, f"growth_stats_{month}{seg_level['file name']}_NOM1.xlsx"),
@@ -134,7 +134,7 @@ def growthfactors(month: int, seg_level: dict):
         mode="w",
     )
     writer_full = pd.ExcelWriter(
-        os.path.join(c.folder, f"WebTRIS_summary_{month}{seg_level['file name']}_NOM1.xlsx"),
+        os.path.join(c.folder, f"WebTRIS_summary_15{month}{seg_level['file name']}_NOM1.xlsx"),
         engine="openpyxl",
         mode="w",
     )
@@ -145,8 +145,8 @@ def growthfactors(month: int, seg_level: dict):
             for period in ["AM", "IP", "PM", "12H"]:
                 for veh in ["All", "Car", "LGV", "HGV"]:
                     seg_df["Growth", period, veh] = (
-                        seg_df["21"][period][veh] - seg_df["18"][period][veh]
-                    ) / seg_df["18"][period][veh]
+                        seg_df["18"][period][veh] - seg_df["15"][period][veh]
+                    ) / seg_df["15"][period][veh]
             stats = seg_df["Growth"].describe()
             stats.to_excel(writer, sheet_name=f"{seg}")
             seg_df.to_excel(writer_full, sheet_name=f"{seg}")
