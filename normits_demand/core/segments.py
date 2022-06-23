@@ -197,13 +197,13 @@ class SegmentationLevel:
                     self._segments[col] = pd.to_numeric(self._segments[col])
                 else:
                     self._segments[col] = self._segments[col].astype(col_type)
-            except ValueError:
+            except ValueError as error:
                 raise ValueError(
                     f"Cannot convert segment values {col} to type {col_type}. "
                     "Maybe the segment needs to be defined with a different "
                     "type? See above for specific exception which caused "
                     "this one."
-                )
+                ) from error
 
         # ## BUILD SEGMENT NAMING ## #
         segments_and_names = self.segments.copy()
@@ -266,6 +266,11 @@ class SegmentationLevel:
     def __len__(self) -> int:
         """Get the length of the segmentation"""
         return len(self.segments)
+
+    def __iter__(self):
+        """Overrides the default implementation"""
+        return self._segments.to_dict(orient='records').__iter__()
+
 
     def _mul_div_segmentation(self,
                               other: SegmentationLevel,
@@ -388,14 +393,6 @@ class SegmentationLevel:
         # Get the division definition
         return_seg_name, join_cols = self._get_divide_definition(other)
         return self._mul_div_segmentation(other, return_seg_name, join_cols)
-
-    def __iter__(self):
-        """Overrides the default implementation"""
-        return self._segments.to_dict(orient='records').__iter__()
-
-    def __len__(self):
-        """Overrides the default implementation"""
-        return len(self.segment_names)
 
     def _read_multiply_definitions(self) -> pd.DataFrame:
         """
@@ -2059,26 +2056,19 @@ class SegmentationLevel:
         # Make sure all segments are in segment_params
         self.validate_contains_all_segments(segment_params.keys())
 
-        # Generate the segment_params string
-        segment_parts = list()
-        for segment_name in self.naming_order:
-            seg_type = self._segment_types[segment_name]
+        segment_str = self.generate_template_segment_str(
+            naming_order=self.naming_order,
+            segment_params=segment_params,
+            segment_types=self._segment_types,
+        )
 
-            if seg_type == str:
-                # Don't include the name when the value is a string too
-                segment_parts += [f"{seg_type(segment_params[segment_name])}"]
-
-            else:
-                # Only include if not NaN
-                if not np.isnan(segment_params[segment_name]):
-                    segment_parts += [f"{segment_name}{seg_type(segment_params[segment_name])}"]
-
-        return template.format(segment_params='_'.join(segment_parts))
+        return template.format(segment_str)
 
     @staticmethod
     def generate_template_segment_str(
         naming_order: List[str],
         segment_params: Dict[str, Any],
+        segment_types: Dict[str, type] = None,
     ) -> str:
         """Generate the string of segment params to use with a template
 
@@ -2095,9 +2085,13 @@ class SegmentationLevel:
             gotten from an instance of `SegmentationLevel.naming_order`.
 
         segment_params:
-            A dictionary of {segment_name: segment_value}. All segment_names
-            from this segmentation must be contained in segment_params. An
-            error will be thrown if any are missing.
+            A dictionary of `{segment_name: segment_value}`.
+
+        segment_types:
+            A dictionary of `{segment_name: segment_type}`. Must have all
+            segment names in that `segment_params` does, if defined.
+            If not defined, type will be inferred `segment_value`
+
 
         Returns
         -------
@@ -2112,6 +2106,21 @@ class SegmentationLevel:
         # Generate the segment_params string
         segment_parts = list()
         for segment_name in naming_order:
+            # Get segment type
+            if segment_types is not None:
+                seg_type = segment_types[segment_name]
+            else:
+                seg_type = type(segment_params[segment_name])
+
+            if seg_type == str:
+                # Don't include the name when the value is a string too
+                segment_parts += [f"{seg_type(segment_params[segment_name])}"]
+
+            else:
+                # Only include if not NaN
+                if not np.isnan(segment_params[segment_name]):
+                    segment_parts += [f"{segment_name}{seg_type(segment_params[segment_name])}"]
+
             segment_parts += [f"{segment_name}{segment_params[segment_name]}"]
 
         return '_'.join(segment_parts)
