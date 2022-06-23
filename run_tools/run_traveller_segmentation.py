@@ -3,6 +3,7 @@
 
 ##### IMPORTS #####
 import pathlib
+import re
 import sys
 from typing import Any
 
@@ -93,6 +94,33 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
 
 
 ##### FUNCTIONS #####
+def _compile_params_format(compile_params_path: nd.PathLike) -> None:
+    """Replace ca/nca in compiled matrix names with ca2/ca1, respectively.
+
+    Overwrites existing compilation parameters file with adjusted names.
+
+    Parameters
+    ----------
+    compile_params_path : nd.PathLike
+        Path to compilation parameters file created by
+        `matrix_processing.build_compile_params`.
+    """
+
+    def replace(match: re.Match) -> str:
+        for val, i in (("ca", 2), ("nca", 1)):
+            if match.group(1).lower() == val:
+                return f"_ca{i}{match.group(2)}"
+
+        # This should never occur
+        raise ValueError(f"unexpected match value: {match!r}")
+
+    compile_params = file_ops.read_df(compile_params_path)
+    compile_params.loc[:, "compilation"] = compile_params["compilation"].str.replace(
+        r"_(ca|nca)([_.])", replace, flags=re.I, regex=True
+    )
+    file_ops.write_df(compile_params, compile_params_path, index=False)
+
+
 def aggregate_purposes(
     matrix_folder: pathlib.Path, model: nd.AssignmentModel, year: int
 ) -> pathlib.Path:
@@ -126,7 +154,7 @@ def aggregate_purposes(
 
     output_folder = matrix_folder / "userclass"
     output_folder.mkdir(exist_ok=True)
-    # TODO Create new build compile params
+
     compile_params_path = matrix_processing.build_compile_params(
         import_dir=matrix_folder,
         export_dir=output_folder,
@@ -136,6 +164,8 @@ def aggregate_purposes(
         ca_needed=[1, 2],
         split_hb_nhb=True,
     )[0]
+    # Update compile parameters to use ca1/2 instead of nca/ca in the output names
+    _compile_params_format(compile_params_path)
 
     matrix_processing.compile_matrices(
         mat_import=matrix_folder,
