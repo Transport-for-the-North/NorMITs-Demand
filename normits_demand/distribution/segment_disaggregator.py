@@ -6,16 +6,19 @@ Created on Fri Nov 20 13:47:56 2020
 """
 
 import os
+import pathlib
 
 import numpy as np
 import pandas as pd
 
+import normits_demand as nd
 from normits_demand.concurrency import multiprocessing as mp
 from normits_demand.utils import file_ops, math_utils
 from normits_demand.utils import trip_length_distributions as tld_utils
 from normits_demand.utils import utils as nup
+from normits_demand import logging as nd_log
 
-
+LOG = nd_log.get_logger(__name__)
 _TINY_INFILL = 1 * 10 ** -8
 
 
@@ -198,25 +201,25 @@ def _control_a_to_enhanced_p(prod_list, attr_list):
 
 
 def disaggregate_segments(
-    import_folder,
-    target_tld_folder,
-    model_name,
-    base_productions_path,
-    base_attractions_path,
-    export_folder,
-    lookup_folder,
-    aggregate_surplus_segments=True,
-    rounding=5,
-    trip_origin="hb",
-    tp="24hr",
-    iz_infill=0.5,
-    furness_loops=1999,
-    min_pa_diff=0.1,
-    bs_con_crit=0.975,
+    import_folder: pathlib.Path,
+    target_tld_folder: pathlib.Path,
+    model: nd.AssignmentModel,
+    base_productions: nd.DVector,
+    base_attractions: nd.DVector,
+    export_folder: pathlib.Path,
+    lookup_folder: pathlib.Path,
+    aggregate_surplus_segments: bool = True,
+    rounding: int = 5,
+    trip_origin: nd.TripOrigin = nd.TripOrigin.HB,
+    tp: str = "24hr",
+    iz_infill: float = 0.5,
+    furness_loops: int = 1999,
+    min_pa_diff: float = 0.1,
+    bs_con_crit: float = 0.975,
     max_bs_loops: int = 300,
-    mp_threads=-1,
-    export_original=True,
-    export_furness=False,
+    mp_threads: int = -1,
+    export_original: bool = True,
+    export_furness: bool = False,
 ):
     """
     Parameters
@@ -228,6 +231,7 @@ def disaggregate_segments(
         If there are segments on the left hand side that aren't in the
         enhanced segmentation, aggregated them. Will
     """
+    raise NotImplementedError("Not yet implemented for the new inputs")
     # Look at segmentation in base matrices
     base_mat_seg = nup.parse_mat_output(
         os.listdir(import_folder), sep="_", mat_type="pa", file_name="base_seg"

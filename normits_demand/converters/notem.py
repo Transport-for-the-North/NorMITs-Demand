@@ -511,6 +511,7 @@ class ToDistributionModel:
 
         # Save into cache and return
         if cache_path is not None:
+            cache_path.parent.mkdir(exist_ok=True, parents=True)
             converted_dvec.save(cache_path)
         return converted_dvec
 
