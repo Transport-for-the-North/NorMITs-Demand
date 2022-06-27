@@ -34,5 +34,11 @@ Below, a brief summary of patches made since the previous version can be found.
       TLDs more efficiently.
     - Outputs graphs and a log of the run alongside the generated TLD csvs
     - Built a front end to generate all the TLDs needed for the Distribution Model
+    - Integrated `SegmentationLevels` into TLD tool
+  - Core
+    - Updated how `SegmentationLevel` handles name generation. Segment types are now used
+      to cast the outputs and NaN values are ignored to add support for 
+      non-complete segmentations.
 - Bug Fixes
-- 
+  - Fixed a bug where segment parts were being added twice while generating segment names
+  - 

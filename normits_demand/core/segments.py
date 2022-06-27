@@ -29,6 +29,7 @@ from typing import Dict
 from typing import Tuple
 from typing import Union
 from typing import Optional
+from typing import Iterable
 
 # Third Party
 import pandas as pd
@@ -110,7 +111,7 @@ class SegmentationLevel:
         "segmentations",
     ))
     segment_group_dir = segment_definitions_path / "_segment_groups"
-    valid_segment_subdirs = ["notem", "tram", "dimo", "custom"]
+    valid_segment_subdirs = ["notem", "tram", "dimo", "user_class", "custom"]
 
     # Paths to specific files
     _multiply_definitions_path = segment_definitions_path / "multiply.csv"
@@ -172,10 +173,9 @@ class SegmentationLevel:
         for col in self.naming_order:
             if col not in valid_segments:
                 raise SegmentationError(
-                    "Error while instantiating a SegmentationLevel object."
-                    "Cannot find column '%s' of naming order in the given "
-                    "valid segments dataframe!"
-                    % col
+                    f"Error while instantiating a SegmentationLevel object. "
+                    f"Cannot find column '{col}' of naming order in the "
+                    f"given valid segments dataframe!"
                 )
 
         # Make sure the df is just the segment columns
@@ -185,23 +185,25 @@ class SegmentationLevel:
         missing_types = set(self.naming_order) - set(self._segment_types.keys())
         if len(missing_types) > 0:
             raise SegmentationError(
-                "Not all columns have been accounted for in segment types. "
-                "Missing defined types for the following segments: %s"
-                % missing_types
+                f"Not all columns have been accounted for in segment types. "
+                f"Missing defined types for the following segments: "
+                f"{missing_types}"
             )
 
         # Convert the segment types to the defined types
         for col, col_type in self._segment_types.items():
             try:
-                self._segments[col] = self._segments[col].astype(col_type)
-            except ValueError:
+                if col_type in (int, float):
+                    self._segments[col] = pd.to_numeric(self._segments[col])
+                else:
+                    self._segments[col] = self._segments[col].astype(col_type)
+            except ValueError as error:
                 raise ValueError(
-                    "Cannot convert segment values %s to type %s. "
+                    f"Cannot convert segment values {col} to type {col_type}. "
                     "Maybe the segment needs to be defined with a different "
-                    "type? See above for specific exception which "
-                    "caused this one."
-                    % (col, col_type)
-                )
+                    "type? See above for specific exception which caused "
+                    "this one."
+                ) from error
 
         # ## BUILD SEGMENT NAMING ## #
         segments_and_names = self.segments.copy()
@@ -264,6 +266,11 @@ class SegmentationLevel:
     def __len__(self) -> int:
         """Get the length of the segmentation"""
         return len(self.segments)
+
+    def __iter__(self):
+        """Overrides the default implementation"""
+        return self._segments.to_dict(orient='records').__iter__()
+
 
     def _mul_div_segmentation(self,
                               other: SegmentationLevel,
@@ -386,14 +393,6 @@ class SegmentationLevel:
         # Get the division definition
         return_seg_name, join_cols = self._get_divide_definition(other)
         return self._mul_div_segmentation(other, return_seg_name, join_cols)
-
-    def __iter__(self):
-        """Overrides the default implementation"""
-        return self._segments.to_dict(orient='records').__iter__()
-
-    def __len__(self):
-        """Overrides the default implementation"""
-        return len(self.segment_names)
 
     def _read_multiply_definitions(self) -> pd.DataFrame:
         """
@@ -1717,7 +1716,7 @@ class SegmentationLevel:
         # If we are here, then must be True
         return True
 
-    def validate_contains_all_segments(self, lst: List[str]) -> None:
+    def validate_contains_all_segments(self, lst: Iterable[str]) -> None:
         """Raises an error is lst is not valid
 
         Raises an error if lst is not a complete list of all segments in
@@ -2057,17 +2056,19 @@ class SegmentationLevel:
         # Make sure all segments are in segment_params
         self.validate_contains_all_segments(segment_params.keys())
 
-        # Generate the segment_params string
-        segment_parts = list()
-        for segment_name in self.naming_order:
-            segment_parts += [f"{segment_name}{segment_params[segment_name]}"]
+        segment_str = self.generate_template_segment_str(
+            naming_order=self.naming_order,
+            segment_params=segment_params,
+            segment_types=self._segment_types,
+        )
 
-        return template.format(segment_params='_'.join(segment_parts))
+        return template.format(segment_params=segment_str)
 
     @staticmethod
     def generate_template_segment_str(
         naming_order: List[str],
         segment_params: Dict[str, Any],
+        segment_types: Dict[str, type] = None,
     ) -> str:
         """Generate the string of segment params to use with a template
 
@@ -2084,9 +2085,13 @@ class SegmentationLevel:
             gotten from an instance of `SegmentationLevel.naming_order`.
 
         segment_params:
-            A dictionary of {segment_name: segment_value}. All segment_names
-            from this segmentation must be contained in segment_params. An
-            error will be thrown if any are missing.
+            A dictionary of `{segment_name: segment_value}`.
+
+        segment_types:
+            A dictionary of `{segment_name: segment_type}`. Must have all
+            segment names in that `segment_params` does, if defined.
+            If not defined, type will be inferred `segment_value`
+
 
         Returns
         -------
@@ -2101,7 +2106,20 @@ class SegmentationLevel:
         # Generate the segment_params string
         segment_parts = list()
         for segment_name in naming_order:
-            segment_parts += [f"{segment_name}{segment_params[segment_name]}"]
+            # Get segment type
+            if segment_types is not None:
+                seg_type = segment_types[segment_name]
+            else:
+                seg_type = type(segment_params[segment_name])
+
+            if seg_type == str:
+                # Don't include the name when the value is a string too
+                segment_parts += [f"{seg_type(segment_params[segment_name])}"]
+
+            else:
+                # Only include if not NaN
+                if not np.isnan(segment_params[segment_name]):
+                    segment_parts += [f"{segment_name}{seg_type(segment_params[segment_name])}"]
 
         return '_'.join(segment_parts)
 
