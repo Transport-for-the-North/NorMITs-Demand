@@ -37,8 +37,8 @@ import tqdm
 import normits_demand as nd
 
 from normits_demand import core as nd_core
-from normits_demand import constants
 from normits_demand.cost import utils as cost_utils
+from normits_demand.cost import distributions as cost_dist
 from normits_demand.utils import file_ops
 from normits_demand.utils import math_utils
 from normits_demand.utils import translation
@@ -811,18 +811,22 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         )
 
         fname = self.running_segmentation.generate_file_name(
-            trip_origin=self.trip_origin.value,
-            file_desc="tlb",
+            file_desc="cost_distribution",
             segment_params=segment_params,
             csv=True,
         )
         path = os.path.join(tcd_dir, fname)
 
-        # Convert to expected format
-        target_cost_distribution = file_ops.read_df(path)
-
-        rename = {'lower': 'min', 'upper': 'max'}
-        target_cost_distribution = target_cost_distribution.rename(columns=rename)
+        # BACKLOG(BT): Update DiMo to accept TLD Classes and not Pandas DataFrame
+        # Read in and convert
+        tcd = cost_dist.CostDistribution.from_csv(path=path, cost_units=nd_core.CostUnits.KM)
+        rename = {
+            tcd.min_bounds_col: 'min',
+            tcd.max_bounds_col: 'max',
+            tcd.mean_col: "ave_km",
+            tcd.shares_col: "band_share",
+        }
+        target_cost_distribution = tcd.to_df().rename(columns=rename)
 
         return target_cost_distribution
 
