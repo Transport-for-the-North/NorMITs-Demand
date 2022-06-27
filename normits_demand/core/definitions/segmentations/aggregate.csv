@@ -22,7 +22,7 @@ notem_nhb_output,nhb_p_m_ca,p;m;ca,
 notem_hb_output,hb_p_ca_tp_week,p;ca;tp,
 notem_hb_output,m_tp_week,m;tp,
 notem_nhb_output,nhb_p_tp_week,p;tp,
-notem_nhb_output,m_tp_week,m;tp
+notem_nhb_output,m_tp_week,m;tp,
 ,,,
 TRAM AGGREGATIONS,,,
 tram_hb_output,hb_p_m7_ca,p;m;ca,
