@@ -5,6 +5,7 @@
 
 ##### IMPORTS #####
 from __future__ import annotations
+
 # Standard imports
 import configparser
 import dataclasses
@@ -25,13 +26,12 @@ from normits_demand import logging as nd_log
 from normits_demand.utils import timing
 from normits_demand.reports import ntem_forecast_checks
 import normits_demand as nd
+
 # pylint: enable=import-error,wrong-import-position
 
 ##### CONSTANTS #####
 LOG_FILE = "NTEM_forecast.log"
-LOG = nd_log.get_logger(
-    nd_log.get_package_logger_name() + ".run_models.run_forecast"
-)
+LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_models.run_forecast")
 
 
 ##### CLASSES #####
@@ -61,19 +61,16 @@ class NTEMForecastParameters:
         the class attributes, and additional optional values
         from `export_path_params`.
     """
+
     iteration: str = "9.7-COVID"
     import_path: Path = Path(r"T:\MidMITs Demand")
-    tempro_data_path: Path = Path(
-        r"I:\Data\TEMPRO\tempro_pa_data_6_mode_exc_mode_4.csv"
-    )
+    tempro_data_path: Path = Path(r"I:\Data\TEMPRO\tempro_pa_data_6_mode_exc_mode_4.csv")
     model_name: str = "miham"
     export_path_fmt: str = "I:/NorMITs Demand/{model_name}/NTEM/iter{iteration}"
     export_path_params: Optional[Dict[str, Any]] = None
-    _export_path: Optional[Path] = dataclasses.field(
-        default=None, init=False, repr=False
-    )
+    _export_path: Optional[Path] = dataclasses.field(default=None, init=False, repr=False)
     base_year = 2021
-    forecast_years = [2030,2040]
+    forecast_years = [2030, 2040]
 
     @property
     def export_path(self) -> Path:
@@ -113,12 +110,10 @@ class NTEMForecastParameters:
             Paths to the PA to OD tour proportions, has
             keys `post_me_tours` and `post_me_fh_th_factors`.
         """
-        tour_prop_home = (
-            self.import_path / self.model_name / "post_me_tour_proportions"
-        )
+        tour_prop_home = self.import_path / self.model_name / "post_me_tour_proportions"
         paths = {
             "post_me_tours": tour_prop_home,
-            "post_me_fh_th_factors": tour_prop_home / "fh_th_factors"
+            "post_me_fh_th_factors": tour_prop_home / "fh_th_factors",
         }
         for nm, p in paths.items():
             if not p.is_dir():
@@ -132,9 +127,7 @@ class NTEMForecastParameters:
         """
         path = self.import_path / "vehicle_occupancies/car_vehicle_occupancies.csv"
         if not path.exists():
-            raise FileNotFoundError(
-                f"cannot find vehicle occupancies CSV: {path}"
-            )
+            raise FileNotFoundError(f"cannot find vehicle occupancies CSV: {path}")
         return path
 
     def save(self, output_path: Optional[Path] = None):
@@ -205,40 +198,8 @@ class NTEMForecastParameters:
 
 
 ##### FUNCTIONS #####
-def get_tempro_data(data_path: Path) -> tempro_trip_ends.TEMProTripEnds:
-    """Read TEMPro data and convert it to DVectors.
-
-    Parameters
-    ----------
-    data_path : Path
-        Path to TEMPro data CSV.
-
-    Returns
-    -------
-    tempro_trip_ends.TEMProTripEnds
-        TEMPro trip end data as DVectors stored in class
-        attributes for base and all future years.
-    """
-    tempro_data = tempro_trip_ends.TEMProData(
-        data_path, [efs_consts.BASE_YEAR] + efs_consts.FUTURE_YEARS
-    )
-    # Read data and convert to DVectors
-    trip_ends = tempro_data.produce_dvectors()
-    # Aggregate DVector to required segmentation
-    segmentation = mitem_forecast.NTEMImportMatrices.SEGMENTATION
-    return trip_ends.aggregate(
-        {
-            "hb_attractions": segmentation["hb"],
-            "hb_productions": segmentation["hb"],
-            "nhb_attractions": segmentation["nhb"],
-            "nhb_productions": segmentation["nhb"],
-        }
-    )
-
-
 def model_mode_subset(
-    trip_ends: tempro_trip_ends.TEMProTripEnds,
-    model_name: str,
+    trip_ends: tempro_trip_ends.TEMProTripEnds, model_name: str,
 ) -> tempro_trip_ends.TEMProTripEnds:
     """Get subset of `trip_ends` segmentation for specific `model_name`.
 
@@ -263,7 +224,7 @@ def model_mode_subset(
         given.
     """
     model_name = model_name.lower().strip()
-    if model_name == "noham" or 'miham':
+    if model_name == "noham" or "miham":
         segmentation = {
             "hb_attractions": "hb_p_m_car",
             "hb_productions": "hb_p_m_car",
@@ -276,6 +237,7 @@ def model_mode_subset(
         )
     return trip_ends.subset(segmentation)
 
+
 def read_tripends(base_year: int, forecast_years: list[int]) -> tempro_trip_ends.TEMProData:
     """
     
@@ -287,22 +249,26 @@ def read_tripends(base_year: int, forecast_years: list[int]) -> tempro_trip_ends
         dict: _description_
     """
     SEGMENTATION = {"hb": "hb_p_m_tp_wday", "nhb": "tms_nhb_p_m_tp_wday"}
-    dvectors = {'hb_attractions': {},
-                'hb_productions': {},
-                'nhb_attractions': {},
-                'nhb_productions': {}}
-    for i in ['hb','nhb']:
-        for j in ['productions', 'attractions']:
+    dvectors = {
+        "hb_attractions": {},
+        "hb_productions": {},
+        "nhb_attractions": {},
+        "nhb_productions": {},
+    }
+    for i in ["hb", "nhb"]:
+        for j in ["productions", "attractions"]:
             years = {}
-            key = f'{i}_{j}'
+            key = f"{i}_{j}"
             for year in [base_year] + forecast_years:
-                years[year] = nd.DVector.load(os.path.join(NTEMForecastParameters.import_path,key,f'{i}_msoa_notem_segmented_{year}_dvec.pkl')).aggregate(nd.get_segmentation_level(SEGMENTATION[i]))
+                years[year] = nd.DVector.load(
+                    os.path.join(
+                        NTEMForecastParameters.import_path,
+                        key,
+                        f"{i}_msoa_notem_segmented_{year}_dvec.pkl",
+                    )
+                ).aggregate(nd.get_segmentation_level(SEGMENTATION[i]))
             dvectors[key] = years
     return tempro_trip_ends.TEMProData(**dvectors)
-
-
-
-
 
 
 def main(params: NTEMForecastParameters, init_logger: bool = True):
@@ -338,31 +304,26 @@ def main(params: NTEMForecastParameters, init_logger: bool = True):
     LOG.info("Input parameters: %r", params)
     params.save()
 
-    tripend_data = read_tripends(base_year=params.base_year, forecast_years=params.forecast_years)
+    tripend_data = read_tripends(
+        base_year=params.base_year, forecast_years=params.forecast_years
+    )
     tripend_data = model_mode_subset(tripend_data, params.model_name)
     tempro_growth = mitem_forecast.tempro_growth(tripend_data, params.model_name)
     tempro_growth.save(params.export_path / "TEMPro Growth Factors")
 
     ntem_inputs = mitem_forecast.NTEMImportMatrices(
-        params.import_path,
-        params.base_year,
-        params.model_name,
+        params.import_path, params.base_year, params.model_name,
     )
     pa_folder = params.export_path / "Matrices" / "PA"
     mitem_forecast.grow_all_matrices(ntem_inputs, tempro_growth, pa_folder)
-    ntem_forecast_checks.pa_matrix_comparison(
-        ntem_inputs, pa_folder, tripend_data
-    )
+    ntem_forecast_checks.pa_matrix_comparison(ntem_inputs, pa_folder, tripend_data)
     od_folder = pa_folder.with_name("OD")
     mitem_forecast.convert_to_od(
         pa_folder,
         od_folder,
         efs_consts.FUTURE_YEARS,
         [ntem_inputs.mode],
-        {
-            "hb": efs_consts.HB_PURPOSES_NEEDED,
-            "nhb": efs_consts.NHB_PURPOSES_NEEDED,
-        },
+        {"hb": efs_consts.HB_PURPOSES_NEEDED, "nhb": efs_consts.NHB_PURPOSES_NEEDED,},
         params.model_name,
         params.pa_to_od_factors,
     )
@@ -370,9 +331,7 @@ def main(params: NTEMForecastParameters, init_logger: bool = True):
     # Compile to output formats
     mitem_forecast.compile_noham_for_norms(pa_folder, efs_consts.FUTURE_YEARS)
     compiled_od_path = mitem_forecast.compile_noham(
-        od_folder,
-        efs_consts.FUTURE_YEARS,
-        params.car_occupancies_path,
+        od_folder, efs_consts.FUTURE_YEARS, params.car_occupancies_path,
     )
     ntem_forecast_checks.od_matrix_comparison(
         ntem_inputs.od_matrix_folder,
@@ -388,7 +347,7 @@ def main(params: NTEMForecastParameters, init_logger: bool = True):
 
 
 ##### MAIN #####
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         main(NTEMForecastParameters())
     except Exception as err:
