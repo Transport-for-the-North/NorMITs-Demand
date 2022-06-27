@@ -331,8 +331,10 @@ class TripLengthDistributionBuilder:
         segment_params: dict[str, Any],
     ) -> str:
         """Wrapper around `segmentation.generate_file_name()` for consistent filenames"""
+        trip_origin = segment_params.get("trip_origin", None)
         return segmentation.generate_file_name(
-            segment_params,
+            segment_params=segment_params,
+            trip_origin=trip_origin,
             file_desc="cost_distribution",
         )
 
