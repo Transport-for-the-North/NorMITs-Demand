@@ -7,10 +7,13 @@ Created on Wed Mar  4 14:07:32 2020
 
 import gc
 import os
+import pathlib
+import re
 import sys
 import time
 import math
 import pickle
+from typing import Any, Dict, Iterator, Set, Union
 
 import numpy as np
 import pandas as pd
@@ -844,11 +847,9 @@ def filter_pa_vector(pa_vector,
     for index, cp in calib_params.items():
         # except trip length bands
         if index in dp_cols:
-            if cp != 'none':
+            if not isinstance(cp, (float, int)) or not np.isnan(cp):
                 # Ignore nulled out segments (soc or ns)
-                # Force the parameter to integer, or it drops trips
-                param = cp
-                dp = dp[dp[index] == param]
+                dp = dp.loc[dp[index] == cp]
                 if verbose:
                     print(index, cp)
             else:
@@ -1959,6 +1960,53 @@ def parse_mat_output(list_dir,
     segments = segments.replace({np.nan: 'none'})
 
     return segments
+
+# TODO Move these out of this utils module
+def parse_matrix_name(filename: str) -> Dict[str, Union[str, int]]:
+    sep = r"(?:\b|[_.])"
+    int_values = {"yr", "m", "p", "ca", "soc", "ns"}
+    naming_formats = {
+        "trip_origin": r"(n?hb)",
+        "matrix_type": r"(pa|od_from|od_to)",
+        "uc": r"(business|commute|other)",
+        "yr": r"yr(\d{4})",
+        "m": r"m(\d)",
+        "p": r"p(\d{1,2})",
+        "ca": r"ca(\d)",
+        "soc": r"soc(\d)",
+        "ns": r"ns(\d)",
+    }
+
+    data: Dict[str, Union[str, int]] = {}
+    for nm, pat in naming_formats.items():
+        match = re.search(f"{sep}{pat}{sep}", filename, re.I)
+        if match is not None:
+            if nm in int_values:
+                data[nm] = int(match.group(1))
+            else:
+                data[nm] = match.group(1).lower()
+
+    return data
+
+
+def parse_matrix_folder(
+    folder: pathlib.Path, extension_filter: Set[str] = None, required_data: Set[str] = None
+) -> Iterator[Dict[str, Union[str, int, pathlib.Path]]]:
+    for file in folder.iterdir():
+        if not file.is_file():
+            continue
+
+        if extension_filter is not None:
+            suffix = "".join(file.suffixes)
+            if not suffix in {s.lower() for s in extension_filter}:
+                continue
+        data = parse_matrix_name(file.name)
+
+        if required_data is not None:
+            if any(i not in data for i in required_data):
+                continue
+
+        yield {"path": file, **data}
 
 
 def unpack_tlb(tlb,

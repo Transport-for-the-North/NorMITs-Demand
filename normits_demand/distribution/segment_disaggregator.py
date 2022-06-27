@@ -7,6 +7,7 @@ Created on Fri Nov 20 13:47:56 2020
 
 import os
 import pathlib
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,7 @@ from normits_demand.utils import file_ops, math_utils
 from normits_demand.utils import trip_length_distributions as tld_utils
 from normits_demand.utils import utils as nup
 from normits_demand import logging as nd_log
+from normits_demand import constants
 
 LOG = nd_log.get_logger(__name__)
 _TINY_INFILL = 1 * 10 ** -8
@@ -44,24 +46,16 @@ def _build_enhanced_pa(tld_mat, df, df_value, col_limit, ia_name=None, unq_zone_
     """
     Private
     """
-    if ia_name == None:
+    if ia_name is None:
         ia_name = list(df)[0]
-    if unq_zone_list == None:
+    if unq_zone_list is None:
         unq_zone_list = nup.get_zone_range(tld_mat[ia_name])
 
     out_list = []
-    for itl, itd in tld_mat.iterrows():
+    for _, itd in tld_mat.iterrows():
         te = df.copy()
-        calib_params = {}
-        for col in col_limit:
-            if itd[col] != "none":
-                if col in ["soc", "ns"]:
-                    value = itd[col]
-                else:
-                    value = int(itd[col])
-                calib_params.update({col: value})
+        calib_params = {c: itd[c] for c in col_limit if itd[c] != np.nan}
 
-        # TODO()
         te, total = nup.filter_pa_vector(
             te,
             ia_name,
@@ -122,6 +116,12 @@ def _control_a_to_seed_matrix(sd, attr_list):
     return new_attr, audit
 
 
+def _is_nan(value: Any) -> bool:
+    if not isinstance(value, (int, float)):
+        return False
+    return np.isnan(value)
+
+
 def _control_a_to_enhanced_p(prod_list, attr_list):
     """
     Function to control a best estimate list of attraction vectors to a similar
@@ -150,10 +150,12 @@ def _control_a_to_enhanced_p(prod_list, attr_list):
         p_types = {}
         # Get sum of productions
         p_tot = prod["trips"].sum()
+
         # Iterate over prod items and build calib params dict
         for p_item, p_dat in prod.items():
             if p_item != "trips":
                 p_types.update({p_item: p_dat})
+
         # Iterate over attr items
         for attr in attr_list:
             work_dict = attr.copy()
@@ -162,9 +164,13 @@ def _control_a_to_enhanced_p(prod_list, attr_list):
                 record_match = True
                 # If they don't match kick the loop
                 if item in p_types.keys():
+                    # Continue if both values are NaN
+                    if _is_nan(dat) and _is_nan(p_types[item]):
+                        continue
                     if dat != p_types[item]:
                         record_match = False
                         break
+
             # If the record matches, build out calib params and balance
             if record_match:
                 # Update dict with anything not there
@@ -207,7 +213,7 @@ def disaggregate_segments(
     base_productions: nd.DVector,
     base_attractions: nd.DVector,
     export_folder: pathlib.Path,
-    lookup_folder: pathlib.Path,
+    cost_folder: pathlib.Path,
     aggregate_surplus_segments: bool = True,
     rounding: int = 5,
     trip_origin: nd.TripOrigin = nd.TripOrigin.HB,
@@ -231,38 +237,51 @@ def disaggregate_segments(
         If there are segments on the left hand side that aren't in the
         enhanced segmentation, aggregated them. Will
     """
-    raise NotImplementedError("Not yet implemented for the new inputs")
-    # Look at segmentation in base matrices
-    base_mat_seg = nup.parse_mat_output(
-        os.listdir(import_folder), sep="_", mat_type="pa", file_name="base_seg"
-    ).drop("mat_type", axis=1)
+    # Find all matrices and extract segmentation info
+    LOG.info("Finding base matrices in %s", import_folder)
+    required_columns = ["matrix_type", "trip_origin", "uc", "yr", "m", "ca"]
+    base_mat_seg = pd.DataFrame(
+        nup.parse_matrix_folder(
+            import_folder,
+            extension_filter=constants.VALID_MAT_FTYPES,
+            required_data=required_columns,
+        )
+    )
+    base_mat_seg.loc[:, "base_seg"] = base_mat_seg["path"].apply(lambda p: p.name)
+    base_mat_seg = base_mat_seg.loc[
+        base_mat_seg["matrix_type"] == "pa", ["base_seg", *required_columns]
+    ].drop(columns="matrix_type")
+    duplicates = base_mat_seg.duplicated().sum()
+    if duplicates > 0:
+        raise ValueError(f"{duplicates} matrices with the same segmentation found")
+    base_mat_seg.to_csv("DO_NOT_COMMIT/base_mat_seg.csv", index=False)
 
-    # Look at segmentation in tld
-    tld_seg = nup.parse_mat_output(
-        os.listdir(target_tld_folder), sep="_", mat_type="tlb", file_name="enh_tld"
-    ).drop("mat_type", axis=1)
+    # Find all TLDs and extract segmentation info
+    LOG.info("Finding TLDs in %s", target_tld_folder)
+    required_columns = ["trip_origin", "m", "uc", "ca"]
+    tld_seg = pd.DataFrame(
+        nup.parse_matrix_folder(
+            target_tld_folder,
+            extension_filter=constants.VALID_MAT_FTYPES,
+            required_data=required_columns,
+        )
+    )
+    tld_seg.loc[:, "enh_tld"] = tld_seg["path"].apply(lambda p: p.name)
+    tld_seg = tld_seg.loc[:, ["enh_tld", *required_columns, "soc", "ns"]]
+    duplicates = tld_seg.duplicated().sum()
+    if duplicates > 0:
+        raise ValueError(f"{duplicates} TLDs with the same segmentation found")
+    tld_seg.to_csv("DO_NOT_COMMIT/tld_seg.csv", index=False)
 
-    # Look at segmentation in base p
-    dtype = {"soc": str, "ns": str}
-    base_p = pd.read_csv(base_productions_path, dtype=dtype)
-    # Get unq zones
-    ia_name = list(base_p)[0]
-    min_zone = min(base_p[ia_name])
-    max_zone = max(base_p[ia_name])
-    unq_zones = pd.DataFrame([i for i in range(int(min_zone), int(max_zone) + 1)])
-    unq_zones = unq_zones.rename(columns={list(unq_zones)[0]: ia_name})
+    unique_zones = base_productions.zoning_system.unique_zones
+    ia_name = base_productions.zone_col
+    base_productions = base_productions.to_df()
+    base_attractions = base_attractions.to_df()
 
-    # Get zone range
-    unq_zone_list = nup.get_zone_range(base_p[ia_name])
-
-    # Look at segmentation in base a
-    base_a = pd.read_csv(base_attractions_path, dtype=dtype)
-
-    # Get p_seg
-    p_seg = read_pa_seg(base_p, exc=["trips", "attractions", "productions"], in_exc=["zone"])
-
-    # get a
-    a_seg = read_pa_seg(base_a, exc=["trips", "attractions", "productions"], in_exc=["zone"])
+    # Get trip end segmentations
+    exclude_columns = ["trips", "attractions", "productions", "val"]
+    productions_seg = read_pa_seg(base_productions, exc=exclude_columns, in_exc=["zone"])
+    attractions_seg = read_pa_seg(base_attractions, exc=exclude_columns, in_exc=["zone"])
 
     ## Build iteration parameters
 
@@ -272,7 +291,7 @@ def disaggregate_segments(
     # Get cols in base that will have to be aggregated
     agg_cols = [x for x in list(base_mat_seg) if x not in list(tld_seg)]
     agg_cols.remove("base_seg")
-    if model_name.lower() == "norms" and "ca" in agg_cols:
+    if model == nd.AssignmentModel.NORMS and "ca" in agg_cols:
         agg_cols.remove("ca")
 
     # Get cols in tld that form the added segments
@@ -291,13 +310,13 @@ def disaggregate_segments(
         base_mat_seg = base_mat_seg.drop(agg_cols, axis=1)
 
     # Get cols in productions that are also in it set
-    p_cols = [x for x in list(it_set) if x in list(p_seg)]
+    p_cols = [x for x in list(it_set) if x in list(productions_seg)]
     # get cols in attractions that are also in it set
-    a_cols = [x for x in list(it_set) if x in list(a_seg)]
+    a_cols = [x for x in list(it_set) if x in list(attractions_seg)]
 
     # Apply any hard constraints here eg, origin, mode
     if trip_origin != "both":
-        it_set = it_set[it_set["trip_origin"] == trip_origin].reset_index(drop=True)
+        it_set = it_set[it_set["trip_origin"] == trip_origin.get_name()].reset_index(drop=True)
 
     # Build a set of every unique combo of base / target split - main iterator
     unq_splits = (
@@ -307,22 +326,22 @@ def disaggregate_segments(
     # Main disaggregation loop
 
     unchanging_kwargs = {
-        "unq_splits": unq_splits,  # unchanging
-        "it_set": it_set,  # unchanging
-        "base_mat_seg": base_mat_seg,  # unchanging
-        "import_folder": import_folder,  # unchanging
-        "add_cols": add_cols,  # unchanging
-        "target_tld_folder": target_tld_folder,  # unchanging
-        "base_p": base_p,  # unchanging
-        "p_cols": p_cols,  # unchanging
-        "base_a": base_a,  # unchanging
-        "a_cols": a_cols,  # unchanging
-        "unq_zone_list": unq_zone_list,  # unchanging
-        "lookup_folder": lookup_folder,  # unchanging
-        "tp": tp,  # unchanging
-        "iz_infill": iz_infill,  # unchanging
-        "furness_loops": furness_loops,  # unchanging
-        "min_pa_diff": min_pa_diff,  # unchanging
+        "unq_splits": unq_splits,
+        "it_set": it_set,
+        "base_mat_seg": base_mat_seg,
+        "import_folder": import_folder,
+        "add_cols": add_cols,
+        "target_tld_folder": target_tld_folder,
+        "base_p": base_productions,
+        "p_cols": p_cols,
+        "base_a": base_attractions,
+        "a_cols": a_cols,
+        "unq_zone_list": unique_zones,
+        "cost_folder": cost_folder,
+        "tp": tp,
+        "iz_infill": iz_infill,
+        "furness_loops": furness_loops,
+        "min_pa_diff": min_pa_diff,
         "bs_con_crit": bs_con_crit,
         "max_bs_loops": max_bs_loops,
         "export_original": export_original,
@@ -330,7 +349,7 @@ def disaggregate_segments(
         "ia_name": ia_name,
         "export_folder": export_folder,
         "trip_origin": trip_origin,
-    }  # unchanging
+    }
 
     out_dat = list()
     kwargs_list = list()
@@ -340,6 +359,7 @@ def disaggregate_segments(
         kwargs_list.append(kwargs)
 
     # Call using multiple threads
+    LOG.debug("Running segment disaggregator on %s threads", mp_threads)
     mp.multiprocess(_segment_build_worker, kwargs=kwargs_list, process_count=mp_threads)
 
     return out_dat
@@ -358,7 +378,7 @@ def _segment_build_worker(
     base_a,
     a_cols,
     unq_zone_list,
-    lookup_folder,
+    cost_folder,
     tp,
     iz_infill,
     furness_loops,
@@ -390,25 +410,13 @@ def _segment_build_worker(
     # Ah calib params
     # Define from the agg split
     calib_params = agg_split.to_dict()
-    # Handle data type
-    for item, dat in calib_params.items():
-        if dat.isnumeric():
-            calib_params.update({item: int(dat)})
 
     # Mat list
     mat_list = list()
     seed_name = ""
 
     # Import and aggregate
-    for ipi, ipr in import_params.iterrows():
-
-        # Name params calib_params style
-        base_params = ipr.to_dict()
-        # Handle data type
-        for item, dat in base_params.items():
-            if dat.isnumeric():
-                base_params.update({item: int(dat)})
-
+    for _, ipr in import_params.iterrows():
         print("Importing " + ipr["base_seg"])
         sd = file_ops.read_df(os.path.join(import_folder, ipr["base_seg"]))
         seed_name = ipr["base_seg"]
@@ -427,7 +435,7 @@ def _segment_build_worker(
     )
 
     tld_list = []
-    for itl, itd in tld_mat.iterrows():
+    for _, itd in tld_mat.iterrows():
         tld_dict = {}
         for col in add_cols:
             if itd[col] != "none":
@@ -438,14 +446,10 @@ def _segment_build_worker(
         tld_list.append(tld_dict)
 
     # Get best possible production subset - control to matrix total
-    prod_list = _build_enhanced_pa(
-        tld_mat, base_p, "trips", p_cols, unq_zone_list=unq_zone_list
-    )
+    prod_list = _build_enhanced_pa(tld_mat, base_p, "val", p_cols, unq_zone_list=unq_zone_list)
 
     # Get best possible attraction subset
-    attr_list = _build_enhanced_pa(
-        tld_mat, base_a, "attractions", a_cols, unq_zone_list=unq_zone_list
-    )
+    attr_list = _build_enhanced_pa(tld_mat, base_a, "val", a_cols, unq_zone_list=unq_zone_list)
 
     # control to sum of target share of attraction vector, cell-wise.
     attr_list, control_aud = _control_a_to_seed_matrix(sd, attr_list)
@@ -471,18 +475,7 @@ def _segment_build_worker(
 
     print(cost_cp)
 
-    costs, c_name = nup.get_costs(
-        lookup_folder, cost_cp, tp=tp, iz_infill=iz_infill, replace_nhb_with_hb=True
-    )
-
-    print("Cost lookup returned " + c_name)
-    costs = nup.df_to_np(
-        costs,
-        v_heading="p_zone",
-        h_heading="a_zone",
-        values="cost",
-        unq_internal_zones=unq_zone_list,
-    )
+    costs = get_costs(cost_folder, cost_cp, unq_zone_list)
 
     # Pass to dissagg function
     out_mats, out_reps, fd = _dissag_seg(
@@ -512,7 +505,7 @@ def _segment_build_worker(
             mat = mat.rename(columns={"index": ia_name})
 
             # Path export
-            es_path = os.path.join(export_folder, trip_origin + "_enhpa")
+            es_path = os.path.join(export_folder, trip_origin.get_name() + "_enhpa")
 
             if tp in add_cols:
                 es_path = nup.build_path(es_path, item, tp=tp)
@@ -529,7 +522,7 @@ def _segment_build_worker(
             furness_mat = furness_mat.rename(columns={"index": ia_name})
 
             # Path export
-            es_path = os.path.join(export_folder, trip_origin + "_enhpafn")
+            es_path = os.path.join(export_folder, trip_origin.get_name() + "_enhpafn")
 
             if tp in add_cols:
                 es_path = nup.build_path(es_path, item, tp=tp)
@@ -560,7 +553,7 @@ def _segment_build_worker(
         del (tlb_con, bs_con, fbs_con, pa_diff, ea, ep, tar_a, tar_p)
 
         # Build report
-        report_path = os.path.join(export_folder, trip_origin + "_disagg_report")
+        report_path = os.path.join(export_folder, trip_origin.get_name() + "_disagg_report")
 
         if tp in add_cols:
             report_path = nup.build_path(report_path, item, tp=tp)
@@ -643,7 +636,10 @@ def _dissag_seg(
         bs_con = max(bs_con, 0)
 
         # Unpack tld
-        min_dist, max_dist, obs_trip, obs_dist = nup.unpack_tlb(target_tld)
+        min_dist = target_tld["min (km)"].values
+        max_dist = target_tld["max (km)"].values
+        obs_trip = target_tld["share"].values
+        obs_dist = target_tld["mean (km)"].values
         num_band = len(min_dist)
 
         # TLB balance/furness
@@ -845,3 +841,52 @@ def _dissag_seg(
     )
 
     return out_mats, seg_audit, final_pa_diff
+
+
+def get_costs(
+    cost_folder: pathlib.Path, calib_params: Dict[str, Any], zones: np.array
+) -> pd.DataFrame:
+    purpose_lookup = {
+        "commute": [1],
+        "business": [2, 12],
+        "other": [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18],
+    }
+
+    seg_columns = ["trip_origin", "m", "p", "ca"]
+    cost_files = pd.DataFrame(
+        nup.parse_matrix_folder(
+            cost_folder,
+            extension_filter=constants.VALID_MAT_FTYPES,
+            required_data=seg_columns,
+        )
+    )
+    cost_files = cost_files.set_index(seg_columns)
+
+    purposes = purpose_lookup[calib_params["uc"]]
+    cost_files = cost_files.loc[
+        pd.IndexSlice[
+            calib_params["trip_origin"], calib_params["m"], purposes, calib_params["ca"]
+        ],
+        "path",
+    ]
+
+    if len(cost_files) == 0:
+        raise ValueError(f"cannot find any cost files for {calib_params}")
+
+    costs: List[pd.DataFrame] = []
+    for file in cost_files:
+        mat = file_ops.read_df(file, index_col=0)
+        mat.columns = pd.to_numeric(mat.columns, errors="ignore", downcast="unsigned")
+        mat.index = pd.to_numeric(mat.index, errors="ignore", downcast="unsigned")
+
+        if np.not_equal(mat.columns, zones).any():
+            raise ValueError("Wrong zones found in cost file columns: {file}")
+        if np.not_equal(mat.index, zones).any():
+            raise ValueError("Wrong zones found in cost file index: {file}")
+
+        costs.append(mat)
+
+    if len(costs) == 1:
+        return costs[0]
+
+    return pd.DataFrame(np.mean(costs, axis=0), index=costs[0].index, columns=costs[0].columns)

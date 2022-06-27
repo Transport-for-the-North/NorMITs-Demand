@@ -1,9 +1,10 @@
+iteration: 1.0
 import_folder: I:\NorMITs Demand\import
-output_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Outputs\Matrix Decompilation
+base_output_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Outputs\Matrix Decompilation
 notem_iteration: 9.10
 notem_export_home: I:\NorMITs Demand\NoTEM
 scenario: SC01_JAM
-matrix_folder: I:\NorMITs Demand\Distribution Model\iter9.3.3\train\Final Outputs\Full PA Matrices
+matrix_folder: I:\NorMITs Demand\Distribution Model\iter9.3.3\train\Final Outputs\Full PA Matrices\translated
 model: NoRMS
 year: 2018
 trip_length_distribution_folder: I:\NorMITs Demand\import\traveller_segment_tool\trip_length_distributions\v1.0

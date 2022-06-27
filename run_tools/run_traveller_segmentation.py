@@ -51,8 +51,9 @@ class DisaggregationSettings(pydantic.BaseModel):
 
 class TravellerSegmentationParameters(config_base.BaseConfig):
     # TODO Docstring explaining the parameters
+    iteration: str
     import_folder: pathlib.Path
-    output_folder: pathlib.Path
+    base_output_folder: pathlib.Path
     notem_export_home: pathlib.Path
     notem_iteration: str
     scenario: nd.Scenario
@@ -67,6 +68,7 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         "matrix_folder",
         "notem_export_home",
         "trip_length_distribution_folder",
+        "base_output_folder",
     )
     def _folder_exists(cls, value) -> pathlib.Path:
         try:
@@ -91,6 +93,12 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
     @property
     def cost_folder(self) -> pathlib.Path:
         return self._build_cost_folder(self.import_folder, self.model)
+
+    @property
+    def output_folder(self) -> pathlib.Path:
+        output_folder = self.base_output_folder / f"iter{self.iteration}"
+        output_folder.mkdir(exist_ok=True)
+        return output_folder
 
 
 ##### FUNCTIONS #####
@@ -183,8 +191,6 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
     # TODO For now use NoRMS syntheic Full PA aggregating to commute, business and other
     # TODO In future use EFS decompile post ME function to convert from NORMS/NOHAM to TMS segmentation
 
-    params.output_folder.mkdir(exist_ok=True, parents=True)
-
     if init_logger:
         # Add log file output to main package logger
         nd_log.get_logger(
@@ -194,6 +200,7 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
             log_version=True,
         )
 
+    LOG.info("Outputs saved to: %s", params.output_folder)
     out = params.output_folder / "Traveller_segmentation_parameters.yml"
     parameters.save_yaml(out)
     LOG.info("Input parameters saved to: %s", out)
@@ -220,11 +227,11 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
         MODEL_SEGMENTATIONS[nd.TripOrigin.HB],
         MODEL_SEGMENTATIONS[nd.TripOrigin.NHB],
     )
-
-    model_folder = params.import_folder / params.model.get_name()
-    file_ops.folder_exists(model_folder)
-    # TODO Use new cost lookup
-    lookup_folder = model_folder / "Model Zone Lookups"
+    LOG.info(
+        "Other inputs:\nCosts: %s\nTrip length distributions: %s",
+        params.cost_folder,
+        params.trip_length_distribution_folder,
+    )
 
     matrix_folder = aggregate_purposes(params.matrix_folder, params.model, params.year)
 
@@ -235,7 +242,6 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
             to, nd.get_segmentation_level(MODEL_SEGMENTATIONS[to])
         )
 
-        continue  # Skip dissaggregator as it's not yet implemented with the new data
         segment_disaggregator.disaggregate_segments(
             import_folder=matrix_folder,
             # TODO Old TLDs were in miles new are kms and costs and kms so don't need to convert anymore
@@ -245,7 +251,7 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
             base_productions=productions,
             base_attractions=attractions,
             export_folder=params.output_folder,
-            lookup_folder=lookup_folder,
+            cost_folder=params.cost_folder,
             trip_origin=to,
             aggregate_surplus_segments=params.disaggregation_settings.aggregate_surplus_segments,
             rounding=params.disaggregation_settings.rounding,
@@ -259,6 +265,9 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
             export_original=params.disaggregation_settings.export_original,
             export_furness=params.disaggregation_settings.export_furness,
         )
+        LOG.info("Finished %s", to.get_name())
+
+    LOG.info("Finished traveller segmentation")
 
 
 ##### MAIN #####
