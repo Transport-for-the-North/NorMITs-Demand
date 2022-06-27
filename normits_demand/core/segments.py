@@ -2062,7 +2062,7 @@ class SegmentationLevel:
             segment_types=self._segment_types,
         )
 
-        return template.format(segment_str)
+        return template.format(segment_params=segment_str)
 
     @staticmethod
     def generate_template_segment_str(
