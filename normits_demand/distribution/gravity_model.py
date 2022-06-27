@@ -31,6 +31,7 @@ from typing import List
 from typing import Dict
 from typing import Tuple
 from typing import Iterable
+from typing import Optional
 
 # Third Party
 import numpy as np
@@ -40,6 +41,7 @@ from scipy import optimize
 # Local Imports
 import normits_demand as nd
 
+from normits_demand import logging as nd_log
 from normits_demand import cost
 
 from normits_demand.utils import timing
@@ -53,6 +55,9 @@ from normits_demand.distribution import furness
 from normits_demand.cost import utils as cost_utils
 from normits_demand.concurrency import multithreading
 from normits_demand.concurrency import communication
+
+
+LOG = nd_log.get_logger(__name__)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -619,35 +624,67 @@ class GravityModelBase(abc.ABC):
 
         # Calculate the optimal cost parameters if we're calibrating
         if calibrate_params is True:
-            result = optimize.least_squares(
-                fun=self._gravity_function,
-                x0=self._order_init_params(init_params),
-                method=self._least_squares_method,
-                bounds=self._order_bounds(),
-                jac=self._jacobian_function,
-                verbose=verbose,
-                ftol=ftol,
-                xtol=xtol,
-                max_nfev=grav_max_iters,
-                kwargs={'diff_step': diff_step},
-            )
-            optimal_params = result.x
+            # Build the kwargs, we need them a few times
+            ls_kwargs = {
+                "fun": self._gravity_function,
+                "method": self._least_squares_method,
+                "bounds": self._order_bounds(),
+                "jac": self._jacobian_function,
+                "verbose": verbose,
+                "ftol": ftol,
+                "xtol": xtol,
+                "max_nfev": grav_max_iters,
+                "kwargs": {'diff_step': diff_step},
+            }
+
+            # Can sometimes fail with infeasible arguments, workaround
+            run_defaults = False
+            result: Optional = None
+
+            try:
+                ordered_init_params = self._order_init_params(init_params)
+                result = optimize.least_squares(x0=ordered_init_params, **ls_kwargs)
+            except ValueError as err:
+                if "infeasible" in str(err) and default_params is not None:
+                    LOG.info(
+                        "Got the following error while trying to run "
+                        "`optimize.least_squares()`. Will try again with the "
+                        "provided `default_params`"
+                    )
+                    run_defaults = True
+                else:
+                    LOG.info(
+                        "Got the following error while trying to run "
+                        "`optimize.least_squares()`. If `default_params` were "
+                        "provided, an attempt would be made with them too."
+                    )
+                    raise err
 
             # If performance was terrible, try again with default params
-            if self.achieved_convergence <= failure_tol and default_params is not None:
-                result = optimize.least_squares(
-                    fun=self._gravity_function,
-                    x0=self._order_init_params(default_params),
-                    method=self._least_squares_method,
-                    bounds=self._order_bounds(),
-                    jac=self._jacobian_function,
-                    verbose=verbose,
-                    ftol=ftol,
-                    xtol=xtol,
-                    max_nfev=grav_max_iters,
-                    kwargs={'diff_step': diff_step},
+            failed = self.achieved_convergence <= failure_tol
+            if result is not None and failed and default_params is not None:
+                LOG.info(
+                    "Performance wasn't great with the given `init_params`. "
+                    f"Achieved '{self.achieved_convergence}', and the `failure_tol` "
+                    f"is set to {failure_tol}. Trying again with the provided "
+                    f"`default_params`"
                 )
+                run_defaults = True
+
+            if run_defaults and default_params is not None:
+                result = optimize.least_squares(
+                    x0=self._order_init_params(default_params),
+                    **ls_kwargs,
+                )
+
+            # Make sure we had a successful run
+            if result is not None:
                 optimal_params = result.x
+            else:
+                raise nd.NormitsDemandError(
+                    "No result has been set. Check the internal logic! This "
+                    "shouldn't be possible."
+                )
 
             # BACKLOG: Try random init_params as a final option
 

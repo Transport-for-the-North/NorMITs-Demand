@@ -68,10 +68,10 @@ def main():
 
     # Choose what to run
     run_hb = True
-    run_nhb = True
+    run_nhb = False
 
     run_all = False
-    run_upper_model = True
+    run_upper_model = False
     run_lower_model = True
     run_pa_matrix_reports = True
     run_pa_to_od = False
@@ -141,6 +141,7 @@ def main():
             'memory_optimised': memory_optimised_multi_area_grav,
             'estimate_init_params': False,
             'use_perceived_factors': True,
+            "default_init_params": {"sigma": 1, "mu": 2},
         }
 
         # Args only work for upper atm!
@@ -219,6 +220,7 @@ def main():
             'memory_optimised': memory_optimised_multi_area_grav,
             'estimate_init_params': False,
             'use_perceived_factors': True,
+            "default_init_params": {"sigma": 1, "mu": 2},
         }
 
         # Args only work for upper atm!
@@ -297,6 +299,7 @@ def main():
             'memory_optimised': memory_optimised_multi_area_grav,
             'estimate_init_params': False,
             'use_perceived_factors': True,
+            "default_init_params": {"sigma": 1, "mu": 2},
         }
 
         # Args only work for upper atm!
@@ -373,6 +376,7 @@ def main():
             'memory_optimised': memory_optimised_multi_area_grav,
             'estimate_init_params': False,
             'use_perceived_factors': True,
+            "default_init_params": {"sigma": 1, "mu": 2},
         }
 
         # Args only work for upper atm!
@@ -402,6 +406,7 @@ def main():
 
     # ## DEAL WITH PROCESS COUNT NEEDS ## #
     process_count = -2
+    # process_count = 0
     upper_model_process_count = process_count
     lower_model_process_count = process_count
 
