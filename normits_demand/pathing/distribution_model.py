@@ -678,7 +678,6 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                  lower_calibration_zones_fname: Optional[str] = None,
                  lower_calibration_naming: Optional[Dict[Any, str]] = None,
                  intrazonal_cost_infill: Optional[float] = None,
-                 target_tld_min_max_multiplier: float = 1,
                  ):
         # Check paths exist
         file_ops.check_path_exists(import_home)
@@ -712,7 +711,6 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         self.upper_target_tld_dir = upper_target_tld_dir
         self.lower_target_tld_dir = lower_target_tld_dir
         self.target_tld_version = target_tld_version
-        self.target_tld_min_max_multiplier = target_tld_min_max_multiplier
 
         self.init_params_cols = init_params_cols
 
@@ -825,8 +823,6 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         rename = {'lower': 'min', 'upper': 'max'}
         target_cost_distribution = target_cost_distribution.rename(columns=rename)
-        target_cost_distribution['min'] *= self.target_tld_min_max_multiplier
-        target_cost_distribution['max'] *= self.target_tld_min_max_multiplier
 
         return target_cost_distribution
 

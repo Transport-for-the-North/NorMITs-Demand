@@ -49,9 +49,6 @@ REDUCE_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
 HB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output'
 NHB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
 
-# TODO(BT): KLUDGE. INPUTS SHOULDN'T NEED THIS!!
-TARGET_TLD_MULTIPLIER = constants.MILES_TO_KM
-
 # TODO(BT): If NHB segmentation isn't with tp, allow providing of NHB tp
 #  splits so tp split OD can be output still
 
@@ -481,7 +478,6 @@ def main():
         'tour_props_zoning_name': tour_props_zoning_name,
         'init_params_cols': gm_cost_function.parameter_names,
         'intrazonal_cost_infill': intrazonal_cost_infill,
-        'target_tld_min_max_multiplier': TARGET_TLD_MULTIPLIER,
     }
 
     distributor_kwargs = {'cost_name': 'Distance', 'cost_units': 'KM'}
