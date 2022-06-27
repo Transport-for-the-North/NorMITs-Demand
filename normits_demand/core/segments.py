@@ -2121,8 +2121,6 @@ class SegmentationLevel:
                 if not np.isnan(segment_params[segment_name]):
                     segment_parts += [f"{segment_name}{seg_type(segment_params[segment_name])}"]
 
-            segment_parts += [f"{segment_name}{segment_params[segment_name]}"]
-
         return '_'.join(segment_parts)
 
     def save(self, path: PathLike = None) -> Union[None, Dict[str, Any]]:
