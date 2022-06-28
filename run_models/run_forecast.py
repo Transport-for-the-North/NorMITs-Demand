@@ -64,13 +64,10 @@ class NTEMForecastParameters:
 
     iteration: str = "9.7-COVID"
     import_path: Path = Path(r"T:\MidMITs Demand")
-    tempro_data_path: Path = Path(r"I:\Data\TEMPRO\tempro_pa_data_6_mode_exc_mode_4.csv")
     model_name: str = "miham"
-    export_path_fmt: str = "I:/NorMITs Demand/{model_name}/NTEM/iter{iteration}"
+    export_path_fmt: str = "C:\Projects\MidMITS\Forecast_test"
     export_path_params: Optional[Dict[str, Any]] = None
     _export_path: Optional[Path] = dataclasses.field(default=None, init=False, repr=False)
-    base_year = 2021
-    forecast_years = [2030, 2040]
 
     @property
     def export_path(self) -> Path:
@@ -144,7 +141,6 @@ class NTEMForecastParameters:
         config = configparser.ConfigParser()
         config["parameters"] = {
             "import_path": self.import_path,
-            "tempro_data_path": self.tempro_data_path,
             "model_name": self.model_name,
             "iteration": self.iteration,
             "export_path_fmt": self.export_path_fmt,
@@ -248,7 +244,7 @@ def read_tripends(base_year: int, forecast_years: list[int]) -> tempro_trip_ends
     Returns:
         dict: _description_
     """
-    SEGMENTATION = {"hb": "hb_p_m_tp_wday", "nhb": "tms_nhb_p_m_tp_wday"}
+    SEGMENTATION = {"hb": "hb_p_m", "nhb": "nhb_p_m"}
     dvectors = {
         "hb_attractions": {},
         "hb_productions": {},
@@ -263,12 +259,15 @@ def read_tripends(base_year: int, forecast_years: list[int]) -> tempro_trip_ends
                 years[year] = nd.DVector.load(
                     os.path.join(
                         NTEMForecastParameters.import_path,
+                        'MiTEM',
+                        f'iter{NTEMForecastParameters.iteration}',
+                        'NTEM',
                         key,
                         f"{i}_msoa_notem_segmented_{year}_dvec.pkl",
                     )
                 ).aggregate(nd.get_segmentation_level(SEGMENTATION[i]))
             dvectors[key] = years
-    return tempro_trip_ends.TEMProData(**dvectors)
+    return tempro_trip_ends.TEMProTripEnds(**dvectors)
 
 
 def main(params: NTEMForecastParameters, init_logger: bool = True):
@@ -305,7 +304,7 @@ def main(params: NTEMForecastParameters, init_logger: bool = True):
     params.save()
 
     tripend_data = read_tripends(
-        base_year=params.base_year, forecast_years=params.forecast_years
+        base_year=efs_consts.BASE_YEAR, forecast_years=efs_consts.FUTURE_YEARS
     )
     tripend_data = model_mode_subset(tripend_data, params.model_name)
     tempro_growth = mitem_forecast.tempro_growth(tripend_data, params.model_name)
