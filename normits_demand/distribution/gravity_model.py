@@ -610,7 +610,6 @@ class GravityModelBase(abc.ABC):
                    xtol: float = 1e-4,
                    grav_max_iters: int = 100,
                    failure_tol: float = 0,
-                   default_params: Dict[str, Any] = None,
                    verbose: int = 0,
                    ) -> None:
         """Internal function of calibrate.
@@ -638,42 +637,34 @@ class GravityModelBase(abc.ABC):
             }
 
             # Can sometimes fail with infeasible arguments, workaround
-            run_defaults = False
             result: Optional = None
 
             try:
                 ordered_init_params = self._order_init_params(init_params)
                 result = optimize.least_squares(x0=ordered_init_params, **ls_kwargs)
             except ValueError as err:
-                if "infeasible" in str(err) and default_params is not None:
+                if "infeasible" in str(err):
                     LOG.info(
                         "Got the following error while trying to run "
                         "`optimize.least_squares()`. Will try again with the "
-                        "provided `default_params`"
+                        "`default_params`"
                     )
-                    run_defaults = True
                 else:
-                    LOG.info(
-                        "Got the following error while trying to run "
-                        "`optimize.least_squares()`. If `default_params` were "
-                        "provided, an attempt would be made with them too."
-                    )
                     raise err
 
             # If performance was terrible, try again with default params
             failed = self.achieved_convergence <= failure_tol
-            if result is not None and failed and default_params is not None:
+            if result is not None and failed:
                 LOG.info(
                     "Performance wasn't great with the given `init_params`. "
                     f"Achieved '{self.achieved_convergence}', and the `failure_tol` "
-                    f"is set to {failure_tol}. Trying again with the provided "
+                    f"is set to {failure_tol}. Trying again with the "
                     f"`default_params`"
                 )
-                run_defaults = True
 
-            if run_defaults and default_params is not None:
+            if result is None:
                 result = optimize.least_squares(
-                    x0=self._order_init_params(default_params),
+                    x0=self._order_init_params(self.cost_function.default_params),
                     **ls_kwargs,
                 )
 
@@ -895,7 +886,6 @@ class GravityModelCalibrator(GravityModelBase):
                   xtol: float = 1e-4,
                   grav_max_iters: int = 100,
                   failure_tol: float = 0,
-                  default_init_params: Dict[str, Any] = None,
                   verbose: int = 0,
                   ) -> Dict[str, Any]:
         """Finds the optimal parameters for self.cost_function
@@ -953,13 +943,9 @@ class GravityModelCalibrator(GravityModelBase):
         failure_tol:
             The threshold that a convergence needs to pass to not be
             considered a failure. Any convergence values less than or equal
-            to this value will be considered a failure. Used in conjunction
-            with `default_init_params`.
-
-        default_init_params:
-            The default initial parameters to be used to try and calibrate
-            the gravity model if the given initial params in `init_params`
-            lead to a failing convergence.
+            to this value will be considered a failure. If this is met,
+            the gravity model will be re-ran with
+            `self.cost_function.default_params` to try get better performance
 
         verbose:
             Copied from scipy.optimize.least_squares documentation, where it
@@ -1006,7 +992,6 @@ class GravityModelCalibrator(GravityModelBase):
             xtol=xtol,
             grav_max_iters=grav_max_iters,
             failure_tol=failure_tol,
-            default_params=default_init_params,
             verbose=verbose,
         )
 
