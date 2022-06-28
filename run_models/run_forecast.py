@@ -20,7 +20,7 @@ from typing import Dict, Any, Optional
 sys.path.append("..")
 # Local imports
 # pylint: disable=import-error,wrong-import-position
-from normits_demand.models import mitem_forecast, tempro_trip_ends
+from normits_demand.models import mitem_forecast, ntem_forecast, tempro_trip_ends
 from normits_demand import efs_constants as efs_consts
 from normits_demand import logging as nd_log
 from normits_demand.utils import timing
@@ -30,14 +30,14 @@ import normits_demand as nd
 # pylint: enable=import-error,wrong-import-position
 
 ##### CONSTANTS #####
-LOG_FILE = "NTEM_forecast.log"
+LOG_FILE = "Forecast.log"
 LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_models.run_forecast")
 
 
 ##### CLASSES #####
 @dataclasses.dataclass(repr=False)
-class NTEMForecastParameters:
-    """Class for storing the parameters for running NTEM forecasting.
+class ForecastParameters:  # TODO Rewrite class as BaseConfig subclass
+    """Class for storing the parameters for running forecasting.
 
     Attributes
     ----------
@@ -65,7 +65,8 @@ class NTEMForecastParameters:
     iteration: str = "9.7-COVID"
     import_path: Path = Path(r"T:\MidMITs Demand")
     model_name: str = "miham"
-    export_path_fmt: str = "C:\Projects\MidMITS\Forecast_test"
+    base_year: int = 2021
+    export_path_fmt: str = r"C:\Projects\MidMITS\Forecast_test"
     export_path_params: Optional[Dict[str, Any]] = None
     _export_path: Optional[Path] = dataclasses.field(default=None, init=False, repr=False)
 
@@ -104,8 +105,8 @@ class NTEMForecastParameters:
     @property
     def pa_to_od_factors(self) -> Dict[str, Path]:
         """Dict[str, Path]
-            Paths to the PA to OD tour proportions, has
-            keys `post_me_tours` and `post_me_fh_th_factors`.
+        Paths to the PA to OD tour proportions, has
+        keys `post_me_tours` and `post_me_fh_th_factors`.
         """
         tour_prop_home = self.import_path / self.model_name / "post_me_tour_proportions"
         paths = {
@@ -120,7 +121,7 @@ class NTEMForecastParameters:
     @property
     def car_occupancies_path(self) -> Path:
         """Path
-            Path to the vehicle occupancies CSV file.
+        Path to the vehicle occupancies CSV file.
         """
         path = self.import_path / "vehicle_occupancies/car_vehicle_occupancies.csv"
         if not path.exists():
@@ -152,7 +153,7 @@ class NTEMForecastParameters:
         LOG.info("Written input parameters to: %s", output_path)
 
     @staticmethod
-    def load(path: Path) -> NTEMForecastParameters:
+    def load(path: Path) -> ForecastParameters:
         """Load parameters from config file.
 
         Parameters
@@ -162,7 +163,7 @@ class NTEMForecastParameters:
 
         Returns
         -------
-        NTEMForecastParameters
+        ForecastParameters
             New instance of the class with all parameters
             filled in from the config file.
 
@@ -190,12 +191,13 @@ class NTEMForecastParameters:
         export_params = "export_path_params"
         if config.has_section(export_params):
             params[export_params] = dict(config[export_params])
-        return NTEMForecastParameters(**params)
+        return ForecastParameters(**params)
 
 
 ##### FUNCTIONS #####
 def model_mode_subset(
-    trip_ends: tempro_trip_ends.TEMProTripEnds, model_name: str,
+    trip_ends: tempro_trip_ends.TEMProTripEnds,
+    model_name: str,
 ) -> tempro_trip_ends.TEMProTripEnds:
     """Get subset of `trip_ends` segmentation for specific `model_name`.
 
@@ -220,7 +222,7 @@ def model_mode_subset(
         given.
     """
     model_name = model_name.lower().strip()
-    if model_name == "noham" or "miham":
+    if model_name == "noham" or model_name == "miham":
         segmentation = {
             "hb_attractions": "hb_p_m_car",
             "hb_productions": "hb_p_m_car",
@@ -229,14 +231,17 @@ def model_mode_subset(
         }
     else:
         raise NotImplementedError(
-            f"NTEM forecasting only not implemented for model {model_name!r}"
+            f"MiTEM forecasting only not implemented for model {model_name!r}"
         )
     return trip_ends.subset(segmentation)
 
 
-def read_tripends(base_year: int, forecast_years: list[int]) -> tempro_trip_ends.TEMProData:
+def read_tripends(
+    base_year: int, forecast_years: list[int]
+) -> tempro_trip_ends.TEMProTripEnds:
+    # TODO Add docstring
     """
-    
+
 
     Args:
         year (int): _description_
@@ -258,10 +263,10 @@ def read_tripends(base_year: int, forecast_years: list[int]) -> tempro_trip_ends
             for year in [base_year] + forecast_years:
                 years[year] = nd.DVector.load(
                     os.path.join(
-                        NTEMForecastParameters.import_path,
-                        'MiTEM',
-                        f'iter{NTEMForecastParameters.iteration}',
-                        'NTEM',
+                        ForecastParameters.import_path,
+                        "MiTEM",
+                        f"iter{ForecastParameters.iteration}",
+                        "NTEM",
                         key,
                         f"{i}_msoa_notem_segmented_{year}_dvec.pkl",
                     )
@@ -270,13 +275,13 @@ def read_tripends(base_year: int, forecast_years: list[int]) -> tempro_trip_ends
     return tempro_trip_ends.TEMProTripEnds(**dvectors)
 
 
-def main(params: NTEMForecastParameters, init_logger: bool = True):
-    """Main function for running the NTEM forecasting.
+def main(params: ForecastParameters, init_logger: bool = True):
+    """Main function for running the MiTEM forecasting.
 
     Parameters
     ----------
-    params : NTEMForecastParameters
-        Parameters for running NTEM forecasting.
+    params : ForecastParameters
+        Parameters for running MiTEM forecasting.
     init_logger : bool, default True
         If True initialises logger with log file
         in the export folder.
@@ -297,7 +302,7 @@ def main(params: NTEMForecastParameters, init_logger: bool = True):
         nd_log.get_logger(
             nd_log.get_package_logger_name(),
             params.export_path / LOG_FILE,
-            "Running NTEM forecast",
+            "Running MiTEM forecast",
         )
     LOG.info(msg, params.export_path)
     LOG.info("Input parameters: %r", params)
@@ -307,33 +312,39 @@ def main(params: NTEMForecastParameters, init_logger: bool = True):
         base_year=efs_consts.BASE_YEAR, forecast_years=efs_consts.FUTURE_YEARS
     )
     tripend_data = model_mode_subset(tripend_data, params.model_name)
-    tempro_growth = mitem_forecast.tempro_growth(tripend_data, params.model_name)
+    tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name)
     tempro_growth.save(params.export_path / "TEMPro Growth Factors")
-
-    ntem_inputs = mitem_forecast.NTEMImportMatrices(
-        params.import_path, params.base_year, params.model_name,
+    mitem_inputs = mitem_forecast.MiTEMImportMatrices(
+        params.import_path,
+        params.base_year,
+        params.model_name,
     )
     pa_folder = params.export_path / "Matrices" / "PA"
-    mitem_forecast.grow_all_matrices(ntem_inputs, tempro_growth, pa_folder)
-    ntem_forecast_checks.pa_matrix_comparison(ntem_inputs, pa_folder, tripend_data)
+    ntem_forecast.grow_all_matrices(mitem_inputs, tempro_growth, pa_folder)
+    ntem_forecast_checks.pa_matrix_comparison(mitem_inputs, pa_folder, tripend_data)
     od_folder = pa_folder.with_name("OD")
-    mitem_forecast.convert_to_od(
+    ntem_forecast.convert_to_od(
         pa_folder,
         od_folder,
         efs_consts.FUTURE_YEARS,
-        [ntem_inputs.mode],
-        {"hb": efs_consts.HB_PURPOSES_NEEDED, "nhb": efs_consts.NHB_PURPOSES_NEEDED,},
+        [mitem_inputs.mode],
+        {
+            "hb": efs_consts.HB_PURPOSES_NEEDED,
+            "nhb": efs_consts.NHB_PURPOSES_NEEDED,
+        },
         params.model_name,
         params.pa_to_od_factors,
     )
 
     # Compile to output formats
-    mitem_forecast.compile_noham_for_norms(pa_folder, efs_consts.FUTURE_YEARS)
-    compiled_od_path = mitem_forecast.compile_noham(
-        od_folder, efs_consts.FUTURE_YEARS, params.car_occupancies_path,
+    ntem_forecast.compile_noham_for_norms(pa_folder, efs_consts.FUTURE_YEARS)
+    compiled_od_path = ntem_forecast.compile_noham(
+        od_folder,
+        efs_consts.FUTURE_YEARS,
+        params.car_occupancies_path,
     )
     ntem_forecast_checks.od_matrix_comparison(
-        ntem_inputs.od_matrix_folder,
+        mitem_inputs.od_matrix_folder,
         compiled_od_path / "PCU",
         params.model_name,
         ntem_forecast_checks.COMPARISON_ZONE_SYSTEMS["matrix 1"],
@@ -348,7 +359,7 @@ def main(params: NTEMForecastParameters, init_logger: bool = True):
 ##### MAIN #####
 if __name__ == "__main__":
     try:
-        main(NTEMForecastParameters())
+        main(ForecastParameters())
     except Exception as err:
-        LOG.critical("NTEM forecasting error:", exc_info=True)
+        LOG.critical("MiTEM forecasting error:", exc_info=True)
         raise
