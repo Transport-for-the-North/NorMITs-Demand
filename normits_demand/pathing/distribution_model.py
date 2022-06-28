@@ -919,9 +919,9 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc):
             # Get the needed kwargs
             segment_name = self.running_segmentation.get_segment_name(segment_params)
-            # if cost_matrix is None:
-            #     cost_matrix = self._get_cost(segment_params, zoning_system)
-            cost_matrix = self._get_cost(segment_params, zoning_system)
+            if cost_matrix is None:
+                cost_matrix = self._get_cost(segment_params, zoning_system)
+            # cost_matrix = self._get_cost(segment_params, zoning_system)
 
             # Add to dictionary
             cost_matrices[segment_name] = cost_matrix

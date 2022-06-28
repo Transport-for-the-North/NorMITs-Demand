@@ -1004,6 +1004,10 @@ class GravityDistributor(AbstractDistributor):
                 f"{nan_report}"
             )
 
+        # Convert the init_params to default if not given
+        if kwargs.get("init_params") is None:
+            kwargs["init_params"] = kwargs.get("cost_function").default_params
+
         # TODO(BT): Fix this problem at the cost source,
         #  only do for upper model. cars, bus, active
         # # Fill any zero costs with 0.2
