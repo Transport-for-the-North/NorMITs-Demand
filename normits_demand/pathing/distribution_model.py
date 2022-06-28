@@ -37,6 +37,7 @@ import tqdm
 import normits_demand as nd
 
 from normits_demand import core as nd_core
+from normits_demand import logging as nd_log
 from normits_demand.cost import utils as cost_utils
 from normits_demand.cost import distributions as cost_dist
 from normits_demand.utils import file_ops
@@ -46,6 +47,10 @@ from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand import converters
+
+
+LOG = nd_log.get_logger(__name__)
+
 
 # ## DEFINE COLLECTIONS OF OUTPUT PATHS ## #
 # Exports
@@ -845,6 +850,13 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                 % (len(seg_init_params), seg_name)
             )
 
+        if len(seg_init_params) == 0:
+            LOG.warning(
+                "No default parameters found for `segment_params` %s. "
+                % segment_params
+            )
+            return None
+
         # Make sure the columns we need do exist
         seg_init_params = pd_utils.reindex_cols(
             df=seg_init_params,
@@ -903,9 +915,12 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         # Generate by segment kwargs
         cost_matrices = dict()
         desc = "Reading in cost"
+        cost_matrix = None
         for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc):
             # Get the needed kwargs
             segment_name = self.running_segmentation.get_segment_name(segment_params)
+            # if cost_matrix is None:
+            #     cost_matrix = self._get_cost(segment_params, zoning_system)
             cost_matrix = self._get_cost(segment_params, zoning_system)
 
             # Add to dictionary

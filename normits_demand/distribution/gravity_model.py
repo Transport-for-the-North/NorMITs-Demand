@@ -974,6 +974,8 @@ class GravityModelCalibrator(GravityModelBase):
         scipy.optimize.least_squares
         """
         # Validate init_params
+        if init_params is None:
+            init_params = self.cost_function.default_params
         self.cost_function.validate_params(init_params)
 
         # Estimate what the initial params should be
@@ -2161,6 +2163,8 @@ class SingleTLDCalibratorThreadBase(multithreading.ReturnOrErrorThread, GravityM
             share convergence for self.target_cost_distribution
         """
         # Validate init_params
+        if self.init_params is None:
+            self.init_params = self.cost_function.default_params
         self.cost_function.validate_params(self.init_params)
 
         # Estimate what the initial params should be

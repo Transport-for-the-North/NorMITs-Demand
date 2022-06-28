@@ -79,11 +79,10 @@ class CostFunction:
         self.param_min = {k: min(v) for k, v in params.items()}
         self.param_max = {k: max(v) for k, v in params.items()}
 
-        if default_params is None:
-            self.default_params = {k: self.default_params for k in self.param_names}
-        else:
-            def_val = self.default_params
-            self.default_params = {k: default_params.get(k, def_val) for k in self.param_names}
+        # Populate the default parameters
+        default_params = dict() if default_params is None else default_params
+        def_val = self._default_param_val
+        self.default_params = {k: default_params.get(k, def_val) for k in self.param_names}
 
         self.kw_order = list(inspect.signature(self.function).parameters.keys())[1:]
         self.kw_order.remove("min_return_val")
