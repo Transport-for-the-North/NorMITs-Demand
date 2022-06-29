@@ -128,7 +128,8 @@ def main(params: ODToAssignmentParameters, init_logger: bool = True) -> None:
 
 ##### MAIN #####
 if __name__ == "__main__":
-    distribution_model_iteration = "9.6b.1"
+    distribution_model_iteration = "9.7-COVID.1"
+    year = 2021
     mat_folder = Path(
         fr"T:\MidMITs Demand\Distribution Model\iter{distribution_model_iteration}"
         r"\car_and_passenger\Final Outputs\Compiled OD Matrices\PCU"
@@ -140,7 +141,7 @@ if __name__ == "__main__":
     matrix_paths = {}
     for t in (1, 2, 3):
         ucs = [
-            mat_folder / f"synthetic_od_{u}_yr2018_m3_tp{t}.csv"
+            mat_folder / f"synthetic_od_{u}_yr{year}_m3_tp{t}.csv"
             for u in ("business", "commute", "other")
         ]
         ucs += [prior_folder / f"MD_b15_mat_v032_TS1_UC{u}.UFM" for u in (4, 5)]
