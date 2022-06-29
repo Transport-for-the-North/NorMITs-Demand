@@ -2,7 +2,7 @@
 """
     Module for running the NTEM forecast.
 """
-
+#todo
 ##### IMPORTS #####
 from __future__ import annotations
 
@@ -241,13 +241,12 @@ def read_tripends(
 ) -> tempro_trip_ends.TEMProTripEnds:
     # TODO Add docstring
     """
-
-
+    Reads in trip-end dvectors from picklefiles
     Args:
-        year (int): _description_
-
+        base_year (int): The base year for the forecast
+        forecast_years (list[int]): A list of forecast years
     Returns:
-        dict: _description_
+        tempro_trip_ends.TEMProTripEnds: the same trip-ends read in
     """
     SEGMENTATION = {"hb": "hb_p_m", "nhb": "nhb_p_m"}
     dvectors = {
@@ -315,7 +314,7 @@ def main(params: ForecastParameters, init_logger: bool = True):
     tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name)
     tempro_growth.save(params.export_path / "TEMPro Growth Factors")
     mitem_inputs = mitem_forecast.MiTEMImportMatrices(
-        params.import_path,
+        os.path.join(params.import_path,'Distribution Model',f'iter{params.iteration}.1','car_and_passenger','Final Outputs','Full PA Matrices'),
         params.base_year,
         params.model_name,
     )
