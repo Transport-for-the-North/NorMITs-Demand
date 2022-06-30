@@ -6,6 +6,7 @@
 ##### IMPORTS #####
 # Standard imports
 import dataclasses
+import os
 from pathlib import Path
 from typing import Dict, Any, List, Union
 
@@ -25,6 +26,8 @@ from normits_demand.matrices import pa_to_od, matrix_processing
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
 LAD_ZONE_SYSTEM = "lad_2020"
+BASE_YEAR = 2021
+FUTURE_YEARS = [2030, 2040]
 
 
 ##### CLASSES #####
@@ -108,7 +111,7 @@ class NTEMImportMatrices:
         """
         name = self.segmentation[hb].generate_file_name(
             segment_params,
-            file_desc="pa",
+            file_desc="synthetic_pa",
             trip_origin=hb,
             year=self.year,
         )
@@ -262,15 +265,15 @@ def trip_end_growth(
         If `normits_demand.efs_constants.BASE_YEAR` is not
         in `tempro_vectors`.
     """
-    if efs_consts.BASE_YEAR not in tempro_vectors:
+    if BASE_YEAR not in tempro_vectors:
         raise NTEMForecastError(
-            f"base year ({efs_consts.BASE_YEAR}) data not given"
+            f"base year ({BASE_YEAR}) data not given"
         )
     growth_zone = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
     model_zoning = nd_core.get_zoning_system(model_zone_system)
     # Split data into internal and external DVectors
     # for different growth calculations
-    base = tempro_vectors[efs_consts.BASE_YEAR]
+    base = tempro_vectors[BASE_YEAR]
     base_data = {
         "internal":
             base.translate_zoning(growth_zone),
@@ -290,7 +293,7 @@ def trip_end_growth(
     # Ignore divide by zero warnings and fill with zeros
     with np.errstate(divide="ignore", invalid="ignore"):
         for yr, data in tempro_vectors.items():
-            if yr == efs_consts.BASE_YEAR:
+            if yr == BASE_YEAR:
                 continue
             forecast = {}
             for area, base in base_data.items():
@@ -305,7 +308,7 @@ def trip_end_growth(
                 )
                 if area == "internal":
                     forecast[area] = forecast[area].translate_zoning(
-                        model_zoning, weighting="average"
+                        model_zoning, weighting='average'
                     )
                 # Set all zones not in the area to 0
                 forecast[area] = forecast[area].segment_apply(
@@ -536,6 +539,8 @@ def grow_matrix(
     ext_future.loc[internals, internals] = 0
     combined_future = pd.concat([int_future, ext_future], axis=0)
     combined_future = combined_future.groupby(level=0).sum()
+    combined_future.rename(columns={i:int(i) for i in combined_future.columns},inplace=True)
+    combined_future.sort_index(axis=1,inplace=True)
     _check_matrix(combined_future, output_path.stem)
     # Write future to file
     file_ops.write_df(combined_future, output_path)

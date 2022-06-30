@@ -46,11 +46,11 @@ class MiTEMImportMatrices(ntem_forecast.NTEMImportMatrices):
 
     def __init__(self, import_folder: Path, year: int, model_name: str) -> None:
         file_ops.check_path_exists(import_folder)
-        self.matrix_folder = import_folder
+        self.matrix_folder = Path(import_folder)
         self.year = int(year)
         self.model_name = model_name.lower().strip()
         if self.model_name != "miham":
-            raise NotImplementedError("this class currently only works for 'noham' model")
+            raise NotImplementedError("this class currently only works for 'miham' model")
         self.mode = MIDMITS_MODEL_MODES[self.model_name]
         if len(self.mode) == 1:
             self.mode = self.mode[0]

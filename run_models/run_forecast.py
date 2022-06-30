@@ -66,6 +66,7 @@ class ForecastParameters:  # TODO Rewrite class as BaseConfig subclass
     import_path: Path = Path(r"T:\MidMITs Demand")
     model_name: str = "miham"
     base_year: int = 2021
+    future_years = [2030, 2040]
     export_path_fmt: str = r"C:\Projects\MidMITS\Forecast_test"
     export_path_params: Optional[Dict[str, Any]] = None
     _export_path: Optional[Path] = dataclasses.field(default=None, init=False, repr=False)
@@ -260,16 +261,18 @@ def read_tripends(
             years = {}
             key = f"{i}_{j}"
             for year in [base_year] + forecast_years:
-                years[year] = nd.DVector.load(
+                dvec = nd.DVector.load(
                     os.path.join(
                         ForecastParameters.import_path,
                         "MiTEM",
                         f"iter{ForecastParameters.iteration}",
                         "NTEM",
                         key,
-                        f"{i}_msoa_notem_segmented_{year}_dvec.pkl",
+                        f"{i}_msoa_notem_segmented_{year}_dvec.pkl")
                     )
-                ).aggregate(nd.get_segmentation_level(SEGMENTATION[i]))
+                if i == 'nhb':
+                    dvec = dvec.reduce(nd.get_segmentation_level('notem_nhb_output_reduced'))
+                years[year] = dvec.aggregate(nd.get_segmentation_level(SEGMENTATION[i]))
             dvectors[key] = years
     return tempro_trip_ends.TEMProTripEnds(**dvectors)
 
@@ -308,7 +311,7 @@ def main(params: ForecastParameters, init_logger: bool = True):
     params.save()
 
     tripend_data = read_tripends(
-        base_year=efs_consts.BASE_YEAR, forecast_years=efs_consts.FUTURE_YEARS
+        base_year=efs_consts.BASE_YEAR, forecast_years=params.future_years
     )
     tripend_data = model_mode_subset(tripend_data, params.model_name)
     tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name)
@@ -325,7 +328,7 @@ def main(params: ForecastParameters, init_logger: bool = True):
     ntem_forecast.convert_to_od(
         pa_folder,
         od_folder,
-        efs_consts.FUTURE_YEARS,
+        params.future_years,
         [mitem_inputs.mode],
         {
             "hb": efs_consts.HB_PURPOSES_NEEDED,
@@ -336,10 +339,10 @@ def main(params: ForecastParameters, init_logger: bool = True):
     )
 
     # Compile to output formats
-    ntem_forecast.compile_noham_for_norms(pa_folder, efs_consts.FUTURE_YEARS)
+    ntem_forecast.compile_noham_for_norms(pa_folder, params.future_years)
     compiled_od_path = ntem_forecast.compile_noham(
         od_folder,
-        efs_consts.FUTURE_YEARS,
+        params.future_years,
         params.car_occupancies_path,
     )
     ntem_forecast_checks.od_matrix_comparison(
