@@ -60,6 +60,7 @@ _DM_ExportPaths_NT = collections.namedtuple(
         'home',
         'upper_external_pa',
         'full_pa_dir',
+        'full_tp_pa_dir',
         'compiled_pa_dir',
         'full_od_dir',
         'combined_od_dir',
@@ -620,6 +621,10 @@ class DMArgumentBuilderBase(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def build_pa_split_by_tp_arguments(self) -> Dict[str, Any]:
+        pass
+
+    @abc.abstractmethod
     def build_pa_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
         pass
 
@@ -1000,9 +1005,8 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             )
         else:
             raise NotImplementedError(
-                "No function exists to build the further_kwargs for "
-                "DistributionMethod %s"
-                % method.value
+                f"No function exists to build the further_kwargs for "
+                f"DistributionMethod {method.value}"
             )
 
         return further_kwargs
@@ -1124,11 +1128,15 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         return final_kwargs
 
-    def build_pa_to_od_arguments(self) -> Dict[str, Any]:
+    def _build_fh_th_factor_args(
+        self,
+        trip_origin: nd_core.TripOrigin,
+    ) -> tuple[pathlib.Path, str, str]:
+        """Builds the path and fnames for the from/to-home factors"""
         # Generate the template filenames for the factors
         template_fname = self.running_segmentation.generate_template_file_name(
             file_desc="{desc}",
-            trip_origin=self.trip_origin.value,
+            trip_origin=trip_origin.value,
             year=str(self.year),
             ftype=".pkl",
         )
@@ -1149,13 +1157,26 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         )
 
         # Build the dictionary of arguments
+        return (
+            pathlib.Path(fh_th_factors_dir),
+            template_fname(desc="fh_factors"),
+            template_fname(desc="th_factors"),
+        )
+
+    def build_pa_to_od_arguments(self) -> Dict[str, Any]:
+        path, fh_template, th_template = self._build_fh_th_factor_args(self.trip_origin)
         return {
-            'factor_dir': pathlib.Path(fh_th_factors_dir),
-            'template_fh_factor_name': template_fname(desc="fh_factors"),
-            'template_th_factor_name': template_fname(desc="th_factors"),
+            'factor_dir': path,
+            'template_fh_factor_name': fh_template,
+            'template_th_factor_name': th_template,
         }
 
+    def build_pa_split_by_tp_arguments(self) -> Dict[str, Any]:
+        path, fh_template, _ = self._build_fh_th_factor_args(self.trip_origin)
+        return {'factor_dir': path, 'template_factor_name': fh_template}
+
     def get_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        """Retrieves all the cost matrices at `zoning_system` """
         return self._build_cost_matrices(zoning_system)
 
     def build_pa_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
@@ -1253,6 +1274,7 @@ class DistributionModelExportPaths:
     # Export dir names
     _upper_external_pa_out_dir = 'Upper External PA Matrices'
     _full_pa_out_dir = 'Full PA Matrices'
+    _full_tp_pa_dir = 'Full TP PA Matrices'
     _compiled_pa_out_dir = 'Compiled PA Matrices'
     _full_od_out_dir = 'Full OD Matrices'
     _combined_od_out_dir = 'Combined OD Matrices'
@@ -1348,6 +1370,7 @@ class DistributionModelExportPaths:
         # Build the matrix output path
         upper_external_pa = os.path.join(export_home, self._upper_external_pa_out_dir)
         full_pa_dir = os.path.join(export_home, self._full_pa_out_dir)
+        full_tp_pa_dir = os.path.join(export_home, self._full_tp_pa_dir)
         compiled_pa_dir = os.path.join(export_home, self._compiled_pa_out_dir)
         full_od_dir = os.path.join(export_home, self._full_od_out_dir)
         compiled_od_dir = os.path.join(export_home, self._compiled_od_out_dir)
@@ -1361,6 +1384,7 @@ class DistributionModelExportPaths:
             home=export_home,
             upper_external_pa=upper_external_pa,
             full_pa_dir=full_pa_dir,
+            full_tp_pa_dir=full_tp_pa_dir,
             compiled_pa_dir=compiled_pa_dir,
             full_od_dir=full_od_dir,
             combined_od_dir=combined_od_dir,
@@ -1372,6 +1396,7 @@ class DistributionModelExportPaths:
         dir_paths = [
             upper_external_pa,
             full_pa_dir,
+            full_tp_pa_dir,
             compiled_pa_dir,
             full_od_dir,
             combined_od_dir,

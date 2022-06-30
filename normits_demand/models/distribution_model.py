@@ -184,6 +184,7 @@ class DistributionModel(DistributionModelExportPaths):
             run_lower_model: bool = False,
             run_pa_matrix_reports: bool = False,
             run_pa_to_od: bool = False,
+            run_pa_split_by_tp: bool = False,
             run_od_matrix_reports: bool = False,
             ) -> None:
         """Runs the components of Distribution Model
@@ -227,6 +228,11 @@ class DistributionModel(DistributionModelExportPaths):
             Whether to run the PA to OD conversion process or not. This step
             depends on the external model and gravity model already being
             run - as these steps produce the PA matrices to convert.
+
+        run_pa_split_by_tp:
+            Whether to run the PA conversion to tp split matrices or not.
+            This step depends on the external model and gravity model already
+            being run - as these steps produce the PA matrices to convert.
 
         run_od_matrix_reports:
             Whether to run the matrix reports for full OD matrices or not.
@@ -279,6 +285,9 @@ class DistributionModel(DistributionModelExportPaths):
 
         if run_pa_to_od:
             self.run_pa_to_od()
+
+        if run_pa_split_by_tp:
+            self.run_pa_split_by_tp()
 
         if run_od_matrix_reports:
             self.run_od_matrix_reports()
@@ -533,6 +542,7 @@ class DistributionModel(DistributionModelExportPaths):
         return out_dir
 
     def run_pa_to_od(self):
+        """Converts the generated PA matrices to OD"""
         # TODO(BT): Make sure the upper and lower matrices exist!
 
         # ## GET THE FULL PA MATRICES ## #
@@ -587,6 +597,41 @@ class DistributionModel(DistributionModelExportPaths):
             raise ValueError(
                 "Don't know how to compile PA matrices to OD for "
                 f"trip origin '{self.trip_origin}'."
+            )
+
+    def run_pa_split_by_tp(self) -> None:
+        """Splits the 24hr PA matrices by time periods"""
+        # TODO(BT): Make sure the upper and lower matrices exist!
+
+        # ## GET THE FULL PA MATRICES ## #
+        self._maybe_recombine_pa_matrices()
+
+        # Translate matrices if needed
+        compile_in_path = self._maybe_translate_matrices_for_compile(
+            matrices_path=self.export_paths.full_pa_dir,
+            matrices_desc=self._pa_matrix_desc,
+        )
+
+        if not self.running_segmentation.has_time_period_segments():
+            self._logger.info("Splitting PA matrices by time period")
+            kwargs = self.arg_builder.build_pa_split_by_tp_arguments()
+
+            # Generate file names
+            template_pa_name = self.running_segmentation.generate_template_file_name(
+                file_desc=self._pa_matrix_desc,
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                compressed=True,
+            )
+
+            pa_to_od.factors_split_by_tp(
+                import_dir=pathlib.Path(compile_in_path),
+                export_dir=pathlib.Path(self.export_paths.full_tp_pa_dir),
+                segmentation=self.running_segmentation,
+                template_in_name=template_pa_name,
+                template_out_name=template_pa_name,
+                process_count=self.process_count,
+                **kwargs
             )
 
     def run_od_matrix_reports(self):

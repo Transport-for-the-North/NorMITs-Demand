@@ -1095,10 +1095,13 @@ def get_latest_modified_time(paths: Iterable[PathLike]) -> float:
     -------
     latest_modified_time:
         The latest modified time of all paths.
-        If paths is an empty iterable, -1.0 is returned.
+        If paths is an empty iterable, np.inf is returned.
     """
+    if paths == list():
+        return np.inf
+
     # init
-    latest_time = -1.0
+    latest_time = -1
 
     # Check the latest time of all paths
     for path in paths:
@@ -1122,8 +1125,11 @@ def get_oldest_modified_time(paths: Iterable[PathLike]) -> float:
     -------
     oldest_modified_time:
         The oldest modified time of all paths.
-        If paths is an empty iterable, np.inf is returned.
+        If paths is an empty iterable, -1 is returned.
     """
+    if paths == list():
+        return -1
+
     # init
     oldest_time = np.inf
 

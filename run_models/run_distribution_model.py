@@ -42,7 +42,7 @@ SCENARIO = nd.Scenario.SC01_JAM
 TARGET_TLD_VERSION = 'v2.0'
 DM_ITERATION_NAME = '9.10.1'
 DM_IMPORT_HOME = r"I:\NorMITs Demand\import"
-DM_EXPORT_HOME = r"F:\NorMITs Demand\Distribution Model"
+DM_EXPORT_HOME = r"E:\NorMITs Demand\Distribution Model"
 
 # General constants
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
@@ -67,14 +67,15 @@ def main():
     calibrate_params = True
 
     # Choose what to run
-    run_hb = False
-    run_nhb = True
+    run_hb = True
+    run_nhb = False
 
     run_all = False
-    run_upper_model = True
-    run_lower_model = True
+    run_upper_model = False
+    run_lower_model = False
     run_pa_matrix_reports = False
     run_pa_to_od = False
+    run_pa_split_by_tp = True
     run_od_matrix_reports = False
     compile_to_assignment = False
 
@@ -550,6 +551,7 @@ def main():
             run_lower_model=run_lower_model,
             run_pa_matrix_reports=run_pa_matrix_reports,
             run_pa_to_od=run_pa_to_od,
+            run_pa_split_by_tp=run_pa_split_by_tp,
             run_od_matrix_reports=run_od_matrix_reports,
         )
 
@@ -592,6 +594,7 @@ def main():
             run_lower_model=run_lower_model,
             run_pa_matrix_reports=run_pa_matrix_reports,
             run_pa_to_od=run_pa_to_od,
+            run_pa_split_by_tp=run_pa_split_by_tp,
             run_od_matrix_reports=run_od_matrix_reports,
         )
 
