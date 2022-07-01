@@ -7,10 +7,11 @@ Created on Fri Nov 20 13:47:56 2020
 
 import os
 import pathlib
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
+import pydantic
 
 import normits_demand as nd
 from normits_demand.concurrency import multiprocessing as mp
@@ -24,7 +25,22 @@ LOG = nd_log.get_logger(__name__)
 _TINY_INFILL = 1 * 10 ** -8
 
 
-def read_pa_seg(pa_df, exc=["trips", "attractions", "productions"], in_exc=["zone"]):
+class DisaggregationSettings(pydantic.BaseModel):  # pylint: disable=no-member
+    """Optional settings for adjusting `disaggregate_segments`."""
+
+    aggregate_surplus_segments: bool = True
+    export_original: bool = True
+    export_furness: bool = False
+    time_period: str = "24hr"
+    intrazonal_cost_infill: float = 0.5
+    maximum_furness_loops: int = 1999
+    pa_furness_convergence: float = 0.1
+    bandshare_convergence: float = 0.975
+    max_bandshare_loops: int = 200
+    multiprocessing_threads: int = -1
+
+
+def read_pa_seg(pa_df, exc=("trips", "attractions", "productions"), in_exc=("zone",)):
     """ """
     cols = list(pa_df)
     cols = [x for x in cols if x not in exc]
@@ -214,19 +230,9 @@ def disaggregate_segments(
     base_attractions: nd.DVector,
     export_folder: pathlib.Path,
     cost_folder: pathlib.Path,
-    aggregate_surplus_segments: bool = True,
-    rounding: int = 5,
     trip_origin: nd.TripOrigin = nd.TripOrigin.HB,
-    tp: str = "24hr",
-    iz_infill: float = 0.5,
-    furness_loops: int = 1999,
-    min_pa_diff: float = 0.1,
-    bs_con_crit: float = 0.975,
-    max_bs_loops: int = 300,
-    mp_threads: int = -1,
-    export_original: bool = True,
-    export_furness: bool = False,
-):
+    settings: DisaggregationSettings = DisaggregationSettings(),
+) -> None:
     """
     Parameters
     ----------
@@ -271,7 +277,6 @@ def disaggregate_segments(
     duplicates = tld_seg.duplicated().sum()
     if duplicates > 0:
         raise ValueError(f"{duplicates} TLDs with the same segmentation found")
-    tld_seg.to_csv("DO_NOT_COMMIT/tld_seg.csv", index=False)
 
     unique_zones = base_productions.zoning_system.unique_zones
     ia_name = base_productions.zone_col
@@ -305,7 +310,7 @@ def disaggregate_segments(
     it_set = base_mat_seg.merge(tld_seg, how="inner", on=merge_cols)
 
     # Drop surplus segments on import descriptors - if you want
-    if aggregate_surplus_segments:
+    if settings.aggregate_surplus_segments:
         it_set = it_set.drop(agg_cols, axis=1)
         base_mat_seg = base_mat_seg.drop(agg_cols, axis=1)
 
@@ -316,7 +321,7 @@ def disaggregate_segments(
 
     # Apply any hard constraints here eg, origin, mode
     if trip_origin != "both":
-        it_set = it_set[it_set["trip_origin"] == trip_origin.get_name()].reset_index(drop=True)
+        it_set = it_set[it_set["trip_origin"] == trip_origin.value].reset_index(drop=True)
 
     # Build a set of every unique combo of base / target split - main iterator
     unq_splits = (
@@ -338,20 +343,12 @@ def disaggregate_segments(
         "a_cols": a_cols,
         "unq_zone_list": unique_zones,
         "cost_folder": cost_folder,
-        "tp": tp,
-        "iz_infill": iz_infill,
-        "furness_loops": furness_loops,
-        "min_pa_diff": min_pa_diff,
-        "bs_con_crit": bs_con_crit,
-        "max_bs_loops": max_bs_loops,
-        "export_original": export_original,
-        "export_furness": export_furness,
         "ia_name": ia_name,
         "export_folder": export_folder,
         "trip_origin": trip_origin,
+        "settings": settings,
     }
 
-    out_dat = list()
     kwargs_list = list()
     for i in unq_splits.index:
         kwargs = unchanging_kwargs.copy()
@@ -359,37 +356,32 @@ def disaggregate_segments(
         kwargs_list.append(kwargs)
 
     # Call using multiple threads
-    LOG.debug("Running segment disaggregator on %s threads", mp_threads)
-    mp.multiprocess(_segment_build_worker, kwargs=kwargs_list, process_count=mp_threads)
-
-    return out_dat
+    LOG.debug("Running segment disaggregator on %s threads", settings.multiprocessing_threads)
+    mp.multiprocess(
+        _segment_build_worker,
+        kwargs=kwargs_list,
+        process_count=settings.multiprocessing_threads,
+    )
 
 
 def _segment_build_worker(
-    agg_split_index,
-    unq_splits,
-    it_set,
-    base_mat_seg,
-    import_folder,
-    add_cols,
-    target_tld_folder,
-    base_p,
-    p_cols,
-    base_a,
-    a_cols,
-    unq_zone_list,
-    cost_folder,
-    tp,
-    iz_infill,
-    furness_loops,
-    min_pa_diff,
-    bs_con_crit,
-    max_bs_loops,
-    export_original,
-    export_furness,
-    ia_name,
-    export_folder,
-    trip_origin,
+    agg_split_index: int,
+    unq_splits: pd.Series,
+    it_set: Union[pd.Series, pd.DataFrame],
+    base_mat_seg: pd.DataFrame,
+    import_folder: pathlib.Path,
+    add_cols: List,
+    target_tld_folder: pathlib.Path,
+    base_p: nd.DVector,
+    p_cols: List,
+    base_a: nd.DVector,
+    a_cols: List,
+    unq_zone_list: np.ndarray,
+    cost_folder: pathlib.Path,
+    ia_name: str,
+    export_folder: pathlib.Path,
+    trip_origin: nd.TripOrigin,
+    settings: DisaggregationSettings,
 ):
     """
     Worker for running segment disaggregator in parallel.
@@ -418,7 +410,7 @@ def _segment_build_worker(
     # Import and aggregate
     for _, ipr in import_params.iterrows():
         print("Importing " + ipr["base_seg"])
-        sd = file_ops.read_df(os.path.join(import_folder, ipr["base_seg"]))
+        sd = file_ops.read_df(import_folder / ipr["base_seg"])
         seed_name = ipr["base_seg"]
 
         if "zone" in list(sd)[0] or "Unnamed" in list(sd)[0]:
@@ -470,7 +462,7 @@ def _segment_build_worker(
     # Get distance/cost
     # Costs should be same for each segment, so get here
     cost_cp = calib_params.copy()
-    if "ca" in calib_params and tp == "tp":
+    if "ca" in calib_params and settings.time_period == "tp":
         cost_cp.pop("ca")
 
     print(cost_cp)
@@ -485,10 +477,10 @@ def _segment_build_worker(
         seed_name,
         sd,
         costs,
-        furness_loops=furness_loops,
-        min_pa_diff=min_pa_diff,
-        bs_con_crit=bs_con_crit,
-        max_bs_loops=max_bs_loops,
+        furness_loops=settings.maximum_furness_loops,
+        min_pa_diff=settings.pa_furness_convergence,
+        bs_con_crit=settings.bandshare_convergence,
+        max_bs_loops=settings.max_bandshare_loops,
     )
 
     # Unpack list of lists
@@ -499,22 +491,22 @@ def _segment_build_worker(
         furness_mat = item.pop("furness_mat")
         mat = item.pop("mat")
 
-        if export_original:
+        if settings.export_original:
             mat = pd.DataFrame(mat, index=unq_zone_list, columns=unq_zone_list).reset_index()
 
             mat = mat.rename(columns={"index": ia_name})
 
             # Path export
-            es_path = os.path.join(export_folder, trip_origin.get_name() + "_enhpa")
+            es_path = os.path.join(export_folder, trip_origin.value + "_enhpa")
 
-            if tp in add_cols:
-                es_path = nup.build_path(es_path, item, tp=tp)
+            if settings.time_period in add_cols:
+                es_path = nup.build_path(es_path, item, tp=settings.time_period)
             else:
                 es_path = nup.build_path(es_path, item)
 
             mat.to_csv(es_path, index=False)
 
-        if export_furness:
+        if settings.export_furness:
             furness_mat = pd.DataFrame(
                 furness_mat, index=unq_zone_list, columns=unq_zone_list
             ).reset_index()
@@ -522,10 +514,10 @@ def _segment_build_worker(
             furness_mat = furness_mat.rename(columns={"index": ia_name})
 
             # Path export
-            es_path = os.path.join(export_folder, trip_origin.get_name() + "_enhpafn")
+            es_path = os.path.join(export_folder, trip_origin.value + "_enhpafn")
 
-            if tp in add_cols:
-                es_path = nup.build_path(es_path, item, tp=tp)
+            if settings.time_period in add_cols:
+                es_path = nup.build_path(es_path, item, tp=settings.time_period)
             else:
                 es_path = nup.build_path(es_path, item)
 
@@ -553,10 +545,10 @@ def _segment_build_worker(
         del (tlb_con, bs_con, fbs_con, pa_diff, ea, ep, tar_a, tar_p)
 
         # Build report
-        report_path = os.path.join(export_folder, trip_origin.get_name() + "_disagg_report")
+        report_path = os.path.join(export_folder, trip_origin.value + "_disagg_report")
 
-        if tp in add_cols:
-            report_path = nup.build_path(report_path, item, tp=tp)
+        if settings.time_period in add_cols:
+            report_path = nup.build_path(report_path, item, tp=settings.time_period)
         else:
             report_path = nup.build_path(report_path, item)
 
@@ -844,7 +836,7 @@ def _dissag_seg(
 
 
 def get_costs(
-    cost_folder: pathlib.Path, calib_params: Dict[str, Any], zones: np.array
+    cost_folder: pathlib.Path, calib_params: Dict[str, Any], zones: np.ndarray
 ) -> pd.DataFrame:
     purpose_lookup = {
         "commute": [1],

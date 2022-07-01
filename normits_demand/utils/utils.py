@@ -13,12 +13,10 @@ import sys
 import time
 import math
 import pickle
-from typing import Any, Dict, Iterator, Set, Union
+from typing import Collection, Dict, Iterator, Union
 
 import numpy as np
 import pandas as pd
-
-import normits_demand as nd
 
 _default_home_dir = 'C:/'
 _default_iter = 'iter0'
@@ -1990,7 +1988,9 @@ def parse_matrix_name(filename: str) -> Dict[str, Union[str, int]]:
 
 
 def parse_matrix_folder(
-    folder: pathlib.Path, extension_filter: Set[str] = None, required_data: Set[str] = None
+    folder: pathlib.Path,
+    extension_filter: Collection[str] = None,
+    required_data: Collection[str] = None,
 ) -> Iterator[Dict[str, Union[str, int, pathlib.Path]]]:
     for file in folder.iterdir():
         if not file.is_file():

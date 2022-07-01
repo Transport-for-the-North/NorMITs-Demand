@@ -1602,8 +1602,8 @@ def build_norms_compile_params(import_dir: str,
     return out_paths
 
 
-def build_compile_params(import_dir: str,
-                         export_dir: str,
+def build_compile_params(import_dir: nd.PathLike,
+                         export_dir: nd.PathLike,
                          matrix_format: str,
                          years_needed: Iterable[int],
                          m_needed: List[int] = efs_consts.MODES_NEEDED,
@@ -2405,9 +2405,9 @@ def _compile_matrices_internal(mat_import,
     return decompile_factors
 
 
-def compile_matrices(mat_import: str,
-                     mat_export: str,
-                     compile_params_path: str,
+def compile_matrices(mat_import: nd.PathLike,
+                     mat_export: nd.PathLike,
+                     compile_params_path: nd.PathLike,
                      factor_pickle_path: str = None,
                      round_dp: int = consts.DEFAULT_ROUNDING,
                      factors_fname: str = 'od_compilation_factors.pickle',

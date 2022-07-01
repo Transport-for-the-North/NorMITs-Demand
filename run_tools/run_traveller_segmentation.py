@@ -34,21 +34,6 @@ MODEL_SEGMENTATIONS = {
 
 
 ##### CLASSES #####
-class DisaggregationSettings(pydantic.BaseModel):
-    # TODO Docstring explaining the parameters
-    aggregate_surplus_segments: bool = True
-    export_original: bool = True
-    export_furness: bool = False
-    rounding: int = 5
-    time_period: str = "24hr"
-    intrazonal_cost_infill: float = 0.5
-    maximum_furness_loops: int = 1999
-    pa_furness_convergence: float = 0.1
-    bandshare_convergence: float = 0.975
-    max_bandshare_loops: int = 200
-    multiprocessing_threads: int = -1
-
-
 class TravellerSegmentationParameters(config_base.BaseConfig):
     # TODO Docstring explaining the parameters
     iteration: str
@@ -61,7 +46,9 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
     model: nd.AssignmentModel
     year: int
     trip_length_distribution_folder: pathlib.Path
-    disaggregation_settings: DisaggregationSettings = DisaggregationSettings()
+    disaggregation_settings: segment_disaggregator.DisaggregationSettings = (
+        segment_disaggregator.DisaggregationSettings()
+    )
 
     @pydantic.validator(
         "import_folder",
@@ -69,7 +56,7 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         "notem_export_home",
         "trip_length_distribution_folder",
         "base_output_folder",
-    )
+    )  # pylint: disable=no-self-argument
     def _folder_exists(cls, value) -> pathlib.Path:
         try:
             return file_ops.folder_exists(value)
@@ -85,8 +72,10 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         )
 
     @pydantic.root_validator(skip_on_failure=True)
-    def _check_cost_folder(cls, values: dict[str, Any]) -> dict[str, Any]:
-        cost_folder = cls._build_cost_folder(values.get("import_folder"), values.get("model"))
+    def _check_cost_folder(  # pylint: disable=no-self-argument
+        cls, values: dict[str, Any]
+    ) -> dict[str, Any]:
+        cost_folder = cls._build_cost_folder(values.get("import_folder"), values.get("model"))  # type: ignore
         cls._folder_exists(cost_folder)
         return values
 
@@ -102,14 +91,14 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
 
 
 ##### FUNCTIONS #####
-def _compile_params_format(compile_params_path: nd.PathLike) -> None:
+def _compile_params_format(compile_params_path: pathlib.Path) -> None:
     """Replace ca/nca in compiled matrix names with ca2/ca1, respectively.
 
     Overwrites existing compilation parameters file with adjusted names.
 
     Parameters
     ----------
-    compile_params_path : nd.PathLike
+    compile_params_path : pathlib.Path
         Path to compilation parameters file created by
         `matrix_processing.build_compile_params`.
     """
@@ -163,15 +152,17 @@ def aggregate_purposes(
     output_folder = matrix_folder / "userclass"
     output_folder.mkdir(exist_ok=True)
 
-    compile_params_path = matrix_processing.build_compile_params(
-        import_dir=matrix_folder,
-        export_dir=output_folder,
-        matrix_format="pa",
-        years_needed=[year],
-        m_needed=model.get_mode().get_mode_values(),
-        ca_needed=[1, 2],
-        split_hb_nhb=True,
-    )[0]
+    compile_params_path = pathlib.Path(
+        matrix_processing.build_compile_params(
+            import_dir=matrix_folder,
+            export_dir=output_folder,
+            matrix_format="pa",
+            years_needed=[year],
+            m_needed=model.get_mode().get_mode_values(),
+            ca_needed=[1, 2],
+            split_hb_nhb=True,
+        )[0]
+    )
     # Update compile parameters to use ca1/2 instead of nca/ca in the output names
     _compile_params_format(compile_params_path)
 
@@ -236,7 +227,7 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
     matrix_folder = aggregate_purposes(params.matrix_folder, params.model, params.year)
 
     for to in nd.TripOrigin:
-        LOG.info("Decompiling %s matrices", to.get_name())
+        LOG.info("Decompiling %s matrices", to.value)
 
         productions, attractions = trip_end_converter.get_trip_ends(
             to, nd.get_segmentation_level(MODEL_SEGMENTATIONS[to])
@@ -244,8 +235,6 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
 
         segment_disaggregator.disaggregate_segments(
             import_folder=matrix_folder,
-            # TODO Old TLDs were in miles new are kms and costs and kms so don't need to convert anymore
-            # TODO Use TLD enums as parameters for finding TLD path, TLD has a function for finding the path
             target_tld_folder=params.trip_length_distribution_folder,
             model=params.model,
             base_productions=productions,
@@ -253,19 +242,9 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
             export_folder=params.output_folder,
             cost_folder=params.cost_folder,
             trip_origin=to,
-            aggregate_surplus_segments=params.disaggregation_settings.aggregate_surplus_segments,
-            rounding=params.disaggregation_settings.rounding,
-            tp=params.disaggregation_settings.time_period,
-            iz_infill=params.disaggregation_settings.intrazonal_cost_infill,
-            furness_loops=params.disaggregation_settings.maximum_furness_loops,
-            min_pa_diff=params.disaggregation_settings.pa_furness_convergence,
-            bs_con_crit=params.disaggregation_settings.bandshare_convergence,
-            max_bs_loops=params.disaggregation_settings.max_bandshare_loops,
-            mp_threads=params.disaggregation_settings.multiprocessing_threads,
-            export_original=params.disaggregation_settings.export_original,
-            export_furness=params.disaggregation_settings.export_furness,
+            settings=params.disaggregation_settings,
         )
-        LOG.info("Finished %s", to.get_name())
+        LOG.info("Finished %s", to.value)
 
     LOG.info("Finished traveller segmentation")
 
