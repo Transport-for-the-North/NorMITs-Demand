@@ -12,6 +12,8 @@ Home of the NorMITs Distribution Model
 """
 # Built-Ins
 import os
+import pathlib
+import functools
 
 from typing import Any
 from typing import List
@@ -33,6 +35,8 @@ from normits_demand.utils import vehicle_occupancy
 from normits_demand.utils import general as du
 from normits_demand.matrices import matrix_processing
 from normits_demand.matrices import pa_to_od
+from normits_demand.matrices import utils as mat_utils
+from normits_demand.reports import matrix_reports
 
 from normits_demand.pathing.distribution_model import DistributionModelExportPaths
 from normits_demand.pathing.distribution_model import DMArgumentBuilderBase
@@ -112,6 +116,7 @@ class DistributionModel(DistributionModelExportPaths):
 
         # Assign attributes
         self.running_segmentation = running_segmentation
+        self.process_count = process_count
         self.upper_model_process_count = upper_model_process_count
         self.lower_model_process_count = lower_model_process_count
 
@@ -348,17 +353,74 @@ class DistributionModel(DistributionModelExportPaths):
         self._logger.info("Lower Model Done!")
 
     def run_pa_matrix_reports(self):
-        # PA RUN REPORTS
-        # Matrix Trip ENd totals
-        #   Inter / Intra Report by segment?
-        #   Aggregate segments and report again too? (CBO)
-        # Sector Reports Dvec style
-        #   Output 24x24 square at 12 hours
-        # TLD curve
-        #   single mile bands - p/m (ca ) segments full matrix
-        #   NorMITs Vis
+        """Generates a standard set of matrix reports on the PA matrices"""
+        # Make sure we have full PA matrices before running
+        self._maybe_recombine_pa_matrices()
 
-        pass
+        # Generate needed arguments
+        input_fname_template = self.running_segmentation.generate_template_file_name(
+                file_desc="synthetic_pa",
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                csv=True
+            )
+        cost_matrices = self.arg_builder.build_pa_report_arguments(
+            self.compile_zoning_system,
+        )
+
+        matrix_reports.generate_matrix_reports(
+            matrix_dir=pathlib.Path(self.export_paths.full_pa_dir),
+            report_dir=pathlib.Path(self.report_paths.pa_reports_dir),
+            matrix_segmentation=self.running_segmentation,
+            matrix_zoning_system=self.compile_zoning_system,
+            matrix_fname_template=input_fname_template,
+            cost_matrices=cost_matrices,
+            row_name='productions',
+            col_name='attractions',
+            report_prefix=f"{self.trip_origin}_{self.iteration_name}",
+        )
+
+    def _maybe_recombine_od_matrices(self) -> None:
+        """Combine od-to and od-from matrices if needed"""
+        if self.trip_origin == 'nhb':
+            # TODO(BT): Make sure the expected OD matrices exist
+            return
+
+        # TODO(BT): Doesn't currently work as need tp segments
+        in_path = pathlib.Path(self.export_paths.full_od_dir)
+        out_path = pathlib.Path(self.export_paths.combined_od_dir)
+
+        if file_ops.is_cache_older(original=in_path, cache=out_path):
+            # Generate fname templates
+            template = self.running_segmentation.generate_template_file_name(
+                file_desc="{matrix_format}",
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                compressed=True,
+            )
+            template_fn = functools.partial(template.format, segment_params="{segment_params}")
+
+            mat_utils.combine_od_to_from_matrices(
+                import_dir=in_path,
+                export_dir=out_path,
+                segmentation=self.running_segmentation,
+                od_fname_template=template_fn(matrix_format=self._od_matrix_desc),
+                od_from_fname_template=template_fn(matrix_format=self._od_from_matrix_desc),
+                od_to_fname_template=template_fn(matrix_format=self._od_to_matrix_desc),
+            )
+
+    def _maybe_recombine_pa_matrices(self) -> None:
+        """Combine pa matrices if it hasn't been done yet"""
+        # Build the I/O paths
+        in_paths = [
+            pathlib.Path(self.lower.export_paths.matrix_dir),
+            pathlib.Path(self.export_paths.upper_external_pa),
+        ]
+        out_path = pathlib.Path(self.export_paths.full_pa_dir)
+
+        # Only recombine if cache is older than original files
+        if file_ops.is_old_cache(original=in_paths, cache=out_path):
+            self._recombine_pa_matrices()
 
     def _recombine_pa_matrices(self):
         # ## GET THE FULL PA MATRICES ## #
@@ -431,8 +493,8 @@ class DistributionModel(DistributionModelExportPaths):
 
         # Get the translations
         pop_trans, emp_trans = translation.get_long_pop_emp_translations(
-            in_zoning_system=current_zoning,
-            out_zoning_system=self.compile_zoning_system,
+            from_zoning_system=current_zoning,
+            to_zoning_system=self.compile_zoning_system,
             weight_col_name=translation_weight_col
         )
 
@@ -474,21 +536,39 @@ class DistributionModel(DistributionModelExportPaths):
         # TODO(BT): Make sure the upper and lower matrices exist!
 
         # ## GET THE FULL PA MATRICES ## #
-        self._recombine_pa_matrices()
+        self._maybe_recombine_pa_matrices()
 
         # ## CONVERT HB PA TO OD ## #
         if self.trip_origin == 'hb':
             self._logger.info("Converting HB PA matrices to OD")
             kwargs = self.arg_builder.build_pa_to_od_arguments()
+
+            # Generate the template file names
+            template_fname = self.running_segmentation.generate_template_file_name(
+                file_desc="{matrix_format}",
+                trip_origin=self.trip_origin,
+                year=str(self.year),
+                compressed=True,
+            )
+            template_fname = functools.partial(
+                template_fname.format,
+                segment_params="{segment_params}",
+            )
+
+            template_pa_name = template_fname(matrix_format=self._pa_matrix_desc)
+            template_od_from_name = template_fname(matrix_format=self._od_from_matrix_desc)
+            template_od_to_name = template_fname(matrix_format=self._od_to_matrix_desc)
+
+            # Convert the matrices
             pa_to_od.build_od_from_fh_th_factors(
-                pa_import=self.export_paths.full_pa_dir,
-                od_export=self.export_paths.full_od_dir,
-                pa_matrix_desc=self._pa_matrix_desc,
-                od_to_matrix_desc=self._od_to_matrix_desc,
-                od_from_matrix_desc=self._od_from_matrix_desc,
-                base_year=self.year,
-                years_needed=[self.year],
-                **kwargs
+                pa_import_dir=pathlib.Path(self.export_paths.full_pa_dir),
+                od_export_dir=pathlib.Path(self.export_paths.full_od_dir),
+                segmentation=self.running_segmentation,
+                template_pa_name=template_pa_name,
+                template_od_from_name=template_od_from_name,
+                template_od_to_name=template_od_to_name,
+                process_count=self.process_count,
+                **kwargs,
             )
 
         # ## MOVE NHB TO OD DIR ## #
@@ -510,17 +590,36 @@ class DistributionModel(DistributionModelExportPaths):
             )
 
     def run_od_matrix_reports(self):
-        # PA RUN REPORTS
-        # Matrix Trip ENd totals
-        #   Inter / Intra Report by segment?
-        #   Aggregate segments and report again too? (CBO)
-        # Sector Reports Dvec style
-        #   Output 24x24 square at 12 hours
-        # TLD curve
-        #   single mile bands - p/m (ca ) segments full matrix
-        #   NorMITs Vis
+        """Generates a standard set of matrix reports on the OD matrices"""
+        # Make sure we have full OD matrices before running
+        self._maybe_recombine_od_matrices()
 
-        pass
+        print("Combined")
+        exit()
+
+        # TODO: OD to and OD from to add (for directional OD) OR just compile to OD?
+        #  OD report arguments
+        input_fname_template = self.running_segmentation.generate_template_file_name(
+            file_desc="synthetic_od",
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            csv=True
+        )
+        print(input_fname_template)
+        cost_matrices = self.arg_builder.build_od_report_arguments(
+            self.compile_zoning_system,
+        )
+
+        matrix_reports.generate_matrix_reports(
+            matrix_dir=pathlib.Path(self.export_paths.combined_od_dir),
+            report_dir=pathlib.Path(self.report_paths.od_reports_dir),
+            matrix_segmentation=self.running_segmentation,
+            matrix_zoning_system=self.compile_zoning_system,
+            matrix_fname_template=input_fname_template,
+            cost_matrices=cost_matrices,
+            row_name='origins',
+            col_name='destinations',
+        )
 
     def compile_to_assignment_format(self):
         """TfN Specific helper function to compile outputs into assignment format
@@ -588,7 +687,7 @@ class DistributionModel(DistributionModelExportPaths):
             )
 
         elif self.running_mode == nd.Mode.TRAIN:
-            self._recombine_pa_matrices()
+            self._maybe_recombine_pa_matrices()
 
             # Translate matrices if needed
             compile_in_path = self._maybe_translate_matrices_for_compile(

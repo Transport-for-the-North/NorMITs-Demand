@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import abc
 import pathlib
+import functools
 import collections
 
 from os import PathLike
@@ -56,6 +57,7 @@ _DM_ExportPaths_NT = collections.namedtuple(
         'full_pa_dir',
         'compiled_pa_dir',
         'full_od_dir',
+        'combined_od_dir',
         'compiled_od_dir',
         'compiled_od_dir_pcu',
     ]
@@ -147,8 +149,8 @@ class DMArgumentBuilderBase(abc.ABC):
     def _get_translations(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Get the translations between upper and lower zoning"""
         return translation.get_long_pop_emp_translations(
-            in_zoning_system=self.upper_zoning_system,
-            out_zoning_system=self.lower_zoning_system,
+            from_zoning_system=self.upper_zoning_system,
+            to_zoning_system=self.lower_zoning_system,
             weight_col_name=self._translation_weight_col
         )
 
@@ -612,6 +614,14 @@ class DMArgumentBuilderBase(abc.ABC):
     def build_pa_to_od_arguments(self) -> Dict[str, Any]:
         pass
 
+    @abc.abstractmethod
+    def build_pa_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        pass
+
+    @abc.abstractmethod
+    def build_od_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        pass
+
 
 class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
     # Costs constants
@@ -651,6 +661,8 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                  lower_running_zones: List[Any],
                  target_tld_version: str,
                  init_params_cols: List[str],
+                 tour_props_version: str,
+                 tour_props_zoning_name: str,
                  upper_model_method: nd.DistributionMethod,
                  upper_model_kwargs: Dict[str, Any],
                  upper_init_params_fname: str,
@@ -665,8 +677,6 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                  lower_calibration_areas: Optional[Union[Dict[Any, str], str]] = None,
                  lower_calibration_zones_fname: Optional[str] = None,
                  lower_calibration_naming: Optional[Dict[Any, str]] = None,
-                 tour_props_version: Optional[str] = None,
-                 tour_props_zoning_name: Optional[str] = None,
                  intrazonal_cost_infill: Optional[float] = None,
                  target_tld_min_max_multiplier: float = 1,
                  ):
@@ -754,7 +764,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         )
         fname = self.running_segmentation.generate_file_name(
             trip_origin=self.trip_origin.value,
-            file_desc="%s_cost" % zoning_system.name,
+            file_desc=f"{zoning_system.name}_cost",
             segment_params=segment_params,
             csv=True,
         )
@@ -1100,16 +1110,17 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         return final_kwargs
 
     def build_pa_to_od_arguments(self) -> Dict[str, Any]:
-        # TODO(BT): UPDATE build_od_from_fh_th_factors() to use segmentation levels
-        seg_level = 'tms'
-        seg_params = {
-            'p_needed': self.running_segmentation.segments['p'].unique(),
-            'm_needed': self.running_segmentation.segments['m'].unique(),
-        }
-        if 'ca' in self.running_segmentation.naming_order:
-            seg_params.update({
-                'ca_needed': self.running_segmentation.segments['ca'].unique(),
-            })
+        # Generate the template filenames for the factors
+        template_fname = self.running_segmentation.generate_template_file_name(
+            file_desc="{desc}",
+            trip_origin=self.trip_origin.value,
+            year=str(self.year),
+            ftype=".pkl",
+        )
+        template_fname = functools.partial(
+            template_fname.format,
+            segment_params="{segment_params}",
+        )
 
         # Build the factors dir
         fh_th_factors_dir = os.path.join(
@@ -1122,11 +1133,21 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             self._fh_th_factors_dir_name,
         )
 
+        # Build the dictionary of arguments
         return {
-            'seg_level': seg_level,
-            'seg_params': seg_params,
-            'fh_th_factors_dir': fh_th_factors_dir,
+            'factor_dir': pathlib.Path(fh_th_factors_dir),
+            'template_fh_factor_name': template_fname(desc="fh_factors"),
+            'template_th_factor_name': template_fname(desc="th_factors"),
         }
+
+    def get_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        return self._build_cost_matrices(zoning_system)
+
+    def build_pa_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        return self.get_report_arguments(zoning_system)
+
+    def build_od_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        return self.get_report_arguments(zoning_system)
 
 
 # ## DEFINE EXPORT PATHS ##
@@ -1219,6 +1240,7 @@ class DistributionModelExportPaths:
     _full_pa_out_dir = 'Full PA Matrices'
     _compiled_pa_out_dir = 'Compiled PA Matrices'
     _full_od_out_dir = 'Full OD Matrices'
+    _combined_od_out_dir = 'Combined OD Matrices'
     _compiled_od_out_dir = 'Compiled OD Matrices'
     _compiled_od_out_dir_pcu = 'PCU'
 
@@ -1314,7 +1336,10 @@ class DistributionModelExportPaths:
         compiled_pa_dir = os.path.join(export_home, self._compiled_pa_out_dir)
         full_od_dir = os.path.join(export_home, self._full_od_out_dir)
         compiled_od_dir = os.path.join(export_home, self._compiled_od_out_dir)
+
+        # Nested paths
         compiled_od_dir_pcu = os.path.join(compiled_od_dir, self._compiled_od_out_dir_pcu)
+        combined_od_dir = os.path.join(full_od_dir, self._combined_od_out_dir)
 
         # Create the export_paths class
         self.export_paths = _DM_ExportPaths_NT(
@@ -1323,6 +1348,7 @@ class DistributionModelExportPaths:
             full_pa_dir=full_pa_dir,
             compiled_pa_dir=compiled_pa_dir,
             full_od_dir=full_od_dir,
+            combined_od_dir=combined_od_dir,
             compiled_od_dir=compiled_od_dir,
             compiled_od_dir_pcu=compiled_od_dir_pcu,
         )
@@ -1333,6 +1359,7 @@ class DistributionModelExportPaths:
             full_pa_dir,
             compiled_pa_dir,
             full_od_dir,
+            combined_od_dir,
             compiled_od_dir,
             compiled_od_dir_pcu,
         ]

@@ -484,18 +484,33 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
             max_bounds=max_bounds,
         )
 
+        # Target data to plot
+        target_data = cost_utils.PlotData(
+            x_values=mid_points,
+            y_values=target_band_share,
+            label=f"Target | [R2={achieved_convergence:.4f}]",
+        )
+
+        # Achieved data to plot
+        label = "Achieved |"
+        for name, value in achieved_cost_params.items():
+            label += f" {name}={value:.2f}"
+
+        achieved_data = cost_utils.PlotData(
+            x_values=mid_points,
+            y_values=achieved_band_share,
+            label=label,
+        )
+
         # Plot the graph and write out
-        cost_utils.plot_cost_distribution(
-            target_x=mid_points,
-            target_y=target_band_share,
-            achieved_x=mid_points,
-            achieved_y=achieved_band_share,
-            convergence=achieved_convergence,
-            cost_params=achieved_cost_params,
+        cost_utils.plot_cost_distributions(
+            plot_data=[target_data, achieved_data],
             plot_title=plot_title,
             path=graph_path,
-            x_label=x_label,
-            y_label=y_label,
+            x_axis_label=x_label,
+            y_axis_label=y_label,
+            band_share_cutoff=0.005,
+            percent_data=True,
             **graph_kwargs,
         )
 
@@ -513,8 +528,7 @@ class DistributionMethod(enum.Enum):
             function = Furness3dDistributor
         else:
             raise nd.NormitsDemandError(
-                "No definition exists for %s distribution method"
-                % self
+                f"No definition exists for {self} distribution method"
             )
 
         return function(**kwargs)
@@ -991,7 +1005,8 @@ class GravityDistributor(AbstractDistributor):
                 f"{nan_report}"
             )
 
-        # # TODO(BT): Fix this problem at the cost source
+        # TODO(BT): Fix this problem at the cost source,
+        #  only do for upper model. cars, bus, active
         # # Fill any zero costs with 0.2
         # cost_matrix = cost_matrix.mask(cost_matrix == 0, 0.2)
 

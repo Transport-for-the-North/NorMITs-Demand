@@ -321,11 +321,12 @@ class GravityModelBase(abc.ABC):
                            tcd_bin_edges: List[float],
                            ) -> np.ndarray:
         """Returns the distribution of matrix across self.tcd_bin_edges"""
-        return cost_utils.calculate_cost_distribution(
+        _, normalised = cost_utils.normalised_cost_distribution(
             matrix=matrix,
             cost_matrix=self.cost_matrix,
             bin_edges=tcd_bin_edges,
         )
+        return normalised
 
     def _guess_init_params(self,
                            cost_args: List[float],
@@ -454,6 +455,9 @@ class GravityModelBase(abc.ABC):
         init_matrix = self.cost_function.calculate(cost_matrix, **cost_kwargs)
 
         # Do some prep for jacobian calculations
+        # TODO(BT): Move this into the Jacobian function. We don't need it here
+        #  and it's just using it memory before we need to. Could single loop it
+        #  too, so that only one extra cost matrix is needed. NOT n_cost_params
         self._jacobian_mats = {'base': init_matrix.copy()}
         for cost_param in self.cost_function.kw_order:
             # Adjust cost slightly
@@ -3012,7 +3016,7 @@ class MultiAreaGravityModelCalibrator:
             area_cost = self.cost_matrix * area_bool
 
             # Convert matrix into an achieved distribution curve
-            achieved_band_shares = cost_utils.calculate_cost_distribution(
+            _, achieved_band_shares = cost_utils.normalised_cost_distribution(
                 matrix=area_matrix,
                 cost_matrix=area_cost,
                 bin_edges=self.tcd_bin_edges[area_id],

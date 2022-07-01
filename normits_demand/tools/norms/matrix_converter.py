@@ -40,7 +40,7 @@ from normits_demand.tools.norms import tp_proportion_extractor
 from normits_demand.tools.norms import tp_proportion_converter
 
 
-LOG = nd_log.get_logger(f"{nd_log.get_package_logger_name()}.norms_generaliser")
+LOG = nd_log.get_logger(__name__)
 
 
 @dataclasses.dataclass

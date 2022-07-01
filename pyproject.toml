@@ -13,11 +13,12 @@ disable = [
 
 # Pylint settings
 [tool.pylint.basic]
-good-names = ["df", "ca", "tp", "x", "i", "f"]
+good-names = ["df", "ca", "tp", "to", "x", "i", "f", "q"]
 
 [tool.pylint.design]
-max-attributes = 15
 max-args = 10
+max-attributes = 15
+max-statements = 100
 
 [tool.mypy]
 ignore_missing_imports = true

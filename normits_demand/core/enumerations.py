@@ -14,9 +14,7 @@ from __future__ import annotations
 
 # Built-Ins
 import enum
-from typing import Dict, List, Set
-
-# Third Party
+from typing import Any, Dict, List
 
 # Local Imports
 import normits_demand as nd
@@ -32,8 +30,61 @@ class AutoName(enum.Enum):
         return name
 
 
+class IsValidEnum(enum.Enum):
+    """Enum with helper functions to check if a given value is valid"""
+
+    @classmethod
+    def to_list(cls):
+        """Convert Enum into a list of Enums"""
+        return list(cls)
+
+    @classmethod
+    def values_to_list(cls):
+        """Convert Enum into a list of Enum values"""
+        return [x.value for x in list(cls)]
+
+    @classmethod
+    def to_enum(cls, value: Any) -> enum.Enum:
+        """Converts a value to a member of this enum class"""
+        # NOTE: enum("value") does the same thing
+        if isinstance(value, IsValidEnum):
+            return value
+        return cls(value)
+
+    @classmethod
+    def is_valid(cls, value: Any) -> bool:
+        """Checks if a value is a valid member of this enum"""
+        if isinstance(value, IsValidEnum):
+            return value in cls.to_list()
+
+        # Try convert to enum, if fails, it isn't valid
+        success = True
+        try:
+            cls(value)
+        except ValueError:
+            success = False
+        return success
+
+
+class IsValidEnumWithAutoNameLower(IsValidEnum):
+    """Enum class to combine IsValidEnum and AutoName
+
+    Must be a better way to do this, but inheriting both classes seems to not
+    produce the expected results
+
+    TODO(BT): Investigate a better way to combine these classes
+    """
+
+    @staticmethod
+    def _generate_next_value_(name, start, count, last_values):
+        del start, count, last_values  # Unused
+        return name.lower()
+
+
 @enum.unique
-class Mode(enum.Enum):
+class Mode(IsValidEnum):
+    """Collection of valid modes and their values/names"""
+
     WALK = "walk"
     CYCLE = "cycle"
     ACTIVE = "walk_and_cycle"
@@ -58,7 +109,7 @@ class Mode(enum.Enum):
         }
 
         if self not in conversion:
-            raise nd.NormitsDemandError("No definition exists for %s mode_values" % self)
+            raise nd.NormitsDemandError(f"No definition exists for {self} mode_values")
 
         return conversion[self]
 
@@ -76,8 +127,9 @@ class Mode(enum.Enum):
 
         if len(mode_vals) > 1:
             raise ValueError(
-                "Mode %s has more than one mode value. If you want to return "
-                "multiple mode values, use Mode.get_mode_values() instead." % self.value
+                f"Mode {self.value} has more than one mode value. "
+                f"If you want to return multiple mode values, use "
+                f"Mode.get_mode_values() instead."
             )
 
         # Must somehow have returned nothing?
@@ -88,22 +140,23 @@ class Mode(enum.Enum):
         )
 
     def get_name(self):
+        """Gets the name of this mode"""
         return self.value
 
 
 @enum.unique
-class Scenario(enum.Enum):
+class Scenario(IsValidEnum):
+    """Collection of valid Scenario names"""
+
     NTEM = "NTEM"
     SC01_JAM = "SC01_JAM"
     SC02_PP = "SC02_PP"
     SC03_DD = "SC03_DD"
     SC04_UZC = "SC04_UZC"
 
-    def get_name(self):
-        return self.value
-
     @staticmethod
     def tfn_scenarios():
+        """Gets a list of the TfN Future Travel Scenarios"""
         return [
             Scenario.SC01_JAM,
             Scenario.SC02_PP,
@@ -113,21 +166,20 @@ class Scenario(enum.Enum):
 
 
 @enum.unique
-class TripOrigin(enum.Enum):
+class TripOrigin(IsValidEnum):
+    """Collection of valid trip origins"""
+
     HB = "hb"
     NHB = "nhb"
-
-    def get_name(self):
-        return self.value
 
     def get_purposes(self):
         """Returns a list of purposes for this TripOrigin"""
         p_dict = TripOrigin.get_purpose_dict()
 
-        if self not in p_dict.keys():
+        if self not in p_dict:
             raise ValueError(
-                "Internal error. There doesn't seem to be a purpose definition "
-                "for TripOrigin %s" % self.value
+                f"Internal error. There doesn't seem to be a purpose "
+                f"definition for TripOrigin {self.value}"
             )
 
         return p_dict[self]
@@ -150,13 +202,139 @@ class TripOrigin(enum.Enum):
                 return to
 
         raise ValueError(
-            "No TripOrigin exists with the value '%s'. Expected one of: %s"
-            % (val, valid_values)
+            f"No TripOrigin exists with the value '{val}'. " f"Expected one of: {valid_values}"
         )
 
 
 @enum.unique
-class AssignmentModel(enum.Enum):
+class UserClass(IsValidEnumWithAutoNameLower):
+    """Collection of valid User Classes and linked purposes"""
+
+    COMMUTE = enum.auto()
+    BUSINESS = enum.auto()
+    OTHER = enum.auto()
+
+    HB_COMMUTE = enum.auto()
+    HB_BUSINESS = enum.auto()
+    HB_OTHER = enum.auto()
+    NHB_BUSINESS = enum.auto()
+    NHB_OTHER = enum.auto()
+
+    def get_purposes(self):
+        """Returns a list of purposes for this UserClass"""
+        p_dict = UserClass.get_purpose_dict()
+
+        if self not in p_dict:
+            raise ValueError(
+                f"Internal error. There doesn't seem to be a purpose "
+                f"definition for UserClass {self.value!r}"
+            )
+
+        return p_dict[self]
+
+    @staticmethod
+    def get_purpose_dict() -> Dict[UserClass, List[int]]:
+        """Returns a dictionary of purposes for each UserClass"""
+        p_dict = {
+            UserClass.HB_COMMUTE: [1],
+            UserClass.HB_BUSINESS: [2],
+            UserClass.HB_OTHER: [3, 4, 5, 6, 7, 8],
+            UserClass.NHB_BUSINESS: [12],
+            UserClass.NHB_OTHER: [13, 14, 15, 16, 18],
+        }
+
+        # Add combinations of other values
+        b_val = p_dict[UserClass.HB_BUSINESS] + p_dict[UserClass.NHB_BUSINESS]
+        p_dict[UserClass.BUSINESS] = b_val
+
+        p_dict[UserClass.COMMUTE] = p_dict[UserClass.HB_COMMUTE]
+        p_dict[UserClass.OTHER] = p_dict[UserClass.HB_OTHER] + p_dict[UserClass.NHB_OTHER]
+
+        return p_dict
+
+
+@enum.unique
+class MatrixFormat(IsValidEnum):
+    """Collection of valid matrix formats"""
+
+    PA = "pa"
+    OD = "od"
+    OD_TO = "od_to"
+    OD_FROM = "od_from"
+
+
+class CostUnits(IsValidEnum):
+    """Valid cost units for the TLD builder"""
+
+    KM = "km"
+    KILOMETRES = "km"
+    KILOMETERS = "km"
+
+    M = "m"
+    METRES = "m"
+    METERS = "m"
+
+    MILES = "miles"
+
+    def get_conversion_factor(self, to_units: CostUnits):
+        """Calculates the conversion factors between cost units
+
+        Returns the conversion factor to get to `to_units` CostUnits from
+        self
+
+        Parameters
+        ----------
+        to_units:
+            The cost units to convert to.
+        """
+        if self == to_units:
+            return 1
+        if self == CostUnits.MILES and to_units == CostUnits.KM:
+            return self._miles_to_km_factor()
+        if self == CostUnits.MILES and to_units == CostUnits.M:
+            return self._miles_to_m_factor()
+
+        if self == CostUnits.KM and to_units == CostUnits.MILES:
+            return self._km_to_miles_factor()
+        if self == CostUnits.KM and to_units == CostUnits.M:
+            return self._km_to_m_factor()
+
+        if self == CostUnits.M and to_units == CostUnits.MILES:
+            return self._m_to_miles_factor()
+        if self == CostUnits.M and to_units == CostUnits.KM:
+            return self._m_to_km_factor()
+
+        raise nd.NormitsDemandError(
+            f"No definition exits to convert from {self} to {to_units}"
+        )
+
+    @staticmethod
+    def _miles_to_km_factor() -> float:
+        return 1.609344
+
+    @staticmethod
+    def _km_to_m_factor() -> float:
+        return 1000
+
+    @staticmethod
+    def _miles_to_m_factor() -> float:
+        return CostUnits._miles_to_km_factor() * CostUnits._km_to_m_factor()
+
+    @staticmethod
+    def _m_to_km_factor() -> float:
+        return 1 / CostUnits._km_to_m_factor()
+
+    @staticmethod
+    def _km_to_miles_factor() -> float:
+        return 1 / CostUnits._miles_to_km_factor()
+
+    @staticmethod
+    def _m_to_miles_factor() -> float:
+        return 1 / CostUnits._miles_to_m_factor()
+
+
+@enum.unique
+class AssignmentModel(IsValidEnum):
     """Network assignment models NorMITs demand is used with."""
 
     NOHAM = "NoHAM"

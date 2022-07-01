@@ -20,7 +20,13 @@ import pathlib
 sys.path.append("..")
 # pylint: disable=import-error,wrong-import-position
 from normits_demand.tools.norms import matrix_converter as norms_matrix_converter
+from normits_demand import logging as nd_log
 # pylint: enable=import-error,wrong-import-position
+
+# Logging
+LOG = nd_log.get_logger(
+    f"{nd_log.get_package_logger_name()}.run_tools.norms_output_to_od"
+)
 
 # RUNNING ARGS
 TP_PROPORTIONS_DIR = r"E:\temp\cube\2f ILF 2018\source - test"
