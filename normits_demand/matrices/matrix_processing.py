@@ -3426,6 +3426,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
 def _recombine_internal_external_internal(in_paths,
                                           output_path,
                                           output_suffix,
+                                          rounding: int = None,
                                           ) -> None:
     # Read in the matrices and compile
     partial_mats = [file_ops.read_df(x, index_col=0, find_similar=True) for x in in_paths]
@@ -3437,6 +3438,9 @@ def _recombine_internal_external_internal(in_paths,
         index=partial_mats[0].index,
         columns=partial_mats[0].columns,
     )
+
+    if rounding is not None:
+        full_mat = full_mat.round(rounding)
 
     # Sort out the output suffix
     base_path = file_ops.remove_suffixes(pathlib.Path(output_path))
@@ -3450,6 +3454,7 @@ def combine_partial_matrices(import_dirs: List[nd.PathLike],
                              export_dir: List[nd.PathLike],
                              segmentation: nd.SegmentationLevel,
                              import_suffixes: List[str] = None,
+                             rounding: int = None,
                              csv_out: bool = False,
                              process_count: int = consts.PROCESS_COUNT,
                              pbar_kwargs: Dict[str, Any] = None,
@@ -3472,6 +3477,10 @@ def combine_partial_matrices(import_dirs: List[nd.PathLike],
         A list of the suffixes for each directory in import_dirs. Should be
         a parallel list to import_dirs. Any directories without a suffix
         should be set to None.
+
+    rounding:
+        the number of decimal places to round the output matrix to. If left as
+        None, then no rounding is done.
 
     csv_out:
         Whether to write the combined matrices out as csvs. If False, files
@@ -3540,6 +3549,7 @@ def combine_partial_matrices(import_dirs: List[nd.PathLike],
             'output_path': output_path,
             'in_paths': in_paths,
             'output_suffix': output_suffix,
+            "rounding": rounding,
         })
 
     multiprocessing.multiprocess(

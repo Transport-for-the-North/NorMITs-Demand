@@ -448,6 +448,7 @@ class DistributionModel(DistributionModelExportPaths):
                 trip_origin=self.trip_origin,
                 year=str(self.year),
                 file_desc=self._pa_matrix_desc,
+                rounding=constants.DEFAULT_ROUNDING,
             )
         else:
             self._logger.info("Copying over Upper Tier Matrices")

@@ -11,6 +11,7 @@ notem_nhb_productions_full,notem_nhb_output,p;m;g;soc;ns;ca;tp,nhb_p:p;nhb_m:m;
 notem_hb_output_wday,hb_p_m_tp_wday,p;m;tp,
 notem_hb_output_wday,hb_p_m_ca_tp_wday,p;m;tp;ca,
 notem_nhb_output,nhb_p_m,p;m,
+notem_hb_output,hb_p_m_ca_tp_week,p;m;ca;tp,
 notem_hb_output,hb_p_m_tp_week,p;m;tp,
 notem_nhb_output,nhb_p_m_tp_week,p;m;tp,
 notem_nhb_output_wday,nhb_p_m,p;m,
