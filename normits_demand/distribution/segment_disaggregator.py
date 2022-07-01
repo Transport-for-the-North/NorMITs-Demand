@@ -70,7 +70,7 @@ def _build_enhanced_pa(tld_mat, df, df_value, col_limit, ia_name=None, unq_zone_
     out_list = []
     for _, itd in tld_mat.iterrows():
         te = df.copy()
-        calib_params = {c: itd[c] for c in col_limit if itd[c] != np.nan}
+        calib_params = {c: itd[c] for c in col_limit if not _isnull(itd[c])}
 
         te, total = nup.filter_pa_vector(
             te,
@@ -222,6 +222,14 @@ def _control_a_to_enhanced_p(prod_list, attr_list):
     return (new_attr, audit)
 
 
+def _set_dataframe_dtypes(df: pd.DataFrame, dtypes: Dict[str, str]) -> pd.DataFrame:
+    """Set DataFrame columns to specific types if the column exists."""
+    for col, dt in dtypes.items():
+        if col in df.columns:
+            df.loc[:, col] = df[col].astype(dt)
+    return df
+
+
 def disaggregate_segments(
     import_folder: pathlib.Path,
     target_tld_folder: pathlib.Path,
@@ -246,6 +254,7 @@ def disaggregate_segments(
     # Find all matrices and extract segmentation info
     LOG.info("Finding base matrices in %s", import_folder)
     required_columns = ["matrix_type", "trip_origin", "uc", "yr", "m", "ca"]
+    seg_dtypes = dict.fromkeys(("p", "yr", "m", "ca", "soc", "ns"), "Int64")
     base_mat_seg = pd.DataFrame(
         nup.parse_matrix_folder(
             import_folder,
@@ -253,6 +262,7 @@ def disaggregate_segments(
             required_data=required_columns,
         )
     )
+    base_mat_seg = _set_dataframe_dtypes(base_mat_seg, seg_dtypes)
     base_mat_seg.loc[:, "base_seg"] = base_mat_seg["path"].apply(lambda p: p.name)
     base_mat_seg = base_mat_seg.loc[
         base_mat_seg["matrix_type"] == "pa", ["base_seg", *required_columns]
@@ -272,6 +282,7 @@ def disaggregate_segments(
             required_data=required_columns,
         )
     )
+    tld_seg = _set_dataframe_dtypes(tld_seg, seg_dtypes)
     tld_seg.loc[:, "enh_tld"] = tld_seg["path"].apply(lambda p: p.name)
     tld_seg = tld_seg.loc[:, ["enh_tld", *required_columns, "soc", "ns"]]
     duplicates = tld_seg.duplicated().sum()
@@ -364,6 +375,15 @@ def disaggregate_segments(
     )
 
 
+def _isnull(value: Any) -> bool:
+    """Checks if value is NaN, None or pandas NA."""
+    if value is None or value is pd.NA:
+        return True
+    if isinstance(value, (float, int)):
+        return np.isnan(value)
+    return False
+
+
 def _segment_build_worker(
     agg_split_index: int,
     unq_splits: pd.Series,
@@ -399,9 +419,8 @@ def _segment_build_worker(
     ie_params = ie_params.reset_index(drop=True)
     import_params = import_params.reset_index(drop=True)
 
-    # Ah calib params
-    # Define from the agg split
-    calib_params = agg_split.to_dict()
+    # Don't include any null values in calib params
+    calib_params = {k: v for k, v in agg_split.iteritems() if not _isnull(v)}
 
     # Mat list
     mat_list = list()
@@ -430,7 +449,7 @@ def _segment_build_worker(
     for _, itd in tld_mat.iterrows():
         tld_dict = {}
         for col in add_cols:
-            if itd[col] != "none":
+            if not _isnull(itd[col]):
                 tld_dict.update({col: itd[col]})
         tld_dict.update(
             {"enh_tld": pd.read_csv(os.path.join(target_tld_folder, itd["enh_tld"]))}
@@ -483,6 +502,8 @@ def _segment_build_worker(
         max_bs_loops=settings.max_bandshare_loops,
     )
 
+    tld_output_folder = export_folder / "TLDs"
+    tld_output_folder.mkdir(exist_ok=True)
     # Unpack list of lists
     # Read, convert, build path and write out
     for oml in out_mats:
@@ -545,7 +566,7 @@ def _segment_build_worker(
         del (tlb_con, bs_con, fbs_con, pa_diff, ea, ep, tar_a, tar_p)
 
         # Build report
-        report_path = os.path.join(export_folder, trip_origin.value + "_disagg_report")
+        report_path = tld_output_folder / (trip_origin.value + "_disagg_report")
 
         if settings.time_period in add_cols:
             report_path = nup.build_path(report_path, item, tp=settings.time_period)

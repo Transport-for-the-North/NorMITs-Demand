@@ -13,10 +13,12 @@ import sys
 import time
 import math
 import pickle
-from typing import Collection, Dict, Iterator, Union
+from typing import Any, Collection, Dict, Iterator, Optional, Union
 
 import numpy as np
 import pandas as pd
+
+from normits_demand.types import PathLike
 
 _default_home_dir = 'C:/'
 _default_iter = 'iter0'
@@ -469,10 +471,12 @@ def df_to_np(df,
     return array
 
 
-def build_path(base_path,
-               calib_params,
-               tp=None,
-               no_csv=False):
+def build_path(
+    base_path: PathLike,
+    calib_params: Dict[str, Any],
+    tp: Optional[str] = None,
+    no_csv: bool = False
+    ) -> PathLike:
     """
     Build a finished param path from a base string containing file location
     and a list of input params for a given run.
@@ -480,9 +484,11 @@ def build_path(base_path,
     # BACKLOG: Update TMS filenames to include the year.
     #  Will always be 2018 in TMS.
     #  labels: demand merge, TMS
+    path_output = isinstance(base_path, pathlib.Path)
+    path = pathlib.Path(base_path)
 
-    if base_path[-4:] == '.csv':
-        base_path = base_path[:-4]
+    suffixes = "".join(path.suffixes)
+    name = path.name.removesuffix(suffixes)
 
     for index, cp in calib_params.items():
         # Ignore trip length bands
@@ -490,14 +496,16 @@ def build_path(base_path,
             # Ignore null segments
             if cp != 'none':
                 cp_ph = ('_' + index + str(cp))
-                base_path += cp_ph
+                name += cp_ph
     if tp:
-        base_path += ('_tp' + str(tp))
+        name += ('_tp' + str(tp))
 
     if not no_csv:
-        base_path += '.csv'
+        name += '.csv'
 
-    return base_path
+    if path_output:
+        return path.parent / name
+    return str(path.parent / name)
 
 # BACKLOG: Replace compile_od() with mat_p.compile_matrices()
 #  labels: demand merge, EFS, TMS
