@@ -1349,19 +1349,19 @@ def plot_tripend_iters(
     ind_segs=True,
 ):
     """
-    Function for outputting a range of plots for a given trip-end dvector, or set of dvectors for different years
+    Function for outputting heatmap plots of differences between different years of model
+
     Args:
-        Dvec_path (str): This should be a path to the dvector you want plotted.  If you are providing just one, give
-        the full path, if you want multiple years compared, replace the year with {}
-        zoning (str): the zoning system you want the data plotted at 
-        segmentation (str): The segmenation you want the data plotted at.  Can be either plotted at every segmentation, or grouped by each level.
-        i.e., could be grouped by m, then each mode plotted, then grouped by tp and each tp plotted
-        years (list, optional): If you want year on year comparisons, supply a list of the years to compare. Defaults to None.
-        pct (bool, optional): If you have supplied a list of years, set this to True if you want the percentage growth plotted. Defaults to False.
-        diff (bool, optional): If you have supplied a list of years, set this to True if you want the absolute growth plotted. Defaults to False.
-        plot_type (str, optional): Currently only heatmap, will be updated for different plot types. Defaults to 'heatmap'.
-        ind_segs (bool, optional): If True, every segment will be plotted (i.e. (mode1, tp1)).  If False data will be grouped by each segment level
-        (e.g. mode 1, mode 2... tp 1, tp 2...)
+        scenario (str): iteration number to plot (i.e. 9.7)
+        pa (str): 'atraction' or 'production'
+        hb_nhb (str): 'hb' or 'nhb'
+        zone_name (str): zoning system string.  Currently only 'lad_2020' has the metadata for this to work
+        segmentation (str): segmentation level as a string, should be a valid normits_demand segmentation
+        years (list, optional): years to compare as a list
+        pct (bool, optional): pct differences to be plotted.  either this or diff must be true
+        diff (bool, optional): absolute differences to be plotted
+        plot_type (str, optional): type of plot. Defaults to "heatmap".  Currently no other type available
+        ind_segs (bool, optional): For each level of segmentation separate plots if true
     """
     path = Path(r"T:\MidMITs Demand\MiTEM")
     seg = nd.get_segmentation_level(segmentation)
