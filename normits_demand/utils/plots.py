@@ -1419,7 +1419,7 @@ def plot_tripend_iters(
                 _autoplot_func(
                     years=years,
                     zone_shape=zone_shape,
-                    out_folder=os.path.join(path),
+                    out_folder=path,
                     pct=pct,
                     diff=diff,
                     df=df,
@@ -1473,32 +1473,37 @@ def plot_tripend_iters(
 
 ##### MAIN #####
 if __name__ == "__main__":
-    iteration_folder = Path(r"I:\NorMITs Demand\noham\NTEM\iter1d")
-    forecast_matrix_folder = iteration_folder / r"Matrices\24hr VDM PA Matrices"
+    # iteration_folder = Path(r"I:\NorMITs Demand\noham\NTEM\iter1d")
+    # forecast_matrix_folder = iteration_folder / r"Matrices\24hr VDM PA Matrices"
 
-    pa_parameters = PAPlotsParameters(
-        base_matrix_folder=Path(r"I:\NorMITs Demand\import\noham\post_me\tms_seg_pa"),
-        forecast_matrix_folder=forecast_matrix_folder,
-        matrix_zoning="noham",
-        plot_zoning="lad_2020_internal_noham",
-        output_folder=forecast_matrix_folder / "Plots",
-        geospatial_file=GeoSpatialFile(
-            Path(
-                r"Y:\Data Strategy\GIS Shapefiles"
-                r"\lad_2020_internal_noham\lad_2020_internal_noham_zoning.shp"
-            ),
-            "zone_name",
-        ),
-        analytical_area_shape=GeoSpatialFile(
-            Path(
-                r"Y:\Data Strategy\GIS Shapefiles\North Analytical Area"
-                r"\Boundary\north_analytical_area_simple_boundary.shp"
-            ),
-            "Name",
-        ),
-        tempro_comparison_folder=iteration_folder / r"Matrices\PA\TEMPro Comparisons",
-        tempro_comparison_summary_zoning="3_sector",
-        base_year=2018,
-    )
+    # pa_parameters = PAPlotsParameters(
+    #     base_matrix_folder=Path(r"I:\NorMITs Demand\import\noham\post_me\tms_seg_pa"),
+    #     forecast_matrix_folder=forecast_matrix_folder,
+    #     matrix_zoning="noham",
+    #     plot_zoning="lad_2020_internal_noham",
+    #     output_folder=forecast_matrix_folder / "Plots",
+    #     geospatial_file=GeoSpatialFile(
+    #         Path(
+    #             r"Y:\Data Strategy\GIS Shapefiles"
+    #             r"\lad_2020_internal_noham\lad_2020_internal_noham_zoning.shp"
+    #         ),
+    #         "zone_name",
+    #     ),
+    #     analytical_area_shape=GeoSpatialFile(
+    #         Path(
+    #             r"Y:\Data Strategy\GIS Shapefiles\North Analytical Area"
+    #             r"\Boundary\north_analytical_area_simple_boundary.shp"
+    #         ),
+    #         "Name",
+    #     ),
+    #     tempro_comparison_folder=iteration_folder / r"Matrices\PA\TEMPro Comparisons",
+    #     tempro_comparison_summary_zoning="3_sector",
+    #     base_year=2018,
+    # )
 
-    main(pa_parameters)
+    # main(pa_parameters)
+
+    for i in ['nhb']:
+        for j in ['productions','attractions']:
+            plot_tripend_iters(scenario='9.7',
+            pa=j,hb_nhb=i,zone_name='lad_2020',segmentation='m_tp_week',years=[2021,2030,2040],pct=True)

@@ -30,8 +30,6 @@ from normits_demand import efs_constants as efs_consts
 LOG = nd_log.get_logger(__name__)
 COMPARISON_ZONE_SYSTEMS = {
     "trip end": ntem_forecast.LAD_ZONE_SYSTEM,
-    "matrix 1": "3_sector",
-    "matrix 2": "ca_sector_2020",
 }
 
 Matrix = Union[Path, pd.DataFrame]
@@ -303,12 +301,13 @@ def _find_matrices(folder: Path) -> pd.DataFrame:
         - `purpose`
     """
     files = []
-    file_types = (".pbz2", ".csv")
+    file_types = (".pbz2", ".csv", ".bz2")
     for p in folder.iterdir():
         if p.is_dir() or p.suffix.lower() not in file_types:
             continue
+        suffix = "".join(p.suffixes)
         try:
-            file_data = _filename_contents(p.stem)
+            file_data = _filename_contents(p.name.removesuffix(suffix))
         except ntem_forecast.NTEMForecastError as err:
             LOG.warning(err)
             continue
