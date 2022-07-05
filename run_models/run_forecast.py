@@ -30,7 +30,7 @@ import normits_demand as nd
 # pylint: enable=import-error,wrong-import-position
 
 ##### CONSTANTS #####
-LOG_FILE = "Forecast.log"
+LOG_FILE = "Forecast_1.log"
 LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_models.run_forecast")
 
 
@@ -109,7 +109,7 @@ class ForecastParameters:  # TODO Rewrite class as BaseConfig subclass
         Paths to the PA to OD tour proportions, has
         keys `post_me_tours` and `post_me_fh_th_factors`.
         """
-        tour_prop_home = self.import_path / self.model_name / "post_me_tour_proportions"
+        tour_prop_home = Path(r"I:\NorMITs Demand\import\modal\car_and_passenger\pre_me_tour_proportions\v9.7-COVID\miham")
         paths = {
             "post_me_tours": tour_prop_home,
             "post_me_fh_th_factors": tour_prop_home / "fh_th_factors",
@@ -314,8 +314,17 @@ def main(params: ForecastParameters, init_logger: bool = True):
         base_year=efs_consts.BASE_YEAR, forecast_years=params.future_years
     )
     tripend_data = model_mode_subset(tripend_data, params.model_name)
-    tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name)
-    tempro_growth.save(params.export_path / "TEMPro Growth Factors")
+    # tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name)
+    # tempro_growth.save(params.export_path / "TEMPro Growth Factors")
+    dvecs = {}
+    for purp in ['hb','nhb']:
+        for pa in ['productions','attractions']:
+            years = {}
+            for year in params.future_years:
+                dvec = nd.DVector.load(params.export_path / "TEMPro Growth Factors" / f"{purp}_{pa}-{year}.pkl")
+                years[year] = dvec
+            dvecs[f"{purp}_{pa}"] = years
+    tempro_growth = tempro_trip_ends.TEMProTripEnds(**dvecs)
     mitem_inputs = mitem_forecast.MiTEMImportMatrices(
         os.path.join(params.import_path,'Distribution Model',f'iter{params.iteration}.1','car_and_passenger','Final Outputs','Full PA Matrices'),
         params.base_year,
