@@ -351,3 +351,23 @@ class CostDistribution:
             cost_units=cost_units,
             band_mean_cost=band_mean_cost,
         )
+
+    @staticmethod
+    def from_trips(
+        trips: np.ndarray,
+        cost_matrix: np.ndarray,
+        min_bounds: np.ndarray,
+        max_bounds: np.ndarray,
+        cost_units: nd_core.CostUnits,
+    ) -> CostDistribution:
+        # TODO Add docstring
+        return CostDistribution(
+            edges=np.array([min_bounds[0]] + max_bounds.tolist()),
+            band_trips=cost_utils.cost_distribution(
+                trips, cost_matrix, min_bounds, max_bounds
+            ),
+            cost_units=cost_units,
+            band_mean_cost=cost_utils.calculate_average_cost_in_bounds(
+                min_bounds, max_bounds, cost_matrix, trips
+            ),
+        )

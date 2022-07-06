@@ -46,6 +46,7 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
     model: nd.AssignmentModel
     year: int
     trip_length_distribution_folder: pathlib.Path
+    trip_length_distribution_units: nd.CostUnits = nd.CostUnits.KILOMETERS
     disaggregation_settings: segment_disaggregator.DisaggregationSettings = (
         segment_disaggregator.DisaggregationSettings()
     )
@@ -236,6 +237,7 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
         segment_disaggregator.disaggregate_segments(
             import_folder=matrix_folder,
             target_tld_folder=params.trip_length_distribution_folder,
+            tld_units=params.trip_length_distribution_units,
             model=params.model,
             base_productions=productions,
             base_attractions=attractions,

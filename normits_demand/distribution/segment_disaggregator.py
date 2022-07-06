@@ -7,13 +7,14 @@ Created on Fri Nov 20 13:47:56 2020
 
 import os
 import pathlib
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, NamedTuple, Union
 
 import numpy as np
 import pandas as pd
 import pydantic
 
 import normits_demand as nd
+from normits_demand import cost
 from normits_demand.concurrency import multiprocessing as mp
 from normits_demand.utils import file_ops, math_utils
 from normits_demand.utils import trip_length_distributions as tld_utils
@@ -38,6 +39,31 @@ class DisaggregationSettings(pydantic.BaseModel):  # pylint: disable=no-member
     bandshare_convergence: float = 0.975
     max_bandshare_loops: int = 200
     multiprocessing_threads: int = -1
+
+
+class DisaggregationSummaryResults(NamedTuple):
+    # TODO Add docstring
+    initial_bs_convergence: float
+    final_bs_convergence: float
+    target_productions: float
+    target_attractions: float
+    estimated_productions: float
+    estimated_attractions: float
+    pa_difference: float
+    final_pa_difference: float
+    convergence_fail: bool
+
+
+class DisaggregationResults(NamedTuple):
+    # TODO Add docstring
+    furness_matrix: np.ndarray
+    final_matrix: np.ndarray
+    segmentation: dict[str, Any]
+    cost_tld: cost.CostDistribution
+    initial_tld: cost.CostDistribution
+    final_tld: cost.CostDistribution
+    target_tld: cost.CostDistribution
+    summary: DisaggregationSummaryResults
 
 
 def read_pa_seg(pa_df, exc=("trips", "attractions", "productions"), in_exc=("zone",)):
@@ -73,11 +99,7 @@ def _build_enhanced_pa(tld_mat, df, df_value, col_limit, ia_name=None, unq_zone_
         calib_params = {c: itd[c] for c in col_limit if not _isnull(itd[c])}
 
         te, total = nup.filter_pa_vector(
-            te,
-            ia_name,
-            calib_params,
-            round_val=3,
-            value_var=df_value,
+            te, ia_name, calib_params, round_val=3, value_var=df_value,
         )
         te = nup.df_to_np(
             te, v_heading=ia_name, values=df_value, unq_internal_zones=unq_zone_list
@@ -233,6 +255,7 @@ def _set_dataframe_dtypes(df: pd.DataFrame, dtypes: Dict[str, str]) -> pd.DataFr
 def disaggregate_segments(
     import_folder: pathlib.Path,
     target_tld_folder: pathlib.Path,
+    tld_units: nd.CostUnits,
     model: nd.AssignmentModel,
     base_productions: nd.DVector,
     base_attractions: nd.DVector,
@@ -348,6 +371,7 @@ def disaggregate_segments(
         "import_folder": import_folder,
         "add_cols": add_cols,
         "target_tld_folder": target_tld_folder,
+        "tld_units": tld_units,
         "base_p": base_productions,
         "p_cols": p_cols,
         "base_a": base_attractions,
@@ -392,6 +416,7 @@ def _segment_build_worker(
     import_folder: pathlib.Path,
     add_cols: List,
     target_tld_folder: pathlib.Path,
+    tld_units: nd.CostUnits,
     base_p: nd.DVector,
     p_cols: List,
     base_a: nd.DVector,
@@ -424,13 +449,11 @@ def _segment_build_worker(
 
     # Mat list
     mat_list = list()
-    seed_name = ""
 
     # Import and aggregate
     for _, ipr in import_params.iterrows():
         print("Importing " + ipr["base_seg"])
         sd = file_ops.read_df(import_folder / ipr["base_seg"])
-        seed_name = ipr["base_seg"]
 
         if "zone" in list(sd)[0] or "Unnamed" in list(sd)[0]:
             sd = sd.drop(list(sd)[0], axis=1)
@@ -438,14 +461,14 @@ def _segment_build_worker(
         mat_list.append(sd)
 
     # Compile matrices in segment into single matrix
-    sd = sum(mat_list)  # I can't believe this works
+    sd: pd.DataFrame = sum(mat_list)  # I can't believe this works
 
     # Get required tld for splitting
     tld_mat = (
         ie_params.copy().drop("base_seg", axis=1).drop_duplicates().reset_index(drop=True)
     )
 
-    tld_list = []
+    tld_list: List[cost.CostDistribution] = []
     for _, itd in tld_mat.iterrows():
         tld_dict = {}
         for col in add_cols:
@@ -454,7 +477,8 @@ def _segment_build_worker(
         tld_dict.update(
             {"enh_tld": pd.read_csv(os.path.join(target_tld_folder, itd["enh_tld"]))}
         )
-        tld_list.append(tld_dict)
+        path = target_tld_folder / itd["enh_tld"]
+        tld_list.append(cost.CostDistribution.from_csv(path, tld_units))
 
     # Get best possible production subset - control to matrix total
     prod_list = _build_enhanced_pa(tld_mat, base_p, "val", p_cols, unq_zone_list=unq_zone_list)
@@ -489,11 +513,10 @@ def _segment_build_worker(
     costs = get_costs(cost_folder, cost_cp, unq_zone_list)
 
     # Pass to dissagg function
-    out_mats, out_reps, fd = _dissag_seg(
+    results = _dissag_seg(
         prod_list,
         attr_list,
         tld_list,
-        seed_name,
         sd,
         costs,
         furness_loops=settings.maximum_furness_loops,
@@ -502,95 +525,101 @@ def _segment_build_worker(
         max_bs_loops=settings.max_bandshare_loops,
     )
 
-    tld_output_folder = export_folder / "TLDs"
-    tld_output_folder.mkdir(exist_ok=True)
-    # Unpack list of lists
+    reports_folder = export_folder / "Reports"
+    reports_folder.mkdir(exist_ok=True)
+
     # Read, convert, build path and write out
-    for oml in out_mats:
-        item = oml.copy()
-
-        furness_mat = item.pop("furness_mat")
-        mat = item.pop("mat")
-
+    for res in results:
         if settings.export_original:
-            mat = pd.DataFrame(mat, index=unq_zone_list, columns=unq_zone_list).reset_index()
+            mat = pd.DataFrame(
+                res.final_matrix, index=unq_zone_list, columns=unq_zone_list
+            ).reset_index()
 
             mat = mat.rename(columns={"index": ia_name})
 
             # Path export
-            es_path = os.path.join(export_folder, trip_origin.value + "_enhpa")
-
+            es_path = export_folder / (trip_origin.value + "_enhpa")
             if settings.time_period in add_cols:
-                es_path = nup.build_path(es_path, item, tp=settings.time_period)
+                es_path = nup.build_path(es_path, res.segmentation, tp=settings.time_period)
             else:
-                es_path = nup.build_path(es_path, item)
+                es_path = nup.build_path(es_path, res.segmentation)
 
             mat.to_csv(es_path, index=False)
 
         if settings.export_furness:
             furness_mat = pd.DataFrame(
-                furness_mat, index=unq_zone_list, columns=unq_zone_list
+                res.furness_matrix, index=unq_zone_list, columns=unq_zone_list
             ).reset_index()
 
             furness_mat = furness_mat.rename(columns={"index": ia_name})
 
             # Path export
-            es_path = os.path.join(export_folder, trip_origin.value + "_enhpafn")
-
+            es_path = export_folder / (trip_origin.value + "_enhpafn")
             if settings.time_period in add_cols:
-                es_path = nup.build_path(es_path, item, tp=settings.time_period)
+                es_path = nup.build_path(es_path, res.segmentation, tp=settings.time_period)
             else:
-                es_path = nup.build_path(es_path, item)
+                es_path = nup.build_path(es_path, res.segmentation)
 
             furness_mat.to_csv(es_path, index=False)
 
-    # Unpack list of lists
-    for orl in out_reps:
-        item = orl.copy()
-
-        tlb_con = item.pop("tlb_con")[1]
-        ftlb_con = item.pop("final_tlb_con")[1]
-
-        bs_con = item.pop("bs_con")
-        fbs_con = item.pop("final_bs_con")
-
-        pa_diff = item.pop("pa_diff")
-
-        ea = item.pop("estimated_a")
-        ep = item.pop("estimated_p")
-
-        tar_a = item.pop("target_a")
-        tar_p = item.pop("target_p")
-
-        # TODO: package these up
-        del (tlb_con, bs_con, fbs_con, pa_diff, ea, ep, tar_a, tar_p)
-
-        # Build report
-        report_path = tld_output_folder / (trip_origin.value + "_disagg_report")
-
+        # Output reports
+        report_path = reports_folder / (trip_origin.value + "_disagg_report")
         if settings.time_period in add_cols:
-            report_path = nup.build_path(report_path, item, tp=settings.time_period)
+            report_path = nup.build_path(
+                report_path, res.segmentation, tp=settings.time_period
+            )
         else:
-            report_path = nup.build_path(report_path, item)
+            report_path = nup.build_path(report_path, res.segmentation)
+        report_path = report_path.with_suffix(".xlsx")
 
-        # Write final tlb_con
-        ftlb_con.to_csv(report_path, index=False)
+        with pd.ExcelWriter(report_path) as excel:
+            summary = pd.DataFrame.from_dict(
+                res.summary._asdict(), columns=["Value"], orient="index"
+            )
+            summary.to_excel(excel, sheet_name="Summary")
 
-    return out_mats, out_reps, fd
+            res.initial_tld.to_df().to_excel(excel, sheet_name="Initial TLD", index=False)
+            res.final_tld.to_df().to_excel(excel, sheet_name="Final TLD", index=False)
+            res.target_tld.to_df().to_excel(excel, sheet_name="Target TLD", index=False)
+            res.cost_tld.to_df().to_excel(excel, sheet_name="Cost TLD", index=False)
+
+        for name, tld in (
+            ("Initial", res.initial_tld),
+            ("Final", res.final_tld),
+            ("Target", res.target_tld),
+            ("Cost", res.cost_tld),
+        ):
+            path = reports_folder / (trip_origin.value + f"_{name.lower()}_tld")
+            if settings.time_period in add_cols:
+                path = nup.build_path(path, res.segmentation, tp=settings.time_period)
+            else:
+                path = nup.build_path(path, res.segmentation)
+            tld.to_graph(path.with_suffix(".pdf"), label=f"{name} Distribution")
+
+    return results
+
+
+def _calculate_bandshare_convergence(
+    matrix: cost.CostDistribution, target: cost.CostDistribution
+) -> float:
+    bs_con = 1 - (
+        np.sum((matrix.band_shares - target.band_shares) ** 2)
+        / np.sum((target.band_shares - np.mean(target.band_shares)) ** 2)
+    )
+    return max(bs_con, 0)
 
 
 def _dissag_seg(
-    prod_list,
-    attr_list,
-    tld_list,
-    seed_name,
-    sd,
-    costs,
+    prod_list: List[Dict[str, Any]],
+    attr_list: List[Dict[str, Any]],
+    tld_list: List[cost.CostDistribution],
+    sd: pd.DataFrame,
+    costs: pd.DataFrame,
     furness_loops=1500,
     min_pa_diff=0.1,
     bs_con_crit=0.975,
     max_bs_loops: int = 300,
-):
+) -> List[DisaggregationResults]:  # TODO Update docstring
     """
     prod_list:
         List of production vector dictionaries
@@ -614,112 +643,69 @@ def _dissag_seg(
 
     # seg_x = 0,prod_list[0]
     seg_audit = list()
-
-    for i, seg in enumerate(prod_list, 0):
+    for i, (prod, attr, target_tld) in enumerate(zip(prod_list, attr_list, tld_list)):
+        target_p: np.ndarray = prod["trips"]
+        target_a: np.ndarray = attr["trips"]
 
         # Build audit dict
-        audit_dict = {}
-        for name, dat in seg.items():
-            if name != "trips":
-                audit_dict.update({name: dat})
+        audit_dict = {"segmentation": {k: v for k, v in prod.items() if k != "trips"}}
 
         # Initialise the output mat
         new_mat = sd / sd.sum()
-        new_mat = new_mat * seg["trips"].sum()
-
-        # Unpack target p/a vectors
-        target_p = prod_list[i]["trips"]
-        target_a = attr_list[i]["trips"]
-        target_tld = tld_list[i]["enh_tld"]
+        new_mat = new_mat * target_p.sum()
 
         # Update audit_dict
         audit_dict["target_p"] = target_p.sum()
         audit_dict["target_a"] = target_a.sum()
 
-        # Get the band share, rename for readability
-        tlb_con = tld_utils.get_trip_length_by_band(target_tld, costs, new_mat)
-        dist_mat, band_shares, global_atl = tlb_con
-        achieved_bs = band_shares["bs"]
-        target_bs = band_shares["tbs"]
-
-        # Calculate the band share convergence
-        bs_con = 1 - np.sum((achieved_bs - target_bs) ** 2) / np.sum(
-            (target_bs - np.mean(target_bs)) ** 2
+        # Calculate matrix tlb
+        matrix_tld = cost.CostDistribution.from_trips(
+            new_mat,
+            costs.values,
+            target_tld.min_bounds,
+            target_tld.max_bounds,
+            target_tld.cost_units,
         )
-        bs_con = max(bs_con, 0)
-
-        # Unpack tld
-        min_dist = target_tld["min (km)"].values
-        max_dist = target_tld["max (km)"].values
-        obs_trip = target_tld["share"].values
-        obs_dist = target_tld["mean (km)"].values
-        num_band = len(min_dist)
+        cost_tld = cost.CostDistribution.from_trips(
+            np.ones_like(costs.values),
+            costs.values,
+            target_tld.min_bounds,
+            target_tld.max_bounds,
+            target_tld.cost_units,
+        )
+        # Calculate the band share convergence
+        bs_con = _calculate_bandshare_convergence(matrix_tld, target_tld)
 
         # TLB balance/furness
         tlb_loop = 1
         conv_fail = False
-        audit_dict.update(
-            {
-                "estimated_p": None,
-                "estimated_a": None,
-                "pa_diff": None,
-                "bs_con": bs_con,
-                "tlb_con": tlb_con,
-                "conv_fail": conv_fail,
-            }
-        )
+        audit_dict["initial_bs_convergence"] = bs_con
+        audit_dict["initial_tld"] = matrix_tld
+        audit_dict["cost_tld"] = cost_tld
         while bs_con < bs_con_crit:
 
-            # Seed convergence critical values for each band
-            est_trip, est_dist, cij_freq = [0] * num_band, [0] * num_band, [0] * num_band
-            for row in range(num_band):
-                # Calculate the estimated trips
-                est_trip[row] = np.sum(
-                    np.where((costs >= min_dist[row]) & (costs < max_dist[row]), new_mat, 0)
-                )
-                est_trip[row] = est_trip[row] / np.sum(new_mat) * 100
+            # Calculating K factors for cells based on which distance band they're in
+            k_factors = np.ones_like(costs.values)
+            for min_, max_, obs, mat in zip(
+                target_tld.min_bounds,
+                target_tld.max_bounds,
+                target_tld.band_trips,
+                matrix_tld.band_trips,
+            ):
+                if mat <= 0:
+                    continue  # Leave K factor as 1 if there aren't any matrix trips
 
-                # Calculate the estimated distances
-                est_dist[row] = np.sum(
-                    np.where(
-                        (costs >= min_dist[row]) & (costs < max_dist[row]), costs * new_mat, 0
-                    )
-                )
-                est_dist[row] = np.where(
-                    est_trip[row] > 0,
-                    est_dist[row] / est_trip[row],
-                    (min_dist[row] + max_dist[row]) / 2,
-                )
-
-                # Calculate the observed distances
-                obs_dist[row] = np.where(obs_dist[row] > 0, obs_dist[row], est_dist[row])
-
-                # CiJ Frequencies?
-                cij_freq[row] = np.sum(
-                    np.where((costs >= min_dist[row]) & (costs < max_dist[row]), len(costs), 0)
-                )
-                cij_freq[row] = cij_freq[row] / np.sum(len(costs)) * 100
-
-            # Get k factors
-            k_factors = k_factors = costs ** 0
-            # k_factors = k_factors**0
-            kfc_dist = [0] * num_band
-
-            for row in range(num_band):
-                kfc_dist[row] = np.where(
-                    est_trip[row] > 0, min(max(obs_trip[row] / est_trip[row], 0.001), 10), 1
-                )
                 k_factors = np.where(
-                    (costs >= min_dist[row]) & (costs < max_dist[row]),
-                    kfc_dist[row],
+                    (costs >= min_) & (costs < max_),
+                    min(max(obs / mat, 0.001), 10),
                     k_factors,
                 )
 
             # Run furness
             new_mat = k_factors * new_mat
 
+            # TODO Replace with furness function
             # Furness
-            print("Furnessing")
             for fur_loop in range(furness_loops):
 
                 fur_loop += 1
@@ -740,30 +726,26 @@ def _dissag_seg(
                 pa_diff = math_utils.get_pa_diff(mat_o, target_p, mat_d, target_a)  # .max()
 
                 if pa_diff < min_pa_diff or np.isnan(np.sum(new_mat)):
-                    print(str(fur_loop) + " loops")
+                    print(f"Furness took {fur_loop} loops")
                     break
 
             prior_bs_con = bs_con
 
-            # Get the band share, rename for readability
-            tlb_con = tld_utils.get_trip_length_by_band(target_tld, costs, new_mat)
-            dist_mat, band_shares, global_atl = tlb_con
-            achieved_bs = band_shares["bs"]
-            target_bs = band_shares["tbs"]
-
-            # Calculate the band share convergence
-            bs_con = 1 - np.sum((achieved_bs - target_bs) ** 2) / np.sum(
-                (target_bs - np.sum(target_bs) / len(target_bs)) ** 2
+            # Calculate new TLD and bandshare convergence
+            matrix_tld = cost.CostDistribution.from_trips(
+                new_mat,
+                costs.values,
+                target_tld.min_bounds,
+                target_tld.max_bounds,
+                target_tld.cost_units,
             )
-            bs_con = max(bs_con, 0)
+            bs_con = _calculate_bandshare_convergence(matrix_tld, target_tld)
 
-            print("Loop " + str(tlb_loop))
-            print("Band share convergence: " + str(bs_con))
+            print("Loop " + str(tlb_loop), "Band share convergence: " + str(bs_con))
 
             # If tiny improvement, exit loop
-            if np.absolute(bs_con - prior_bs_con) < 0.001:
-                if bs_con != 0:
-                    break
+            if (np.absolute(bs_con - prior_bs_con) < 0.001) and (bs_con != 0):
+                break
 
             tlb_loop += 1
 
@@ -777,7 +759,6 @@ def _dissag_seg(
                     "estimated_a": mat_d.sum(),
                     "pa_diff": pa_diff,
                     "bs_con": bs_con,
-                    "tlb_con": tlb_con,
                     "conv_fail": conv_fail,
                 }
             )
@@ -794,57 +775,41 @@ def _dissag_seg(
     # ORDER OF PREFERENCE
     # Balance to p/a sd, tld, cells @ sd if possible, P/A slice
 
-    """
-    Snippet for unpacking a test
-    test = []
-    for seg_x in enumerate(out_mats,0):
-        test.append(seg_x[1]['mat'])
-        seg_cube[:,:,seg_x[0]] = seg_x[1]['mat']
-        test = sum(test)
-   """
-
     # TODO(BT): Replace with LAD aggregation method
     # Replaces all zeros with tiny value - prevents zero splits
-    for i in range(len(prod_list)):
-        val = seg_cube[:, :, i]
-        val = np.where(val == 0, _TINY_INFILL, val)
-        seg_cube[:, :, i] = val
+    seg_cube = np.where(seg_cube == 0, _TINY_INFILL, seg_cube)
 
     # Calculate the total of all the matrices
     cube_sd = seg_cube.sum(axis=2)
 
     # calculate the splitting factors
-    for seg_x in enumerate(prod_list, 0):
+    target_tld: cost.CostDistribution
+    for i, (prod, target_tld) in enumerate(zip(prod_list, tld_list)):
         # Get share of cell values from original matrix
-        factor_cube[:, :, seg_x[0]] = seg_cube[:, :, seg_x[0]] / cube_sd
+        factor_cube[:, :, i] = seg_cube[:, :, i] / cube_sd
 
         # Multiply original matrix by share to get cell balanced out matrix
-        out_cube[:, :, seg_x[0]] = sd * factor_cube[:, :, seg_x[0]]
-        print(out_cube[:, :, seg_x[0]].sum())
+        out_cube[:, :, i] = sd * factor_cube[:, :, i]
+        print(out_cube[:, :, i].sum())
 
         # Get trip length by band
-        tlb_con = tld_utils.get_trip_length_by_band(
-            tld_list[seg_x[0]]["enh_tld"], costs, out_cube[:, :, seg_x[0]]
+        matrix_tld = cost.CostDistribution.from_trips(
+            out_cube[:, :, i],
+            costs.values,
+            target_tld.min_bounds,
+            target_tld.max_bounds,
+            target_tld.cost_units,
         )
-        seg_audit[seg_x[0]].update({"final_tlb_con": tlb_con})
+        bs_con = _calculate_bandshare_convergence(matrix_tld, target_tld)
 
-        bs_con = max(
-            1
-            - np.sum((tlb_con[1]["bs"] - tlb_con[1]["tbs"]) ** 2)
-            / np.sum(
-                (tlb_con[1]["tbs"] - np.sum(tlb_con[1]["tbs"]) / len(tlb_con[1]["tbs"])) ** 2
-            ),
-            0,
+        seg_audit[i].update(
+            {"target_tld": target_tld, "final_tld": matrix_tld, "final_bs_con": bs_con}
         )
-        # Get final bs con r2
-        seg_audit[seg_x[0]].update({"final_bs_con": bs_con})
 
-        out_dict = {"furness_mat": seg_cube[:, :, seg_x[0]], "mat": out_cube[:, :, seg_x[0]]}
+        out_dict = {"furness_mat": seg_cube[:, :, i], "mat": out_cube[:, :, i]}
 
         # Add lavels back on to export list
-        for item, dat in prod_list[seg_x[0]].items():
-            if item != "trips":
-                out_dict.update({item: dat})
+        out_dict.update({k: v for k, v in prod.items() if k != "trips"})
         out_mats.append(out_dict)
 
     out_sd = out_cube.sum(axis=2)
@@ -853,7 +818,32 @@ def _dissag_seg(
         out_sd.sum(axis=1), sd.sum(axis=1), out_sd.sum(axis=0), sd.sum(axis=0)
     )
 
-    return out_mats, seg_audit, final_pa_diff
+    outputs = []
+    for mats, res in zip(out_mats, seg_audit):
+        outputs.append(
+            DisaggregationResults(
+                furness_matrix=mats["furness_mat"],
+                final_matrix=mats["mat"],
+                segmentation=res["segmentation"],
+                cost_tld=res["cost_tld"],
+                initial_tld=res["initial_tld"],
+                final_tld=res["final_tld"],
+                target_tld=res["target_tld"],
+                summary=DisaggregationSummaryResults(
+                    initial_bs_convergence=res["initial_bs_convergence"],
+                    final_bs_convergence=res["final_bs_con"],
+                    target_productions=res["target_p"],
+                    target_attractions=res["target_a"],
+                    estimated_productions=res["estimated_p"],
+                    estimated_attractions=res["estimated_a"],
+                    pa_difference=res["pa_diff"],
+                    final_pa_difference=final_pa_diff,
+                    convergence_fail=res["conv_fail"],
+                ),
+            )
+        )
+
+    return outputs
 
 
 def get_costs(
