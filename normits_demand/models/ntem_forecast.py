@@ -753,9 +753,11 @@ def grow_all_matrices(
 
 
 def convert_to_od(
-    pa_folder: Path,
+    pa_output_folder: Path,
+    pa_input_folder: Path,
     od_folder: Path,
-    years: List[int],
+    base_year: int,
+    future_years: List[int],
     modes: List[int],
     purposes: Dict[str, List[int]],
     model_name: str,
@@ -791,31 +793,33 @@ def convert_to_od(
     LOG.info("Converting PA to OD")
     od_folder.mkdir(exist_ok=True, parents=True)
     pa_to_od.build_od_from_fh_th_factors(
-        pa_import=pa_folder,
+        pa_import=pa_output_folder,
         od_export=od_folder,
         fh_th_factors_dir=pa_to_od_factors["post_me_fh_th_factors"],
-        years_needed=years,
+        base_year = base_year,
+        years_needed=future_years,
         seg_level="tms",
         seg_params={
             "p_needed": purposes["hb"],
             "m_needed": modes
         },
     )
+
     matrix_processing.nhb_tp_split_via_factors(
-        import_dir=pa_folder,
+        import_dir=pa_input_folder,
         export_dir=od_folder,
         import_matrix_format="pa",
         export_matrix_format="od",
-        tour_proportions_dir=pa_to_od_factors["post_me_tours"],
         model_name=model_name,
-        years_needed=years,
+        base_year=base_year,
+        future_years_needed=future_years,
         p_needed=purposes["nhb"],
         m_needed=modes,
         compress_out=True,
     )
 
 
-def compile_noham_for_norms(pa_folder: Path, years: List[int]) -> Path:
+def compile_highway_for_rail(pa_folder: Path, years: List[int]) -> Path:
     """Compile the PA matrices into the 24hr VDM PA matrices format.
 
     The outputs are saved in a new folder called
@@ -854,7 +858,7 @@ def compile_noham_for_norms(pa_folder: Path, years: List[int]) -> Path:
     return vdm_folder
 
 
-def compile_noham(
+def compile_highway(
     import_od_path: Path, years: List[int], car_occupancies_path: Path
 ) -> Path:
     """Compile OD matrices into the formats required for NoHAM.

@@ -2,7 +2,7 @@
 """
     Module for running the NTEM forecast.
 """
-#todo
+# todo
 ##### IMPORTS #####
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ import normits_demand as nd
 # pylint: enable=import-error,wrong-import-position
 
 ##### CONSTANTS #####
-LOG_FILE = "Forecast_1.log"
+LOG_FILE = "Forecast.log"
 LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_models.run_forecast")
 
 
@@ -89,11 +89,9 @@ class ForecastParameters:  # TODO Rewrite class as BaseConfig subclass
     def __repr__(self) -> str:
         params = (
             "import_path",
-            "tempro_data_path",
             "export_path",
             "model_name",
             "iteration",
-            "car_occupancies_path",
         )
         msg = f"{self.__class__.__name__}("
         for p in params:
@@ -109,7 +107,9 @@ class ForecastParameters:  # TODO Rewrite class as BaseConfig subclass
         Paths to the PA to OD tour proportions, has
         keys `post_me_tours` and `post_me_fh_th_factors`.
         """
-        tour_prop_home = Path(r"I:\NorMITs Demand\import\modal\car_and_passenger\pre_me_tour_proportions\v9.7-COVID\miham")
+        tour_prop_home = Path(
+            r"I:\NorMITs Demand\import\modal\car_and_passenger\pre_me_tour_proportions\v9.7-COVID\miham"
+        )
         paths = {
             "post_me_tours": tour_prop_home,
             "post_me_fh_th_factors": tour_prop_home / "fh_th_factors",
@@ -197,8 +197,7 @@ class ForecastParameters:  # TODO Rewrite class as BaseConfig subclass
 
 ##### FUNCTIONS #####
 def model_mode_subset(
-    trip_ends: tempro_trip_ends.TEMProTripEnds,
-    model_name: str,
+    trip_ends: tempro_trip_ends.TEMProTripEnds, model_name: str,
 ) -> tempro_trip_ends.TEMProTripEnds:
     """Get subset of `trip_ends` segmentation for specific `model_name`.
 
@@ -268,10 +267,11 @@ def read_tripends(
                         f"iter{ForecastParameters.iteration}",
                         "NTEM",
                         key,
-                        f"{i}_msoa_notem_segmented_{year}_dvec.pkl")
+                        f"{i}_msoa_notem_segmented_{year}_dvec.pkl",
                     )
-                if i == 'nhb':
-                    dvec = dvec.reduce(nd.get_segmentation_level('notem_nhb_output_reduced'))
+                )
+                if i == "nhb":
+                    dvec = dvec.reduce(nd.get_segmentation_level("notem_nhb_output_reduced"))
                 years[year] = dvec.aggregate(nd.get_segmentation_level(SEGMENTATION[i]))
             dvectors[key] = years
     return tempro_trip_ends.TEMProTripEnds(**dvectors)
@@ -314,45 +314,52 @@ def main(params: ForecastParameters, init_logger: bool = True):
         base_year=efs_consts.BASE_YEAR, forecast_years=params.future_years
     )
     tripend_data = model_mode_subset(tripend_data, params.model_name)
-    # tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name)
-    # tempro_growth.save(params.export_path / "TEMPro Growth Factors")
-    dvecs = {}
-    for purp in ['hb','nhb']:
-        for pa in ['productions','attractions']:
-            years = {}
-            for year in params.future_years:
-                dvec = nd.DVector.load(params.export_path / "TEMPro Growth Factors" / f"{purp}_{pa}-{year}.pkl")
-                years[year] = dvec
-            dvecs[f"{purp}_{pa}"] = years
-    tempro_growth = tempro_trip_ends.TEMProTripEnds(**dvecs)
+    tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name)
+    tempro_growth.save(params.export_path / "TEMPro Growth Factors")
+    # dvecs = {}
+    # for purp in ["hb", "nhb"]:
+    #     for pa in ["productions", "attractions"]:
+    #         years = {}
+    #         for year in params.future_years:
+    #             dvec = nd.DVector.load(
+    #                 params.export_path / "TEMPro Growth Factors" / f"{purp}_{pa}-{year}.pkl"
+    #             )
+    #             years[year] = dvec
+    #         dvecs[f"{purp}_{pa}"] = years
+    # tempro_growth = tempro_trip_ends.TEMProTripEnds(**dvecs)
     mitem_inputs = mitem_forecast.MiTEMImportMatrices(
-        os.path.join(params.import_path,'Distribution Model',f'iter{params.iteration}.1','car_and_passenger','Final Outputs','Full PA Matrices'),
+        os.path.join(
+            params.import_path,
+            "Distribution Model",
+            f"iter{params.iteration}.1",
+            "car_and_passenger",
+            "Final Outputs",
+            "Full PA Matrices",
+        ),
         params.base_year,
         params.model_name,
     )
-    pa_folder = params.export_path / "Matrices" / "PA"
-    ntem_forecast.grow_all_matrices(mitem_inputs, tempro_growth, pa_folder)
-    ntem_forecast_checks.pa_matrix_comparison(mitem_inputs, pa_folder, tripend_data)
-    od_folder = pa_folder.with_name("OD")
+    pa_output_folder = params.export_path / "Matrices" / "PA"
+    pa_input_folder = params.import_path / "Distribution Model"
+    ntem_forecast.grow_all_matrices(mitem_inputs, tempro_growth, pa_output_folder)
+    ntem_forecast_checks.pa_matrix_comparison(mitem_inputs, pa_output_folder, tripend_data)
+    od_folder = pa_output_folder.with_name("OD")
     ntem_forecast.convert_to_od(
-        pa_folder,
+        pa_output_folder,
+        pa_input_folder,
         od_folder,
+        params.base_year,
         params.future_years,
         [mitem_inputs.mode],
-        {
-            "hb": efs_consts.HB_PURPOSES_NEEDED,
-            "nhb": efs_consts.NHB_PURPOSES_NEEDED,
-        },
+        {"hb": efs_consts.HB_PURPOSES_NEEDED, "nhb": efs_consts.NHB_PURPOSES_NEEDED,},
         params.model_name,
         params.pa_to_od_factors,
     )
 
     # Compile to output formats
-    ntem_forecast.compile_noham_for_norms(pa_folder, params.future_years)
-    compiled_od_path = ntem_forecast.compile_noham(
-        od_folder,
-        params.future_years,
-        params.car_occupancies_path,
+    # ntem_forecast.compile_highway_for_rail(pa_output_folder, params.future_years)
+    compiled_od_path = ntem_forecast.compile_highway(
+        od_folder, params.future_years, params.car_occupancies_path,
     )
     ntem_forecast_checks.od_matrix_comparison(
         mitem_inputs.od_matrix_folder,
