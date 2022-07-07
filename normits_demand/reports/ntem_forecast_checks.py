@@ -30,6 +30,7 @@ from normits_demand import efs_constants as efs_consts
 LOG = nd_log.get_logger(__name__)
 COMPARISON_ZONE_SYSTEMS = {
     "trip end": ntem_forecast.LAD_ZONE_SYSTEM,
+    "matrix at gor": 'gor'
 }
 
 Matrix = Union[Path, pd.DataFrame]
