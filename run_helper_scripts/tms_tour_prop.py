@@ -31,7 +31,7 @@ from normits_demand.utils import general as du
 # ## GLOBALS ## #
 MODES = [nd.Mode.CAR]
 SCENARIO = nd.Scenario.NTEM
-YEARS = [2021]
+YEARS = [2021,2030,2040]
 TPS = [1, 2, 3, 4]
 ZONING_SYSTEM = "miham"
 NOTEM_ITER = '9.7-COVID'
@@ -54,7 +54,7 @@ def tms_tour_prop():
 
     for year in YEARS:
         for mode in MODES:
-
+            print(f"Beginning processing for {year}, mode {mode}...")
             out_folder = OUT_FOLDER_FMT.format(
                 mode_name=mode.get_name(), iter=NOTEM_ITER, zone_name=ZONING_SYSTEM
             )
