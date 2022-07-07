@@ -7,7 +7,7 @@ Created on Fri Nov 20 13:47:56 2020
 
 import os
 import pathlib
-from typing import Any, Dict, List, NamedTuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -100,7 +100,11 @@ def _build_enhanced_pa(tld_mat, df, df_value, col_limit, ia_name=None, unq_zone_
         calib_params = {c: itd[c] for c in col_limit if not _isnull(itd[c])}
 
         te, total = nup.filter_pa_vector(
-            te, ia_name, calib_params, round_val=3, value_var=df_value,
+            te,
+            ia_name,
+            calib_params,
+            round_val=3,
+            value_var=df_value,
         )
         te = nup.df_to_np(
             te, v_heading=ia_name, values=df_value, unq_internal_zones=unq_zone_list
@@ -264,7 +268,7 @@ def disaggregate_segments(
     cost_folder: pathlib.Path,
     trip_origin: nd.TripOrigin = nd.TripOrigin.HB,
     settings: DisaggregationSettings = DisaggregationSettings(),
-) -> None: # TODO Update docstring
+) -> None:  # TODO Update docstring
     """
     Parameters
     ----------
@@ -529,87 +533,102 @@ def _segment_build_worker(
     reports_folder = export_folder / "Reports"
     reports_folder.mkdir(exist_ok=True)
 
-    # Read, convert, build path and write out
+    # Output matrices and reports
+    output_tp = settings.time_period if settings.time_period in add_cols else None
     for res in results:
-        if settings.export_original:
-            mat = pd.DataFrame(
-                res.final_matrix, index=unq_zone_list, columns=unq_zone_list
-            ).reset_index()
+        _segment_disaggregator_outputs(
+            res,
+            export_folder,
+            unq_zone_list,
+            ia_name,
+            trip_origin,
+            export_furness=settings.export_furness,
+            export_original=settings.export_original,
+            time_period=output_tp,
+        )
 
-            mat = mat.rename(columns={"index": ia_name})
+    return results
 
-            # Path export
-            es_path = export_folder / (trip_origin.value + "_enhpa")
-            if settings.time_period in add_cols:
-                es_path = nup.build_path(es_path, res.segmentation, tp=settings.time_period)
-            else:
-                es_path = nup.build_path(es_path, res.segmentation)
 
-            mat.to_csv(es_path, index=False)
+def _segment_disaggregator_outputs(
+    results: DisaggregationResults,
+    export_folder: pathlib.Path,
+    unique_zones: np.ndarray,
+    zones_name: str,
+    trip_origin: nd.TripOrigin,
+    export_furness: bool,
+    export_original: bool,
+    time_period: Optional[str] = None,
+) -> None:
+    """Write matrices, summary spreadsheets and TLD graphs to `export_folder`."""
+    if export_original:
+        mat = pd.DataFrame(
+            results.final_matrix, index=unique_zones, columns=unique_zones
+        ).reset_index()
+        mat = mat.rename(columns={"index": zones_name})
 
-        if settings.export_furness:
-            furness_mat = pd.DataFrame(
-                res.furness_matrix, index=unq_zone_list, columns=unq_zone_list
-            ).reset_index()
+        path = nup.build_path(
+            export_folder / (trip_origin.value + "_enhpa"),
+            results.segmentation,
+            tp=time_period,
+        )
+        mat.to_csv(path, index=False)
 
-            furness_mat = furness_mat.rename(columns={"index": ia_name})
+    if export_furness:
+        furness_mat = pd.DataFrame(
+            results.furness_matrix, index=unique_zones, columns=unique_zones
+        ).reset_index()
+        furness_mat = furness_mat.rename(columns={"index": zones_name})
 
-            # Path export
-            es_path = export_folder / (trip_origin.value + "_enhpafn")
-            if settings.time_period in add_cols:
-                es_path = nup.build_path(es_path, res.segmentation, tp=settings.time_period)
-            else:
-                es_path = nup.build_path(es_path, res.segmentation)
+        path = nup.build_path(
+            export_folder / (trip_origin.value + "_enhpafn"),
+            results.segmentation,
+            tp=time_period,
+        )
+        furness_mat.to_csv(path, index=False)
 
-            furness_mat.to_csv(es_path, index=False)
+    # Output Excel based reports
+    reports_folder = export_folder / "Reports"
+    path = nup.build_path(
+        reports_folder / (trip_origin.value + "_disagg_report"),
+        results.segmentation,
+        tp=time_period,
+    )
 
-        # Output reports
-        report_path = reports_folder / (trip_origin.value + "_disagg_report")
-        if settings.time_period in add_cols:
-            report_path = nup.build_path(
-                report_path, res.segmentation, tp=settings.time_period
-            )
-        else:
-            report_path = nup.build_path(report_path, res.segmentation)
-        report_path = report_path.with_suffix(".xlsx")
-
-        with pd.ExcelWriter(report_path) as excel:
-            summary = pd.DataFrame.from_dict(
-                res.summary._asdict(), columns=["Value"], orient="index"
-            )
-            summary.index = summary.index.str.replace("_", " ").str.title()
-            summary.to_excel(excel, sheet_name="Summary")
-
-            tlds = []
-            for nm, tld in (
-                ("Final Matrix", res.final_matrix_tld),
-                ("Observed", res.target_tld),
-                ("Cost", res.cost_tld),
-            ):
-                index_cols = [tld.min_bounds_col, tld.max_bounds_col, tld.mid_bounds_col]
-                df = tld.to_df().set_index(index_cols)
-                df.columns = [f"{nm} {c.title()}" for c in df.columns]
-                df.index.names = [i.title() for i in df.index.names]
-                tlds.append(df)
-            pd.concat(tlds, axis=1).to_excel(excel, sheet_name="Cost Distribution")
-
-        path = reports_folder / (trip_origin.value + f"_tld")
-        if settings.time_period in add_cols:
-            path = nup.build_path(path, res.segmentation, tp=settings.time_period)
-        else:
-            path = nup.build_path(path, res.segmentation)
-        path = path.with_suffix(".pdf")
+    with pd.ExcelWriter(path.with_suffix(".xlsx")) as excel:
+        summary = pd.DataFrame.from_dict(
+            results.summary._asdict(), columns=["Value"], orient="index"
+        )
+        summary.index = summary.index.str.replace("_", " ").str.title()
+        summary.to_excel(excel, sheet_name="Summary")
 
         tlds = []
         for nm, tld in (
-            ("Final", res.final_matrix_tld),
-            ("Target", res.target_tld),
-            ("Cost", res.cost_tld),
+            ("Final Matrix", results.final_matrix_tld),
+            ("Observed", results.target_tld),
+            ("Cost", results.cost_tld),
         ):
-            tlds.append(cost_utils.PlotData(tld.band_means, tld.band_shares, f"{nm}"))
-        cost_utils.plot_cost_distributions(tlds, path.stem, path=path)
+            index_cols = [tld.min_bounds_col, tld.max_bounds_col, tld.mid_bounds_col]
+            df = tld.to_df().set_index(index_cols)
+            df.columns = [f"{nm} {c.title()}" for c in df.columns]
+            df.index.names = [i.title() for i in df.index.names]
+            tlds.append(df)
+        pd.concat(tlds, axis=1).to_excel(excel, sheet_name="Cost Distribution")
 
-    return results
+    # Output TLD graphs
+    path = nup.build_path(
+        reports_folder / (trip_origin.value + "_tld"), results.segmentation, tp=time_period
+    )
+    path = path.with_suffix(".pdf")
+
+    tlds = []
+    for nm, tld in (
+        ("Final", results.final_matrix_tld),
+        ("Target", results.target_tld),
+        ("Cost", results.cost_tld),
+    ):
+        tlds.append(cost_utils.PlotData(tld.band_means, tld.band_shares, f"{nm}"))
+    cost_utils.plot_cost_distributions(tlds, path.stem, path=path)
 
 
 def _calculate_bandshare_convergence(
