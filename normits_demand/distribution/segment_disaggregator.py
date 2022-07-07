@@ -15,9 +15,9 @@ import pydantic
 
 import normits_demand as nd
 from normits_demand import cost
+from normits_demand.cost import utils as cost_utils
 from normits_demand.concurrency import multiprocessing as mp
 from normits_demand.utils import file_ops, math_utils
-from normits_demand.utils import trip_length_distributions as tld_utils
 from normits_demand.utils import utils as nup
 from normits_demand import logging as nd_log
 from normits_demand import constants
@@ -42,26 +42,27 @@ class DisaggregationSettings(pydantic.BaseModel):  # pylint: disable=no-member
 
 
 class DisaggregationSummaryResults(NamedTuple):
-    # TODO Add docstring
+    """High level results from the `_segment_build_worker` function."""
+
     initial_bs_convergence: float
     final_bs_convergence: float
     target_productions: float
     target_attractions: float
     estimated_productions: float
     estimated_attractions: float
-    pa_difference: float
+    initial_pa_difference: float
     final_pa_difference: float
     convergence_fail: bool
 
 
 class DisaggregationResults(NamedTuple):
-    # TODO Add docstring
+    """All results returned by the `_segment_build_worker` function."""
+
     furness_matrix: np.ndarray
     final_matrix: np.ndarray
     segmentation: dict[str, Any]
     cost_tld: cost.CostDistribution
-    initial_tld: cost.CostDistribution
-    final_tld: cost.CostDistribution
+    final_matrix_tld: cost.CostDistribution
     target_tld: cost.CostDistribution
     summary: DisaggregationSummaryResults
 
@@ -263,7 +264,7 @@ def disaggregate_segments(
     cost_folder: pathlib.Path,
     trip_origin: nd.TripOrigin = nd.TripOrigin.HB,
     settings: DisaggregationSettings = DisaggregationSettings(),
-) -> None:
+) -> None: # TODO Update docstring
     """
     Parameters
     ----------
@@ -576,25 +577,37 @@ def _segment_build_worker(
             summary = pd.DataFrame.from_dict(
                 res.summary._asdict(), columns=["Value"], orient="index"
             )
+            summary.index = summary.index.str.replace("_", " ").str.title()
             summary.to_excel(excel, sheet_name="Summary")
 
-            res.initial_tld.to_df().to_excel(excel, sheet_name="Initial TLD", index=False)
-            res.final_tld.to_df().to_excel(excel, sheet_name="Final TLD", index=False)
-            res.target_tld.to_df().to_excel(excel, sheet_name="Target TLD", index=False)
-            res.cost_tld.to_df().to_excel(excel, sheet_name="Cost TLD", index=False)
+            tlds = []
+            for nm, tld in (
+                ("Final Matrix", res.final_matrix_tld),
+                ("Observed", res.target_tld),
+                ("Cost", res.cost_tld),
+            ):
+                index_cols = [tld.min_bounds_col, tld.max_bounds_col, tld.mid_bounds_col]
+                df = tld.to_df().set_index(index_cols)
+                df.columns = [f"{nm} {c.title()}" for c in df.columns]
+                df.index.names = [i.title() for i in df.index.names]
+                tlds.append(df)
+            pd.concat(tlds, axis=1).to_excel(excel, sheet_name="Cost Distribution")
 
-        for name, tld in (
-            ("Initial", res.initial_tld),
-            ("Final", res.final_tld),
+        path = reports_folder / (trip_origin.value + f"_tld")
+        if settings.time_period in add_cols:
+            path = nup.build_path(path, res.segmentation, tp=settings.time_period)
+        else:
+            path = nup.build_path(path, res.segmentation)
+        path = path.with_suffix(".pdf")
+
+        tlds = []
+        for nm, tld in (
+            ("Final", res.final_matrix_tld),
             ("Target", res.target_tld),
             ("Cost", res.cost_tld),
         ):
-            path = reports_folder / (trip_origin.value + f"_{name.lower()}_tld")
-            if settings.time_period in add_cols:
-                path = nup.build_path(path, res.segmentation, tp=settings.time_period)
-            else:
-                path = nup.build_path(path, res.segmentation)
-            tld.to_graph(path.with_suffix(".pdf"), label=f"{name} Distribution")
+            tlds.append(cost_utils.PlotData(tld.band_means, tld.band_shares, f"{nm}"))
+        cost_utils.plot_cost_distributions(tlds, path.stem, path=path)
 
     return results
 
@@ -680,7 +693,6 @@ def _dissag_seg(
         tlb_loop = 1
         conv_fail = False
         audit_dict["initial_bs_convergence"] = bs_con
-        audit_dict["initial_tld"] = matrix_tld
         audit_dict["cost_tld"] = cost_tld
         while bs_con < bs_con_crit:
 
@@ -826,8 +838,7 @@ def _dissag_seg(
                 final_matrix=mats["mat"],
                 segmentation=res["segmentation"],
                 cost_tld=res["cost_tld"],
-                initial_tld=res["initial_tld"],
-                final_tld=res["final_tld"],
+                final_matrix_tld=res["final_tld"],
                 target_tld=res["target_tld"],
                 summary=DisaggregationSummaryResults(
                     initial_bs_convergence=res["initial_bs_convergence"],
@@ -836,7 +847,7 @@ def _dissag_seg(
                     target_attractions=res["target_a"],
                     estimated_productions=res["estimated_p"],
                     estimated_attractions=res["estimated_a"],
-                    pa_difference=res["pa_diff"],
+                    initial_pa_difference=res["pa_diff"],
                     final_pa_difference=final_pa_diff,
                     convergence_fail=res["conv_fail"],
                 ),
