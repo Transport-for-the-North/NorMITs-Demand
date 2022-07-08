@@ -2,6 +2,7 @@
 """Run script for disaggregating model matrices into other segmentations."""
 
 ##### IMPORTS #####
+import logging
 import pathlib
 import re
 import sys
@@ -45,6 +46,7 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
     matrix_folder: pathlib.Path
     model: nd.AssignmentModel
     year: int
+    disaggregation_output_segment: segment_disaggregator.DisaggregationOutputSegment
     trip_length_distribution_folder: pathlib.Path
     trip_length_distribution_units: nd.CostUnits = nd.CostUnits.KILOMETERS
     disaggregation_settings: segment_disaggregator.DisaggregationSettings = (
@@ -243,6 +245,7 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
             base_attractions=attractions,
             export_folder=params.output_folder,
             cost_folder=params.cost_folder,
+            disaggregation_segment=params.disaggregation_output_segment,
             trip_origin=to,
             settings=params.disaggregation_settings,
         )
@@ -253,6 +256,8 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
 
 ##### MAIN #####
 if __name__ == "__main__":
+    logging.captureWarnings(True)
+
     try:
         # TODO Add command line argument to specify config path,
         # with default as CONFIG_PATH if no arguments are given
