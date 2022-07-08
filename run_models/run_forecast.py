@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+
 # Third party imports
 
 # Add parent folder to path
@@ -23,7 +24,7 @@ sys.path.append("..")
 from normits_demand.models import mitem_forecast, ntem_forecast, tempro_trip_ends
 from normits_demand import efs_constants as efs_consts
 from normits_demand import logging as nd_log
-from normits_demand.utils import timing
+from normits_demand.utils import timing, config_base
 from normits_demand.reports import ntem_forecast_checks
 import normits_demand as nd
 
@@ -36,7 +37,7 @@ LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_models.run_fore
 
 ##### CLASSES #####
 @dataclasses.dataclass(repr=False)
-class ForecastParameters:  # TODO Rewrite class as BaseConfig subclass
+class ForecastParameters(config_base.BaseConfig):  # TODO Rewrite class as BaseConfig subclass
     """Class for storing the parameters for running forecasting.
 
     Attributes
@@ -60,16 +61,21 @@ class ForecastParameters:  # TODO Rewrite class as BaseConfig subclass
         the `export_path_fmt` with variables filled in from
         the class attributes, and additional optional values
         from `export_path_params`.
+    tripend_path: Path
+        Base path for the process to read trip-end data from for 
+        growth factors
     """
 
     iteration: str = "9.7-COVID"
-    import_path: Path = Path(r"T:\MidMITs Demand")
+    import_path: Path = Path(r"I:/NorMITs Demand/import")
     model_name: str = "miham"
     base_year: int = 2021
     future_years = [2030, 2040]
-    export_path_fmt: str = r"C:\Projects\MidMITS\Forecast_test"
+    export_path_fmt: str = rf"T:/MidMITs Demand/Forecasting/{model_name}/tripend/{iteration}"
     export_path_params: Optional[Dict[str, Any]] = None
     _export_path: Optional[Path] = dataclasses.field(default=None, init=False, repr=False)
+    tripend_path: Path = Path(rf'T:\MidMITs Demand\MiTEM\iter{iteration}\NTEM')
+    matrix_import_path: Path = Path(rf'T:\MidMITs Demand\Distribution Model\iter{iteration}.1\car_and_passenger\Final Outputs\Full PA Matrices')
 
     @property
     def export_path(self) -> Path:
@@ -108,7 +114,7 @@ class ForecastParameters:  # TODO Rewrite class as BaseConfig subclass
         keys `post_me_tours` and `post_me_fh_th_factors`.
         """
         tour_prop_home = Path(
-            r"I:\NorMITs Demand\import\modal\car_and_passenger\pre_me_tour_proportions\v9.7-COVID\miham"
+            self.import_path / self.model_name / "synthetic_tour_proportions"
         )
         paths = {
             "post_me_tours": tour_prop_home,
@@ -262,10 +268,7 @@ def read_tripends(
             for year in [base_year] + forecast_years:
                 dvec = nd.DVector.load(
                     os.path.join(
-                        ForecastParameters.import_path,
-                        "MiTEM",
-                        f"iter{ForecastParameters.iteration}",
-                        "NTEM",
+                        ForecastParameters.tripend_path,
                         key,
                         f"{i}_msoa_notem_segmented_{year}_dvec.pkl",
                     )
@@ -310,43 +313,35 @@ def main(params: ForecastParameters, init_logger: bool = True):
     LOG.info("Input parameters: %r", params)
     params.save()
 
-    tripend_data = read_tripends(
-        base_year=efs_consts.BASE_YEAR, forecast_years=params.future_years
-    )
-    tripend_data = model_mode_subset(tripend_data, params.model_name)
-    tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name)
-    tempro_growth.save(params.export_path / "TEMPro Growth Factors")
-    # dvecs = {}
-    # for purp in ["hb", "nhb"]:
-    #     for pa in ["productions", "attractions"]:
-    #         years = {}
-    #         for year in params.future_years:
-    #             dvec = nd.DVector.load(
-    #                 params.export_path / "TEMPro Growth Factors" / f"{purp}_{pa}-{year}.pkl"
-    #             )
-    #             years[year] = dvec
-    #         dvecs[f"{purp}_{pa}"] = years
-    # tempro_growth = tempro_trip_ends.TEMProTripEnds(**dvecs)
+    # tripend_data = read_tripends(
+    #     base_year=efs_consts.BASE_YEAR, forecast_years=params.future_years
+    # )
+    # tripend_data = model_mode_subset(tripend_data, params.model_name)
+    # tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name)
+    # tempro_growth.save(params.export_path / "TEMPro Growth Factors")
+    # # The following lines are only to save time when testing the process and should be commented out for a real run
+    # # dvecs = {}
+    # # for purp in ["hb", "nhb"]:
+    # #     for pa in ["productions", "attractions"]:
+    # #         years = {}
+    # #         for year in params.future_years:
+    # #             dvec = nd.DVector.load(
+    # #                 params.export_path / "TEMPro Growth Factors" / f"{purp}_{pa}-{year}.pkl"
+    # #             )
+    # #             years[year] = dvec
+    # #         dvecs[f"{purp}_{pa}"] = years
+    # # tempro_growth = tempro_trip_ends.TEMProTripEnds(**dvecs)
     mitem_inputs = mitem_forecast.MiTEMImportMatrices(
-        os.path.join(
-            params.import_path,
-            "Distribution Model",
-            f"iter{params.iteration}.1",
-            "car_and_passenger",
-            "Final Outputs",
-            "Full PA Matrices",
-        ),
+        params.matrix_import_path,
         params.base_year,
         params.model_name,
     )
     pa_output_folder = params.export_path / "Matrices" / "PA"
-    pa_input_folder = params.import_path / "Distribution Model"
-    ntem_forecast.grow_all_matrices(mitem_inputs, tempro_growth, pa_output_folder)
-    ntem_forecast_checks.pa_matrix_comparison(mitem_inputs, pa_output_folder, tripend_data)
+    # ntem_forecast.grow_all_matrices(mitem_inputs, tempro_growth, pa_output_folder)
+    # ntem_forecast_checks.pa_matrix_comparison(mitem_inputs, pa_output_folder, tripend_data)
     od_folder = pa_output_folder.with_name("OD")
     ntem_forecast.convert_to_od(
         pa_output_folder,
-        pa_input_folder,
         od_folder,
         params.base_year,
         params.future_years,

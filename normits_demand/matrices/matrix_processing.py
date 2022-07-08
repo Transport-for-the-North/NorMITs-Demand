@@ -51,6 +51,7 @@ from normits_demand.matrices import compilation as mat_comp
 from normits_demand.distribution import furness
 from normits_demand.concurrency import multiprocessing
 from normits_demand.validation import checks
+from run_models.run_forecast import ForecastParameters
 
 from normits_demand.matrices.tms_matrix_processing import *
 
@@ -2120,7 +2121,6 @@ def _nhb_tp_split_via_factors_internal(
 
 
 def calc_nhb_props(
-    path: Path,
     iteration: str,
     year: int,
     file_name: str,
@@ -2128,6 +2128,7 @@ def calc_nhb_props(
     time_periods: list[int],
     mode: int,
 ) -> dict:
+#TODO Include nhb matrices as parameter in config file and read it from there
     """
     Reads in nhb base year matrices by time period and purpose, and creates a nested dictionary of splitting factors 
     Args:
@@ -2143,7 +2144,7 @@ def calc_nhb_props(
         dict: Dictionary of splitting factors {purpose:{time_period:factors dataframe}}
     """
     import_path = (
-        path / f"iter{iteration}.1" / "car_and_passenger" / "Final Outputs" / "Full PA Matrices"
+        ForecastParameters.matrix_import_path
     )
     final = {}
     for purp in purposes:
@@ -2160,11 +2161,9 @@ def calc_nhb_props(
 
 
 def nhb_tp_split_via_factors(
-    import_dir: nd.PathLike,
     export_dir: nd.PathLike,
     import_matrix_format: str,
     export_matrix_format: str,
-    model_name: str,
     base_year: int,
     future_years_needed: List[str],
     p_needed: List[int],
@@ -2192,7 +2191,6 @@ def nhb_tp_split_via_factors(
     du.print_w_toggle("Calculating the splitting factors...", verbose=verbose)
     splitting_factors = calc_nhb_props(
         year=base_year,
-        path=import_dir,
         iteration="9.7-COVID",
         file_name="nhb_synthetic_pa",
         purposes=p_needed,

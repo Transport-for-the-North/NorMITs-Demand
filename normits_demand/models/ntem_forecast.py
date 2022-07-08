@@ -753,8 +753,7 @@ def grow_all_matrices(
 
 
 def convert_to_od(
-    pa_output_folder: Path,
-    pa_input_folder: Path,
+    pa_folder: Path,
     od_folder: Path,
     base_year: int,
     future_years: List[int],
@@ -793,7 +792,7 @@ def convert_to_od(
     LOG.info("Converting PA to OD")
     od_folder.mkdir(exist_ok=True, parents=True)
     pa_to_od.build_od_from_fh_th_factors(
-        pa_import=pa_output_folder,
+        pa_import=pa_folder,
         od_export=od_folder,
         fh_th_factors_dir=pa_to_od_factors["post_me_fh_th_factors"],
         base_year = base_year,
@@ -806,11 +805,9 @@ def convert_to_od(
     )
 
     matrix_processing.nhb_tp_split_via_factors(
-        import_dir=pa_input_folder,
         export_dir=od_folder,
         import_matrix_format="pa",
         export_matrix_format="od",
-        model_name=model_name,
         base_year=base_year,
         future_years_needed=future_years,
         p_needed=purposes["nhb"],
