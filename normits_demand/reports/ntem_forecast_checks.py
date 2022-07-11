@@ -793,7 +793,7 @@ def od_matrix_comparison(
         Name of the zoning system for the summaries.
     """
     OD_MATRIX_NAMES = {
-        "base": "od_m3_{purp}_tp{tp}_postME.csv",
+        "base": "synthetic_od_{purp}_yr2021_m3_tp{tp}.csv",
         "base2": "od_m3_{purp}_tp{tp}.csv",
         "forecast": "od_{purp}_yr{yr}_m3_tp{tp}.csv",
     }
@@ -817,10 +817,11 @@ def od_matrix_comparison(
     with pd.ExcelWriter(out_path) as writer:
         for purpose in efs_consts.USER_CLASSES:
             for tp in efs_consts.TIME_PERIODS:
-                base_path = base_folder / OD_MATRIX_NAMES["base"].format(
+                base_path = base_folder / 'Compiled OD Matrices' / OD_MATRIX_NAMES["base"].format(
                     purp=purpose, tp=tp
                 )
                 if not base_path.exists():
+                    print(base_path)
                     base_path = base_path.with_name(
                         OD_MATRIX_NAMES["base2"].format(purp=purpose, tp=tp)
                     )
@@ -865,16 +866,9 @@ def _compare_od_matrices(
     # Read base matrix which is in long format
     base = file_ops.read_df(
         base_path,
-        header=None,
-        index_col=[0, 1],
-        dtype={
-            0: int,
-            1: int,
-            2: float
-        },
+        index_col= 0
     )
-    base = base.unstack().fillna(0)
-    base.columns = base.columns.droplevel(0)
+    base.rename(columns = {i:int(i) for i in base.columns},inplace=True)
     base = translate_matrix(base, matrix_zoning, comparison_zoning)
     base = matrix_totals(base)
     base.to_excel(excel_writer, sheet_name=sheet, index_label="Base")

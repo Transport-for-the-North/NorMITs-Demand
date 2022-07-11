@@ -206,9 +206,8 @@ def main(params: forecast_config.ForecastParameters, init_logger: bool = True):
 
 ##### MAIN #####
 
-    print(parameters.export_path)
     try:
-        main(ForecastParameters.load_yaml(r'C:\Projects\MidMITS\Python\scripts\NorMITs-Demand\config\run_forecast\miham\9.7-COVID.yml'))
+        main(PARAMS)
     except Exception as err:
         LOG.critical("MiTEM forecasting error:", exc_info=True)
         raise
