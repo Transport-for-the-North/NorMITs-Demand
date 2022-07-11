@@ -37,7 +37,7 @@ LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_models.run_fore
 
 ##### CLASSES #####
 @dataclasses.dataclass(repr=False)
-class ForecastParameters(config_base.BaseConfig):  # TODO Rewrite class as BaseConfig subclass
+class ForecastParameters:  # TODO Rewrite class as BaseConfig subclass
     """Class for storing the parameters for running forecasting.
 
     Attributes
@@ -64,6 +64,8 @@ class ForecastParameters(config_base.BaseConfig):  # TODO Rewrite class as BaseC
     tripend_path: Path
         Base path for the process to read trip-end data from for 
         growth factors
+    matrix_import_path: Path
+        Path to directory the matrix files are saved in
     """
 
     iteration: str = "9.7-COVID"
@@ -89,8 +91,7 @@ class ForecastParameters(config_base.BaseConfig):  # TODO Rewrite class as BaseC
             fmt_params = dataclasses.asdict(self)
             if self.export_path_params is not None:
                 fmt_params.update(self.export_path_params)
-            self._export_path = Path(self.export_path_fmt.format(**fmt_params))
-        return self._export_path
+        return Path(self.export_path_fmt.format(**fmt_params))
 
     def __repr__(self) -> str:
         params = (
@@ -313,32 +314,32 @@ def main(params: ForecastParameters, init_logger: bool = True):
     LOG.info("Input parameters: %r", params)
     params.save()
 
-    # tripend_data = read_tripends(
-    #     base_year=efs_consts.BASE_YEAR, forecast_years=params.future_years
-    # )
-    # tripend_data = model_mode_subset(tripend_data, params.model_name)
-    # tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name)
-    # tempro_growth.save(params.export_path / "TEMPro Growth Factors")
-    # # The following lines are only to save time when testing the process and should be commented out for a real run
-    # # dvecs = {}
-    # # for purp in ["hb", "nhb"]:
-    # #     for pa in ["productions", "attractions"]:
-    # #         years = {}
-    # #         for year in params.future_years:
-    # #             dvec = nd.DVector.load(
-    # #                 params.export_path / "TEMPro Growth Factors" / f"{purp}_{pa}-{year}.pkl"
-    # #             )
-    # #             years[year] = dvec
-    # #         dvecs[f"{purp}_{pa}"] = years
-    # # tempro_growth = tempro_trip_ends.TEMProTripEnds(**dvecs)
+    tripend_data = read_tripends(
+        base_year=efs_consts.BASE_YEAR, forecast_years=params.future_years
+    )
+    tripend_data = model_mode_subset(tripend_data, params.model_name)
+    tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name)
+    tempro_growth.save(params.export_path / "TEMPro Growth Factors")
+    # The following lines are only to save time when testing the process and should be commented out for a real run
+    # dvecs = {}
+    # for purp in ["hb", "nhb"]:
+    #     for pa in ["productions", "attractions"]:
+    #         years = {}
+    #         for year in params.future_years:
+    #             dvec = nd.DVector.load(
+    #                 params.export_path / "TEMPro Growth Factors" / f"{purp}_{pa}-{year}.pkl"
+    #             )
+    #             years[year] = dvec
+    #         dvecs[f"{purp}_{pa}"] = years
+    # tempro_growth = tempro_trip_ends.TEMProTripEnds(**dvecs)
     mitem_inputs = mitem_forecast.MiTEMImportMatrices(
         params.matrix_import_path,
         params.base_year,
         params.model_name,
     )
     pa_output_folder = params.export_path / "Matrices" / "PA"
-    # ntem_forecast.grow_all_matrices(mitem_inputs, tempro_growth, pa_output_folder)
-    # ntem_forecast_checks.pa_matrix_comparison(mitem_inputs, pa_output_folder, tripend_data)
+    ntem_forecast.grow_all_matrices(mitem_inputs, tempro_growth, pa_output_folder)
+    ntem_forecast_checks.pa_matrix_comparison(mitem_inputs, pa_output_folder, tripend_data)
     od_folder = pa_output_folder.with_name("OD")
     ntem_forecast.convert_to_od(
         pa_output_folder,

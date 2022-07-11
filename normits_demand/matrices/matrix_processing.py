@@ -2273,7 +2273,7 @@ def nhb_tp_split_via_factors(
 
         # ## APPLY SPLITTING FACTORS, WRITE TO DISK ## #
         unchanging_kwargs = {
-            "import_dir": Path(r"C:\Projects\MidMITS\Forecast_test\Matrices\PA"),
+            "import_dir": ForecastParameters().export_path / "Matrices" / "PA",
             "export_dir": export_dir,
             "trip_origin": trip_origin,
             "export_matrix_format": export_matrix_format,
