@@ -52,14 +52,9 @@ from normits_demand.matrices import compilation as mat_comp
 from normits_demand.distribution import furness
 from normits_demand.concurrency import multiprocessing
 from normits_demand.validation import checks
-from run_models import forecast_config
 
 from normits_demand.matrices.tms_matrix_processing import *
 
-# PATH = Path(r"C:\Projects\MidMITS\Python\scripts\NorMITs-Demand\config\run_forecast")
-# MODEL_NAME = 'miham'
-# ITERATION = '9.7-COVID'
-# PARAMS = forecast_config.ForecastParameters.load_yaml(PATH / MODEL_NAME / f"{ITERATION}.yml")
 
 
 def _aggregate(
