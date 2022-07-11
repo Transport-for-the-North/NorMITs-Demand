@@ -23,15 +23,12 @@ from tqdm import tqdm
 from normits_demand import core as nd_core
 from normits_demand import logging as nd_log
 from normits_demand.models import ntem_forecast, tempro_trip_ends
-from normits_demand.utils import file_ops, translation
+from normits_demand.utils import file_ops, translation, config_base
 from normits_demand import efs_constants as efs_consts
 
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
-COMPARISON_ZONE_SYSTEMS = {
-    "trip end": ntem_forecast.LAD_ZONE_SYSTEM,
-    "matrix 1": 'gor'
-}
+
 
 Matrix = Union[Path, pd.DataFrame]
 """Path to file (.csv or .pbz2), or DataFrame, containing matrix."""
@@ -144,6 +141,7 @@ def _compare_trip_ends(
     forecast_trip_ends: Dict[str, Dict[str, nd_core.DVector]],
     tempro_data: tempro_trip_ends.TEMProTripEnds,
     years: Tuple[int, int],
+    comparison_zone_system
 ) -> pd.DataFrame:
     """Compares matrix growth to `tempro_data`.
 
@@ -183,7 +181,7 @@ def _compare_trip_ends(
             # Convert to DataFrames
             dataframes = []
             index_cols = [
-                "p", "m", f"{COMPARISON_ZONE_SYSTEMS['trip end']}_zone_id"
+                "p", "m", f"{comparison_zone_system['trip end']}_zone_id"
             ]
             for nm, dvec in dvectors.items():
                 df = dvec.to_df().rename(columns={"val": nm})
@@ -337,6 +335,9 @@ def pa_matrix_comparison(
     ntem_imports: ntem_forecast.NTEMImportMatrices,
     pa_folder: Path,
     tempro_data: tempro_trip_ends.TEMProTripEnds,
+    mode: int,
+    comparison_zone_system: dict,
+    base_year
 ):
     """Produce TEMPro comparisons for PA matrices.
 
@@ -358,10 +359,10 @@ def pa_matrix_comparison(
     # Read base matrices
     if ntem_imports.mode != 3:
         raise NotImplementedError("PA matrix comparison only works for mode 3")
-    SEGMENTATION = {"hb": "hb_p_m_car", "nhb": "nhb_p_m_car"}
+    segmentation = {"hb": f"hb_p_m_{mode}", "nhb": f"nhb_p_m_{mode}"}
     base_matrices = {}
     base_trip_ends = {}
-    for nm, seg in SEGMENTATION.items():
+    for nm, seg in segmentation.items():
         LOG.info("Getting trip ends for base %s", nm.upper())
         base_matrices[nm] = _read_matrices(getattr(ntem_imports, f"{nm}_paths"))
         base_trip_ends[nm] = matrix_dvectors(
@@ -374,13 +375,13 @@ def pa_matrix_comparison(
 
     # Convert tempro_data to LA zoning and make sure segmentation is (n)hb_p_m
     tempro_data_comp = tempro_data.translate_zoning(
-        COMPARISON_ZONE_SYSTEMS["trip end"]
+        comparison_zone_system["trip end"]
     )
     # Compare trip ends to tempro for all purposes and years
     for yr in files.index.get_level_values("year").unique():
         forecast_matrices = {}
         forecast_trip_ends = {}
-        for nm, seg in SEGMENTATION.items():
+        for nm, seg in segmentation.items():
             LOG.info("Getting trip ends for %s %s", yr, nm.upper())
             indices = pd.IndexSlice[nm, yr, ntem_imports.mode]
             forecast_matrices[nm] = _read_matrices(
@@ -397,13 +398,14 @@ def pa_matrix_comparison(
             base_trip_ends,
             forecast_trip_ends,
             tempro_data_comp,
-            (efs_consts.BASE_YEAR, yr),
+            (base_year, yr),
+            comparison_zone_system=comparison_zone_system
         )
         out = output_folder / f"PA_TEMPro_comparisons-{yr}-LAD.csv"
         file_ops.write_df(comparison, out)
         LOG.info("Written: %s", out)
 
-        for nm, comp_zone in COMPARISON_ZONE_SYSTEMS.items():
+        for nm, comp_zone in comparison_zone_system.items():
             if not nm.startswith("matrix"):
                 continue
             LOG.info("Matrix comparisons at %s zoning", comp_zone)
@@ -413,7 +415,7 @@ def pa_matrix_comparison(
                 ntem_imports.model_name,
                 tempro_data,
                 comp_zone,
-                (efs_consts.BASE_YEAR, yr),
+                (base_year, yr),
                 output_folder / f"PA_TEMPro_comparisons-{yr}-{comp_zone}",
             )
 

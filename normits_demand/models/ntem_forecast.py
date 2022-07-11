@@ -26,8 +26,6 @@ from normits_demand.matrices import pa_to_od, matrix_processing
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
 LAD_ZONE_SYSTEM = "lad_2020"
-BASE_YEAR = 2021
-FUTURE_YEARS = [2030, 2040]
 
 
 ##### CLASSES #####
@@ -231,6 +229,8 @@ def trip_end_growth(
     tempro_vectors: Dict[int, nd_core.DVector],
     model_zone_system: str,
     zone_weighting: str,
+    base_year: int,
+    future_years: list[int]
 ) -> Dict[int, nd_core.DVector]:
     """Calculate growth at LAD level and return it a `model_zone_system`.
 
@@ -265,15 +265,15 @@ def trip_end_growth(
         If `normits_demand.efs_constants.BASE_YEAR` is not
         in `tempro_vectors`.
     """
-    if BASE_YEAR not in tempro_vectors:
+    if base_year not in tempro_vectors:
         raise NTEMForecastError(
-            f"base year ({BASE_YEAR}) data not given"
+            f"base year ({base_year}) data not given"
         )
     growth_zone = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
     model_zoning = nd_core.get_zoning_system(model_zone_system)
     # Split data into internal and external DVectors
     # for different growth calculations
-    base = tempro_vectors[BASE_YEAR]
+    base = tempro_vectors[base_year]
     base_data = {
         "internal":
             base.translate_zoning(growth_zone),
@@ -322,7 +322,8 @@ def trip_end_growth(
 def tempro_growth(
     tempro_data: TEMProTripEnds,
     model_zone_system: str,
-) -> TEMProTripEnds:
+    base_year: int,
+    future_years: int) -> TEMProTripEnds:
     """Calculate LAD growth factors and return at original zone system.
 
     Growth factors are calculated at LAD level but are
@@ -362,6 +363,8 @@ def tempro_growth(
             getattr(tempro_data, segment.name),
             model_zone_system,
             zone_translation_weights[segment.name],
+            base_year = base_year,
+            future_years = future_years
         )
     return TEMProTripEnds(**grown)
 
@@ -759,8 +762,10 @@ def convert_to_od(
     future_years: List[int],
     modes: List[int],
     purposes: Dict[str, List[int]],
-    model_name: str,
     pa_to_od_factors: Dict[str, Path],
+    iteration: str,
+    time_periods: list[int],
+    matrix_import_path: Path
 ) -> None:
     """Converts PA matrices from folder to OD.
 
@@ -812,11 +817,14 @@ def convert_to_od(
         future_years_needed=future_years,
         p_needed=purposes["nhb"],
         m_needed=modes,
+        iteration = iteration,
+        time_periods = time_periods,
+        matrix_import_path = matrix_import_path,
         compress_out=True,
     )
 
 
-def compile_highway_for_rail(pa_folder: Path, years: List[int]) -> Path:
+def compile_highway_for_rail(pa_folder: Path, years: List[int], mode: dict) -> Path:
     """Compile the PA matrices into the 24hr VDM PA matrices format.
 
     The outputs are saved in a new folder called
@@ -842,7 +850,7 @@ def compile_highway_for_rail(pa_folder: Path, years: List[int]) -> Path:
         export_dir=vdm_folder,
         matrix_format="pa",
         years_needed=years,
-        m_needed=[3],
+        m_needed=[mode.keys()],
         split_hb_nhb=True,
     )
     for path in paths:

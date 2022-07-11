@@ -44,6 +44,7 @@ from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 from normits_demand.utils import compress
 from normits_demand.utils import pandas_utils as pd_utils
+from normits_demand.utils import config_base
 
 from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.matrices import utils as mat_utils
@@ -51,9 +52,14 @@ from normits_demand.matrices import compilation as mat_comp
 from normits_demand.distribution import furness
 from normits_demand.concurrency import multiprocessing
 from normits_demand.validation import checks
-from run_models.run_forecast import ForecastParameters
+from run_models import forecast_config
 
 from normits_demand.matrices.tms_matrix_processing import *
+
+# PATH = Path(r"C:\Projects\MidMITS\Python\scripts\NorMITs-Demand\config\run_forecast")
+# MODEL_NAME = 'miham'
+# ITERATION = '9.7-COVID'
+# PARAMS = forecast_config.ForecastParameters.load_yaml(PATH / MODEL_NAME / f"{ITERATION}.yml")
 
 
 def _aggregate(
@@ -2121,14 +2127,13 @@ def _nhb_tp_split_via_factors_internal(
 
 
 def calc_nhb_props(
-    iteration: str,
     year: int,
     file_name: str,
     purposes: list[int],
     time_periods: list[int],
     mode: int,
+    matrix_import_path: Path
 ) -> dict:
-#TODO Include nhb matrices as parameter in config file and read it from there
     """
     Reads in nhb base year matrices by time period and purpose, and creates a nested dictionary of splitting factors 
     Args:
@@ -2144,7 +2149,7 @@ def calc_nhb_props(
         dict: Dictionary of splitting factors {purpose:{time_period:factors dataframe}}
     """
     import_path = (
-        ForecastParameters.matrix_import_path
+        matrix_import_path
     )
     final = {}
     for purp in purposes:
@@ -2168,6 +2173,9 @@ def nhb_tp_split_via_factors(
     future_years_needed: List[str],
     p_needed: List[int],
     m_needed: List[int],
+    iteration: str,
+    time_periods: list[int],
+    matrix_import_path: Path,
     soc_needed: List[int] = None,
     ns_needed: List[int] = None,
     ca_needed: List[int] = None,
@@ -2191,11 +2199,12 @@ def nhb_tp_split_via_factors(
     du.print_w_toggle("Calculating the splitting factors...", verbose=verbose)
     splitting_factors = calc_nhb_props(
         year=base_year,
-        iteration="9.7-COVID",
+        iteration=iteration,
         file_name="nhb_synthetic_pa",
         purposes=p_needed,
         mode=m_needed[0],
-        time_periods=list(range(1, 5))
+        time_periods=time_periods,
+        matrix_import_path=matrix_import_path
     )
     # Figure out the level of segmentation we are working at
     check_key = list(splitting_factors.keys())[0]

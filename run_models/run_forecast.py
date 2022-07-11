@@ -5,10 +5,10 @@
 # todo
 ##### IMPORTS #####
 from __future__ import annotations
+from ast import For, Str
 
 # Standard imports
 import configparser
-import dataclasses
 import os
 import sys
 from pathlib import Path
@@ -22,183 +22,18 @@ sys.path.append("..")
 # Local imports
 # pylint: disable=import-error,wrong-import-position
 from normits_demand.models import mitem_forecast, ntem_forecast, tempro_trip_ends
-from normits_demand import efs_constants as efs_consts
 from normits_demand import logging as nd_log
-from normits_demand.utils import timing, config_base
+from normits_demand.utils import timing
 from normits_demand.reports import ntem_forecast_checks
 import normits_demand as nd
+import forecast_config
 
 # pylint: enable=import-error,wrong-import-position
 
 ##### CONSTANTS #####
 LOG_FILE = "Forecast.log"
 LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_models.run_forecast")
-
-
-##### CLASSES #####
-@dataclasses.dataclass(repr=False)
-class ForecastParameters(config_base.BaseConfig):  # TODO Rewrite class as BaseConfig subclass
-    """Class for storing the parameters for running forecasting.
-
-    Attributes
-    ----------
-    import_path : Path
-        Path to the NorMITs demand imports.
-    tempro_data_path : Path
-        Path to the CSV containing the TEMPro data.
-    model_name : str
-        Name of the model.
-    iteration : str
-        Iteration number.
-    export_path_fmt: str
-        Format for the export path, used for building
-        `export_path` property.
-    export_path_params : Dict[str, Any]
-        Dictionary containing any additional parameters
-        for building the `export_path`.
-    export_path : Path
-        Read-only path to export folder, this is built from
-        the `export_path_fmt` with variables filled in from
-        the class attributes, and additional optional values
-        from `export_path_params`.
-    tripend_path: Path
-        Base path for the process to read trip-end data from for 
-        growth factors
-    """
-
-    iteration: str = "9.7-COVID"
-    import_path: Path = Path(r"I:/NorMITs Demand/import")
-    model_name: str = "miham"
-    base_year: int = 2021
-    future_years = [2030, 2040]
-    export_path_fmt: str = rf"T:/MidMITs Demand/Forecasting/{model_name}/tripend/{iteration}"
-    export_path_params: Optional[Dict[str, Any]] = None
-    _export_path: Optional[Path] = dataclasses.field(default=None, init=False, repr=False)
-    tripend_path: Path = Path(rf'T:\MidMITs Demand\MiTEM\iter{iteration}\NTEM')
-    matrix_import_path: Path = Path(rf'T:\MidMITs Demand\Distribution Model\iter{iteration}.1\car_and_passenger\Final Outputs\Full PA Matrices')
-
-    @property
-    def export_path(self) -> Path:
-        """
-        Read-only path to export folder, this is built from
-        the `export_path_fmt` with variables filled in from
-        the class attributes, and additional optional values
-        from `export_path_params`.
-        """
-        if self._export_path is None:
-            fmt_params = dataclasses.asdict(self)
-            if self.export_path_params is not None:
-                fmt_params.update(self.export_path_params)
-            self._export_path = Path(self.export_path_fmt.format(**fmt_params))
-        return self._export_path
-
-    def __repr__(self) -> str:
-        params = (
-            "import_path",
-            "export_path",
-            "model_name",
-            "iteration",
-        )
-        msg = f"{self.__class__.__name__}("
-        for p in params:
-            msg += f"\n\t{p}={getattr(self, p)!s}"
-        for p, val in self.pa_to_od_factors.items():
-            msg += f"\n\t{p}={val!s}"
-        msg += "\n)"
-        return msg
-
-    @property
-    def pa_to_od_factors(self) -> Dict[str, Path]:
-        """Dict[str, Path]
-        Paths to the PA to OD tour proportions, has
-        keys `post_me_tours` and `post_me_fh_th_factors`.
-        """
-        tour_prop_home = Path(
-            self.import_path / self.model_name / "synthetic_tour_proportions"
-        )
-        paths = {
-            "post_me_tours": tour_prop_home,
-            "post_me_fh_th_factors": tour_prop_home / "fh_th_factors",
-        }
-        for nm, p in paths.items():
-            if not p.is_dir():
-                raise NotADirectoryError(f"cannot find {nm} folder: {p}")
-        return paths
-
-    @property
-    def car_occupancies_path(self) -> Path:
-        """Path
-        Path to the vehicle occupancies CSV file.
-        """
-        path = self.import_path / "vehicle_occupancies/car_vehicle_occupancies.csv"
-        if not path.exists():
-            raise FileNotFoundError(f"cannot find vehicle occupancies CSV: {path}")
-        return path
-
-    def save(self, output_path: Optional[Path] = None):
-        """Save current parameters to config file.
-
-        Parameters
-        ----------
-        output_path : Path, optional
-            Path to the file to save, if not given saves to
-            'NTEM_forecast_parameters.txt' in `export_folder`.
-        """
-        if output_path is None:
-            output_path = self.export_path / "NTEM_forecast_parameters.txt"
-        config = configparser.ConfigParser()
-        config["parameters"] = {
-            "import_path": self.import_path,
-            "model_name": self.model_name,
-            "iteration": self.iteration,
-            "export_path_fmt": self.export_path_fmt,
-        }
-        if self.export_path_params is not None:
-            config["export_path_params"] = self.export_path_params
-        with open(output_path, "wt") as f:
-            config.write(f)
-        LOG.info("Written input parameters to: %s", output_path)
-
-    @staticmethod
-    def load(path: Path) -> ForecastParameters:
-        """Load parameters from config file.
-
-        Parameters
-        ----------
-        path : Path
-            Path to config file.
-
-        Returns
-        -------
-        ForecastParameters
-            New instance of the class with all parameters
-            filled in from the config file.
-
-        Raises
-        ------
-        FileNotFoundError
-            If `path` isn't a file.
-        tempro_trip_ends.NTEMForecastError
-            If the config file doesn't contain a
-            'parameters' section.
-        """
-        if not path.is_file():
-            raise FileNotFoundError(f"cannot find config file: {path}")
-        config = configparser.ConfigParser()
-        config.read(path)
-        param_sec = "parameters"
-        if not config.has_section(param_sec):
-            raise tempro_trip_ends.NTEMForecastError(
-                f"config file doesn't contain '{param_sec}' section"
-            )
-        params = dict(config[param_sec])
-        for p in ("import_path", "tempro_data_path"):
-            if p in params:
-                params[p] = Path(params[p])
-        export_params = "export_path_params"
-        if config.has_section(export_params):
-            params[export_params] = dict(config[export_params])
-        return ForecastParameters(**params)
+PARAMS = forecast_config.ForecastParameters.load_yaml("config/run_forecast.yml")
 
 
 ##### FUNCTIONS #####
@@ -268,7 +103,7 @@ def read_tripends(
             for year in [base_year] + forecast_years:
                 dvec = nd.DVector.load(
                     os.path.join(
-                        ForecastParameters.tripend_path,
+                        PARAMS.tripend_path,
                         key,
                         f"{i}_msoa_notem_segmented_{year}_dvec.pkl",
                     )
@@ -280,7 +115,7 @@ def read_tripends(
     return tempro_trip_ends.TEMProTripEnds(**dvectors)
 
 
-def main(params: ForecastParameters, init_logger: bool = True):
+def main(params: forecast_config.ForecastParameters, init_logger: bool = True):
     """Main function for running the MiTEM forecasting.
 
     Parameters
@@ -313,32 +148,30 @@ def main(params: ForecastParameters, init_logger: bool = True):
     LOG.info("Input parameters: %r", params)
     params.save()
 
-    # tripend_data = read_tripends(
-    #     base_year=efs_consts.BASE_YEAR, forecast_years=params.future_years
-    # )
-    # tripend_data = model_mode_subset(tripend_data, params.model_name)
-    # tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name)
-    # tempro_growth.save(params.export_path / "TEMPro Growth Factors")
-    # # The following lines are only to save time when testing the process and should be commented out for a real run
-    # # dvecs = {}
-    # # for purp in ["hb", "nhb"]:
-    # #     for pa in ["productions", "attractions"]:
-    # #         years = {}
-    # #         for year in params.future_years:
-    # #             dvec = nd.DVector.load(
-    # #                 params.export_path / "TEMPro Growth Factors" / f"{purp}_{pa}-{year}.pkl"
-    # #             )
-    # #             years[year] = dvec
-    # #         dvecs[f"{purp}_{pa}"] = years
-    # # tempro_growth = tempro_trip_ends.TEMProTripEnds(**dvecs)
+    tripend_data = read_tripends(
+        base_year=params.base_year, forecast_years=params.future_years
+    )
+    tripend_data = model_mode_subset(tripend_data, params.model_name)
+    tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name, params.base_year, params.future_years)
+    tempro_growth.save(params.export_path / "TEMPro Growth Factors")
+    # The following lines are only to save time when testing the process and should be commented out for a real run
+    # dvecs = {}
+    # for purp in ["hb", "nhb"]:
+    #     for pa in ["productions", "attractions"]:
+    #         years = {}
+    #         for year in params.future_years:
+    #             dvec = nd.DVector.load(
+    #                 params.export_path / "TEMPro Growth Factors" / f"{purp}_{pa}-{year}.pkl"
+    #             )
+    #             years[year] = dvec
+    #         dvecs[f"{purp}_{pa}"] = years
+    # tempro_growth = tempro_trip_ends.TEMProTripEnds(**dvecs)
     mitem_inputs = mitem_forecast.MiTEMImportMatrices(
-        params.matrix_import_path,
-        params.base_year,
-        params.model_name,
+        params.matrix_import_path, params.base_year, params.model_name,
     )
     pa_output_folder = params.export_path / "Matrices" / "PA"
-    # ntem_forecast.grow_all_matrices(mitem_inputs, tempro_growth, pa_output_folder)
-    # ntem_forecast_checks.pa_matrix_comparison(mitem_inputs, pa_output_folder, tripend_data)
+    ntem_forecast.grow_all_matrices(mitem_inputs, tempro_growth, pa_output_folder)
+    ntem_forecast_checks.pa_matrix_comparison(mitem_inputs, pa_output_folder, tripend_data, params.mode,params.comparison_zone_systems, params.base_year)
     od_folder = pa_output_folder.with_name("OD")
     ntem_forecast.convert_to_od(
         pa_output_folder,
@@ -346,13 +179,15 @@ def main(params: ForecastParameters, init_logger: bool = True):
         params.base_year,
         params.future_years,
         [mitem_inputs.mode],
-        {"hb": efs_consts.HB_PURPOSES_NEEDED, "nhb": efs_consts.NHB_PURPOSES_NEEDED,},
-        params.model_name,
+        {"hb": params.hb_purposes_needed, "nhb": params.nhb_purpose_needed,},
         params.pa_to_od_factors,
+        params.iteration,
+        params.time_periods,
+        params.matrix_import_path
     )
 
     # Compile to output formats
-    # ntem_forecast.compile_highway_for_rail(pa_output_folder, params.future_years)
+    ntem_forecast.compile_highway_for_rail(pa_output_folder, params.future_years, params.mode)
     compiled_od_path = ntem_forecast.compile_highway(
         od_folder, params.future_years, params.car_occupancies_path,
     )
@@ -360,7 +195,7 @@ def main(params: ForecastParameters, init_logger: bool = True):
         mitem_inputs.od_matrix_folder,
         compiled_od_path / "PCU",
         params.model_name,
-        ntem_forecast_checks.COMPARISON_ZONE_SYSTEMS["matrix 1"],
+        params.comparison_zone_systems["matrix 1"],
     )
 
     LOG.info(
@@ -370,9 +205,10 @@ def main(params: ForecastParameters, init_logger: bool = True):
 
 
 ##### MAIN #####
-if __name__ == "__main__":
+
+    print(parameters.export_path)
     try:
-        main(ForecastParameters())
+        main(ForecastParameters.load_yaml(r'C:\Projects\MidMITS\Python\scripts\NorMITs-Demand\config\run_forecast\miham\9.7-COVID.yml'))
     except Exception as err:
         LOG.critical("MiTEM forecasting error:", exc_info=True)
         raise
