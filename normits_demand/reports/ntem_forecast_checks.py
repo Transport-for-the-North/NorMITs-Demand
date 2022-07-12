@@ -218,6 +218,7 @@ def matrix_dvectors(
     trip_end_type: str,
     matrix_zoning: str,
     mode: int,
+    comparison_zone_systems
 ) -> Dict[str, nd_core.DVector]:
     """Calculate matrix trip ends and convert to DVectors
 
@@ -255,7 +256,7 @@ def matrix_dvectors(
 
     matrix_zoning = nd_core.get_zoning_system(matrix_zoning)
     comparison_zoning = nd_core.get_zoning_system(
-        COMPARISON_ZONE_SYSTEMS["trip end"]
+        comparison_zone_systems["trip end"]
     )
     dvectors = {}
     columns = ["zone_id", "trips", "p", "m"]
@@ -371,6 +372,7 @@ def pa_matrix_comparison(
             "pa",
             ntem_imports.model_name,
             ntem_imports.mode,
+            comparison_zone_system
         )
 
     # Convert tempro_data to LA zoning and make sure segmentation is (n)hb_p_m
@@ -393,6 +395,7 @@ def pa_matrix_comparison(
                 "pa",
                 ntem_imports.model_name,
                 ntem_imports.mode,
+                comparison_zone_system
             )
         comparison = _compare_trip_ends(
             base_trip_ends,

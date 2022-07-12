@@ -229,8 +229,7 @@ def trip_end_growth(
     tempro_vectors: Dict[int, nd_core.DVector],
     model_zone_system: str,
     zone_weighting: str,
-    base_year: int,
-    future_years: list[int]
+    base_year: int
 ) -> Dict[int, nd_core.DVector]:
     """Calculate growth at LAD level and return it a `model_zone_system`.
 
@@ -293,7 +292,7 @@ def trip_end_growth(
     # Ignore divide by zero warnings and fill with zeros
     with np.errstate(divide="ignore", invalid="ignore"):
         for yr, data in tempro_vectors.items():
-            if yr == BASE_YEAR:
+            if yr == base_year:
                 continue
             forecast = {}
             for area, base in base_data.items():
@@ -322,8 +321,7 @@ def trip_end_growth(
 def tempro_growth(
     tempro_data: TEMProTripEnds,
     model_zone_system: str,
-    base_year: int,
-    future_years: int) -> TEMProTripEnds:
+    base_year: int) -> TEMProTripEnds:
     """Calculate LAD growth factors and return at original zone system.
 
     Growth factors are calculated at LAD level but are
@@ -364,7 +362,6 @@ def tempro_growth(
             model_zone_system,
             zone_translation_weights[segment.name],
             base_year = base_year,
-            future_years = future_years
         )
     return TEMProTripEnds(**grown)
 
