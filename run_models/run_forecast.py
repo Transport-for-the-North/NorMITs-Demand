@@ -196,6 +196,9 @@ def main(params: forecast_config.ForecastParameters, init_logger: bool = True):
         compiled_od_path / "PCU",
         params.model_name,
         params.comparison_zone_systems["matrix 1"],
+        params.user_classes,
+        params.time_periods,
+        params.future_years
     )
 
     LOG.info(

@@ -47,6 +47,7 @@ class ForecastParameters(config_base.BaseConfig):  # TODO Rewrite class as BaseC
     comparison_zone_systems: Dict[str,str]
     mode: Dict[str,int]
     time_periods: list[int]
+    user_classes: list[str]
 
 
 
@@ -118,7 +119,8 @@ if __name__ == "__main__":
         comparison_zone_systems={"trip end": 'lad_2020',
         "matrix 1": "gor"},
         mode = {'car':3},
-        time_periods=[1,2,3,4]
+        time_periods=[1,2,3,4],
+        user_classes = ['commute', 'business', 'other']
     )
     outputpath = r"C:\Projects\MidMITS\Python\scripts\NorMITs-Demand\config"
     Path(outputpath

@@ -778,6 +778,9 @@ def od_matrix_comparison(
     forecast_folder: Path,
     matrix_zoning: str,
     comparison_zoning: str,
+    user_classes: list[str],
+    time_periods: list[int],
+    future_years: list[int]
 ):
     """Write spreadsheet summarising OD matrix growth.
 
@@ -811,12 +814,12 @@ def od_matrix_comparison(
     out_path = forecast_folder / f"OD_matrix_growth_summary-{comparison_zoning}.xlsx"
     pbar = tqdm(
         desc="Creating OD Matrix Summary",
-        total=len(efs_consts.USER_CLASSES) * len(efs_consts.TIME_PERIODS),
+        total=len(user_classes) * len(time_periods),
         dynamic_ncols=True,
     )
     with pd.ExcelWriter(out_path) as writer:
-        for purpose in efs_consts.USER_CLASSES:
-            for tp in efs_consts.TIME_PERIODS:
+        for purpose in user_classes:
+            for tp in time_periods:
                 base_path = base_folder / 'Compiled OD Matrices' / OD_MATRIX_NAMES["base"].format(
                     purp=purpose, tp=tp
                 )
@@ -829,7 +832,7 @@ def od_matrix_comparison(
                     "forecast"].format(purp=p, tp=t, yr=y)
                 forecast_paths = {
                     y: forecast_folder / forecast_name(purpose, tp, y)
-                    for y in efs_consts.FUTURE_YEARS
+                    for y in future_years
                 }
                 _compare_od_matrices(
                     writer,
