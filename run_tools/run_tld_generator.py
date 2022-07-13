@@ -201,8 +201,8 @@ def build_new_traveller_segment_tlds():
     # ## GENERATE RAIL TLDS ## #
     iterator = [
         ("uc_m_g_m6", "traveller_segment_m6_g"),
-        # ("uc_m_soc_m6", "traveller_segment_m6_soc"),
-        # ("uc_m_ns_m6", "traveller_segment_m6_ns"),
+        ("uc_m_soc_m6", "traveller_segment_m6_soc"),
+        ("uc_m_ns_m6", "traveller_segment_m6_ns"),
     ]
 
     for segmentation_name, copy_def_name in iterator:
