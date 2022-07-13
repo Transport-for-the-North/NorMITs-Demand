@@ -705,7 +705,7 @@ class TripLengthDistributionBuilder:
             log_line = segment_params.copy()
             log_line["records"] = sample_size
 
-            if sample_size <= sample_threshold:
+            if sample_size < sample_threshold:
                 log_line["status"] = "Failed"
                 LOG.warning(
                     "Not enough data was returned to create a TLD for segment "
@@ -878,6 +878,7 @@ class TripLengthDistributionBuilder:
         nts_to_segment_names = {
             "main_mode": "m",
             "p": self.purpose_col,
+            "gender": "g",
             "soc": "soc",
             "ns": "ns",
             "start_time": self.tp_col,
