@@ -332,7 +332,7 @@ def disaggregate_segments(
         nup.parse_matrix_folder(
             target_tld_folder,
             extension_filter=constants.VALID_MAT_FTYPES,
-            required_data=segment_columns,
+            required_data=segment_columns + [disaggregation_segment.value],
         )
     )
     tld_seg = _set_dataframe_dtypes(tld_seg, seg_dtypes)
@@ -380,6 +380,7 @@ def disaggregate_segments(
 
         trip_ends.append(df.groupby([zone_col_name] + segment_columns).agg({nm: "sum"}))
     trip_ends = pd.concat(trip_ends, axis=1, verify_integrity=True).reset_index()
+    # TODO Check that TLDs and trip ends contain the same segment values for all columns
 
     # Main disaggregation loop
     kwargs: list[dict[str, Any]] = []
@@ -600,10 +601,12 @@ def _segment_disaggregator_outputs(
     tlds = []
     for nm, tld in (
         ("Final", results.final_matrix_tld),
-        ("Target", results.target_tld),
+        ("Observed", results.target_tld),
     ):
         tlds.append(cost_utils.PlotData(tld.band_means, tld.band_shares, f"{nm}"))
     cost_utils.plot_cost_distributions(tlds, path.stem, path=path)
+
+    # TODO Add graphs which contain the input TLD and the TLDs for all output matrix
 
 
 def _calculate_bandshare_convergence(
@@ -686,8 +689,8 @@ def _dissag_seg(
             for min_, max_, obs, mat in zip(
                 target_tld.min_bounds,
                 target_tld.max_bounds,
-                target_tld.band_trips,
-                matrix_tld.band_trips,
+                target_tld.band_shares,
+                matrix_tld.band_shares,
             ):
                 if mat <= 0:
                     continue  # Leave K factor as 1 if there aren't any matrix trips
@@ -723,6 +726,7 @@ def _dissag_seg(
                 pa_diff = math_utils.get_pa_diff(mat_o, target_p, mat_d, target_a)  # .max()
 
                 if pa_diff < min_pa_diff or np.isnan(np.sum(new_mat)):
+                    # TODO Write this to output file per loop, while it's running
                     print(f"Furness took {fur_loop} loops")
                     break
 
@@ -738,6 +742,7 @@ def _dissag_seg(
             )
             bs_con = _calculate_bandshare_convergence(matrix_tld, target_tld)
 
+            # TODO Write this to output file per loop, while it's running
             print("Loop " + str(tlb_loop), "Band share convergence: " + str(bs_con))
 
             # If tiny improvement, exit loop
