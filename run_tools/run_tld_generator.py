@@ -199,22 +199,28 @@ def build_new_traveller_segment_tlds():
     generate_kwargs.update({"sample_threshold": 10})
 
     # ## GENERATE RAIL TLDS ## #
+    iterator = [
+        ("uc_m_g_m6", "traveller_segment_m6_g"),
+        ("uc_m_soc_m6", "traveller_segment_m6_soc"),
+        ("uc_m_ns_m6", "traveller_segment_m6_ns"),
+    ]
 
-    # Generate with CA combined and then split out
-    # Generate with HB and NHB combined and then split out
-    extract.tld_generator(
-        bands_name="dia_gb_rail_bands",
-        segmentation=nd_core.get_segmentation_level("uc_m_seg_m6"),
-        **generate_kwargs,
-    )
+    for segmentation_name, copy_def_name in iterator:
+        # Generate with CA combined and then split out
+        # Generate with HB and NHB combined and then split out
+        extract.tld_generator(
+            bands_name="dia_gb_rail_bands",
+            segmentation=nd_core.get_segmentation_level(segmentation_name),
+            **generate_kwargs,
+        )
 
-    # Copy back out!
-    extract.copy_tlds(
-        copy_definition_name="traveller_segment_rail",
-        bands_name="dia_gb_rail_bands",
-        segmentation=nd_core.get_segmentation_level("uc_m_seg_m6"),
-        **path_kwargs,
-    )
+        # Copy back out!
+        extract.copy_tlds(
+            copy_definition_name=copy_def_name,
+            bands_name="dia_gb_rail_bands",
+            segmentation=nd_core.get_segmentation_level(segmentation_name),
+            **path_kwargs,
+        )
 
     # A full traveller segment run needs:
     # ## run at GB, trip_OD ## #
@@ -232,5 +238,5 @@ if __name__ == "__main__":
     # run_test()
 
     # run_all_combinations()
-    build_new_dimo_tlds()
-    # build_new_traveller_segment_tlds()
+    # build_new_dimo_tlds()
+    build_new_traveller_segment_tlds()

@@ -22,9 +22,11 @@ import numpy as np
 import pandas as pd
 
 # Local Imports
+# pylint: disable=import-error,wrong-import-position
 from normits_demand import core as nd_core
 from normits_demand.utils import file_ops
 from normits_demand.cost import utils as cost_utils
+# pylint: enable=import-error,wrong-import-position
 
 # TODO(BT): Build class to handle a segmentationLevel collection of these
 
@@ -38,6 +40,7 @@ class CostDistribution:
         band_trips: np.ndarray,
         cost_units: nd_core.CostUnits,
         band_mean_cost: np.ndarray = None,
+        sample_size: int = -1,
     ):
         """
         Parameters
@@ -57,7 +60,12 @@ class CostDistribution:
         band_mean_cost:
             Similar to `band_trips`. The mean cost in each band, as defined by
             `edges`. If left as None, this defaults to all -1 values.
+
+        sample_size:
+            The size of the sample used to create this TLD.
         """
+        # TODO(BT): Fully integrate the sample_size into csv/df IO
+
         # Set initial values
         if band_mean_cost is None:
             band_mean_cost = np.full(band_trips.shape, -1)
@@ -66,6 +74,7 @@ class CostDistribution:
         self._cost_units = cost_units
 
         self.edges = edges
+        self.sample_size = sample_size
         self.min_bounds = edges[:-1]
         self.max_bounds = edges[1:]
         self.mid_bounds = (self.min_bounds + self.max_bounds) / 2
@@ -232,9 +241,12 @@ class CostDistribution:
             "aspect_ratio": 9 / 16,
             "dpi": 300,
         }
-
         default_graph_kwargs.update(graph_kwargs)
         graph_kwargs = default_graph_kwargs
+
+        # Build the output label
+        if self.sample_size > 0:
+            label = f"{label} | n={self.sample_size}"
 
         # Gather plotting data
         plot_data = cost_utils.PlotData(
@@ -281,6 +293,7 @@ class CostDistribution:
         max_bounds_col: str = None,
         trips_col: str = None,
         mean_col: str = None,
+        sample_size: int = -1,
     ) -> CostDistribution:
         """Reads in data from a csv to build a CostDistribution
 
@@ -309,6 +322,10 @@ class CostDistribution:
         mean_col:
             The name of the column containing the mean distance of the trips
             in each band
+
+        sample_size:
+            The size of the sample used to create this TLD. Will be passed
+            directly to the class constructor.
 
         Returns
         -------
@@ -350,4 +367,5 @@ class CostDistribution:
             band_trips=band_trips,
             cost_units=cost_units,
             band_mean_cost=band_mean_cost,
+            sample_size=sample_size,
         )

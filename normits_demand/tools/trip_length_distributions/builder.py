@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 
 # Local Imports
+# pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
 
 from normits_demand import cost
@@ -33,7 +34,7 @@ from normits_demand.utils import functional as func_utils
 from normits_demand.utils import string_utils as str_utils
 from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand.tools.trip_length_distributions import enumerations as tld_enums
-
+# pylint: enable=import-error,wrong-import-position
 
 LOG = nd_log.get_logger(__name__)
 
@@ -236,6 +237,7 @@ class TripLengthDistributionBuilder:
         """
         # Init
         data = data.copy()
+        sample_size = len(data)
         trip_count_col = self.trip_count_col if trip_count_col is None else trip_count_col
         trip_dist_col = self.trip_distance_col if trip_dist_col is None else trip_dist_col
 
@@ -269,6 +271,7 @@ class TripLengthDistributionBuilder:
             band_trips=np.array(all_band_trips),
             cost_units=output_cost_units,
             band_mean_cost=np.array(all_band_mean_cost),
+            sample_size=sample_size,
         )
 
     def _filter_nts_data(
@@ -705,7 +708,7 @@ class TripLengthDistributionBuilder:
             log_line = segment_params.copy()
             log_line["records"] = sample_size
 
-            if sample_size <= sample_threshold:
+            if sample_size < sample_threshold:
                 log_line["status"] = "Failed"
                 LOG.warning(
                     "Not enough data was returned to create a TLD for segment "
@@ -878,6 +881,7 @@ class TripLengthDistributionBuilder:
         nts_to_segment_names = {
             "main_mode": "m",
             "p": self.purpose_col,
+            "gender": "g",
             "soc": "soc",
             "ns": "ns",
             "start_time": self.tp_col,
