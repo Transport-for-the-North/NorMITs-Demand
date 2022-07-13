@@ -122,7 +122,7 @@ if __name__ == "__main__":
         time_periods=[1,2,3,4],
         user_classes = ['commute', 'business', 'other']
     )
-    outputpath = r"C:\Projects\MidMITS\Python\scripts\NorMITs-Demand\config"
+    outputpath = r"NorMITs-Demand\config"
     Path(outputpath
     ).mkdir(parents=True, exist_ok=True)
 

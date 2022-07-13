@@ -218,6 +218,7 @@ def matrix_dvectors(
     trip_end_type: str,
     matrix_zoning: str,
     mode: int,
+    comparison_zone_systems
 ) -> Dict[str, nd_core.DVector]:
     """Calculate matrix trip ends and convert to DVectors
 
@@ -255,7 +256,7 @@ def matrix_dvectors(
 
     matrix_zoning = nd_core.get_zoning_system(matrix_zoning)
     comparison_zoning = nd_core.get_zoning_system(
-        COMPARISON_ZONE_SYSTEMS["trip end"]
+        comparison_zone_systems["trip end"]
     )
     dvectors = {}
     columns = ["zone_id", "trips", "p", "m"]
@@ -371,6 +372,7 @@ def pa_matrix_comparison(
             "pa",
             ntem_imports.model_name,
             ntem_imports.mode,
+            comparison_zone_system
         )
 
     # Convert tempro_data to LA zoning and make sure segmentation is (n)hb_p_m
@@ -393,6 +395,7 @@ def pa_matrix_comparison(
                 "pa",
                 ntem_imports.model_name,
                 ntem_imports.mode,
+                comparison_zone_system
             )
         comparison = _compare_trip_ends(
             base_trip_ends,
@@ -820,7 +823,7 @@ def od_matrix_comparison(
     with pd.ExcelWriter(out_path) as writer:
         for purpose in user_classes:
             for tp in time_periods:
-                base_path = base_folder / 'Compiled OD Matrices' / OD_MATRIX_NAMES["base"].format(
+                base_path = base_folder / 'Compiled OD Matrices' / 'PCU' / OD_MATRIX_NAMES["base"].format(
                     purp=purpose, tp=tp
                 )
                 if not base_path.exists():
@@ -871,6 +874,12 @@ def _compare_od_matrices(
         base_path,
         index_col= 0
     )
+    if base.isnull().values.any():
+        LOG.warning("Base matrix at %s contains %s null values.  These are being"
+            " set to zero internally for reporting but consider checking the matrix.",
+            base_path,
+            forecast.isnull().sum().sum())
+        base.fillna(0, inplace=True)
     base.rename(columns = {i:int(i) for i in base.columns},inplace=True)
     base = translate_matrix(base, matrix_zoning, comparison_zoning)
     base = matrix_totals(base)
@@ -880,6 +889,12 @@ def _compare_od_matrices(
         # Read forecast matrix which is in square format
         forecast = file_ops.read_df(path, index_col=0)
         forecast.columns = pd.to_numeric(forecast.columns, downcast="integer")
+        if forecast.isnull().values.any():
+            LOG.warning("Forecast matrix at %s contains %s null values.  These are"
+            "set to zero internally for reporting but consider checking the matrix.",
+            path,
+            forecast.isnull().sum().sum())
+            forecast.fillna(0, inplace=True)
         forecast = translate_matrix(forecast, matrix_zoning, comparison_zoning)
         forecast = matrix_totals(forecast)
         col = i * (len(forecast) + 2)

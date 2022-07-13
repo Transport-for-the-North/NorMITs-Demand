@@ -26,14 +26,14 @@ from normits_demand import logging as nd_log
 from normits_demand.utils import timing
 from normits_demand.reports import ntem_forecast_checks
 import normits_demand as nd
-import forecast_config
+import forecast_cnfg
 
 # pylint: enable=import-error,wrong-import-position
 
 ##### CONSTANTS #####
 LOG_FILE = "Forecast.log"
 LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_models.run_forecast")
-PARAMS = forecast_config.ForecastParameters.load_yaml("config/run_forecast.yml")
+PARAMS = forecast_cnfg.ForecastParameters.load_yaml("config/run_forecast.yml")
 
 
 ##### FUNCTIONS #####
@@ -146,13 +146,12 @@ def main(params: forecast_config.ForecastParameters, init_logger: bool = True):
         )
     LOG.info(msg, params.export_path)
     LOG.info("Input parameters: %r", params)
-    params.save()
 
     tripend_data = read_tripends(
         base_year=params.base_year, forecast_years=params.future_years
     )
     tripend_data = model_mode_subset(tripend_data, params.model_name)
-    tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name, params.base_year, params.future_years)
+    tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name, params.base_year)
     tempro_growth.save(params.export_path / "TEMPro Growth Factors")
     # The following lines are only to save time when testing the process and should be commented out for a real run
     # dvecs = {}
@@ -171,7 +170,7 @@ def main(params: forecast_config.ForecastParameters, init_logger: bool = True):
     )
     pa_output_folder = params.export_path / "Matrices" / "PA"
     ntem_forecast.grow_all_matrices(mitem_inputs, tempro_growth, pa_output_folder)
-    ntem_forecast_checks.pa_matrix_comparison(mitem_inputs, pa_output_folder, tripend_data, params.mode,params.comparison_zone_systems, params.base_year)
+    ntem_forecast_checks.pa_matrix_comparison(mitem_inputs, pa_output_folder, tripend_data, list(params.mode.keys())[0],params.comparison_zone_systems, params.base_year)
     od_folder = pa_output_folder.with_name("OD")
     ntem_forecast.convert_to_od(
         pa_output_folder,
@@ -179,15 +178,16 @@ def main(params: forecast_config.ForecastParameters, init_logger: bool = True):
         params.base_year,
         params.future_years,
         [mitem_inputs.mode],
-        {"hb": params.hb_purposes_needed, "nhb": params.nhb_purpose_needed,},
+        {"hb": params.hb_purposes_needed, "nhb": params.nhb_purposes_needed},
         params.pa_to_od_factors,
         params.iteration,
         params.time_periods,
-        params.matrix_import_path
+        params.matrix_import_path,
+        params.export_path
     )
 
     # Compile to output formats
-    ntem_forecast.compile_highway_for_rail(pa_output_folder, params.future_years, params.mode)
+    # ntem_forecast.compile_highway_for_rail(pa_output_folder, params.future_years, params.mode)
     compiled_od_path = ntem_forecast.compile_highway(
         od_folder, params.future_years, params.car_occupancies_path,
     )
@@ -208,7 +208,7 @@ def main(params: forecast_config.ForecastParameters, init_logger: bool = True):
 
 
 ##### MAIN #####
-
+if __name__ == "__main__":
     try:
         main(PARAMS)
     except Exception as err:

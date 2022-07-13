@@ -2169,12 +2169,13 @@ def nhb_tp_split_via_factors(
     iteration: str,
     time_periods: list[int],
     matrix_import_path: Path,
+    export_path: Path,
     soc_needed: List[int] = None,
     ns_needed: List[int] = None,
     ca_needed: List[int] = None,
     process_count: int = consts.PROCESS_COUNT,
     compress_out: bool = False,
-    verbose: bool = True,
+    verbose: bool = True
 ) -> None:
     # TODO(BT): Write nhb_tp_split_via_factors() docs
     # Init
@@ -2192,7 +2193,6 @@ def nhb_tp_split_via_factors(
     du.print_w_toggle("Calculating the splitting factors...", verbose=verbose)
     splitting_factors = calc_nhb_props(
         year=base_year,
-        iteration=iteration,
         file_name="nhb_synthetic_pa",
         purposes=p_needed,
         mode=m_needed[0],
@@ -2275,7 +2275,7 @@ def nhb_tp_split_via_factors(
 
         # ## APPLY SPLITTING FACTORS, WRITE TO DISK ## #
         unchanging_kwargs = {
-            "import_dir": ForecastParameters().export_path / "Matrices" / "PA",
+            "import_dir": export_path / "Matrices" / "PA",
             "export_dir": export_dir,
             "trip_origin": trip_origin,
             "export_matrix_format": export_matrix_format,
