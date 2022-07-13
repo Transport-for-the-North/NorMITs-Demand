@@ -762,7 +762,8 @@ def convert_to_od(
     pa_to_od_factors: Dict[str, Path],
     iteration: str,
     time_periods: list[int],
-    matrix_import_path: Path
+    matrix_import_path: Path,
+    export_path: Path
 ) -> None:
     """Converts PA matrices from folder to OD.
 
@@ -817,7 +818,9 @@ def convert_to_od(
         iteration = iteration,
         time_periods = time_periods,
         matrix_import_path = matrix_import_path,
+        export_path=export_path,
         compress_out=True,
+        
     )
 
 

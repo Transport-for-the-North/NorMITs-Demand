@@ -182,11 +182,12 @@ def main(params: forecast_config.ForecastParameters, init_logger: bool = True):
         params.pa_to_od_factors,
         params.iteration,
         params.time_periods,
-        params.matrix_import_path
+        params.matrix_import_path,
+        params.export_path
     )
 
     # Compile to output formats
-    ntem_forecast.compile_highway_for_rail(pa_output_folder, params.future_years, params.mode)
+    # ntem_forecast.compile_highway_for_rail(pa_output_folder, params.future_years, params.mode)
     compiled_od_path = ntem_forecast.compile_highway(
         od_folder, params.future_years, params.car_occupancies_path,
     )

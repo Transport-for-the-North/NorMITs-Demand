@@ -823,7 +823,7 @@ def od_matrix_comparison(
     with pd.ExcelWriter(out_path) as writer:
         for purpose in user_classes:
             for tp in time_periods:
-                base_path = base_folder / 'Compiled OD Matrices' / OD_MATRIX_NAMES["base"].format(
+                base_path = base_folder / 'Compiled OD Matrices' / 'PCU' / OD_MATRIX_NAMES["base"].format(
                     purp=purpose, tp=tp
                 )
                 if not base_path.exists():
@@ -874,6 +874,12 @@ def _compare_od_matrices(
         base_path,
         index_col= 0
     )
+    if base.isnull().values.any():
+        LOG.warning("Base matrix at %s contains %s null values.  These are being"
+            " set to zero internally for reporting but consider checking the matrix.",
+            base_path,
+            forecast.isnull().sum().sum())
+        base.fillna(0, inplace=True)
     base.rename(columns = {i:int(i) for i in base.columns},inplace=True)
     base = translate_matrix(base, matrix_zoning, comparison_zoning)
     base = matrix_totals(base)
@@ -883,6 +889,12 @@ def _compare_od_matrices(
         # Read forecast matrix which is in square format
         forecast = file_ops.read_df(path, index_col=0)
         forecast.columns = pd.to_numeric(forecast.columns, downcast="integer")
+        if forecast.isnull().values.any():
+            LOG.warning("Forecast matrix at %s contains %s null values.  These are"
+            "set to zero internally for reporting but consider checking the matrix.",
+            path,
+            forecast.isnull().sum().sum())
+            forecast.fillna(0, inplace=True)
         forecast = translate_matrix(forecast, matrix_zoning, comparison_zoning)
         forecast = matrix_totals(forecast)
         col = i * (len(forecast) + 2)

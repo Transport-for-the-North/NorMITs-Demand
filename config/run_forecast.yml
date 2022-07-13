@@ -37,7 +37,6 @@ time_periods:
 - 3
 - 4
 user_classes:
--commute
--business
--other
-
+- commute
+- business
+- other
