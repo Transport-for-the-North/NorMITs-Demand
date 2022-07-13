@@ -2130,16 +2130,14 @@ def calc_nhb_props(
     matrix_import_path: Path
 ) -> dict:
     """
-    Reads in nhb base year matrices by time period and purpose, and creates a nested dictionary of splitting factors 
+    Reads in nhb base year matrices by time period and purpose, and creates a nested dictionary of splitting factors
     Args:
-        path (Path): The base path.  This folder should contain files with the name 'iter{iteration name}'
-        iter (str): The iteration name
-        year (int): The base year your are using to generate factors
-        file_name (str): the name all of your matrices have in commmone preceding 'yr...'
-        purposes (list[int]): List of purposes to iterate over
-        time_periods (list[int]): List of time periods to iterate over
-        mode (int): The mode this is being run for
-
+        year (int): The year the data is for.  This will generally be the base year of the model
+        file_name (str): The common name of all matrices preceding 'yr...'
+        purposes (list[int]): List of purposes
+        time_periods (list[int]): List of time periods
+        mode (int): The mode being analysed in string form e.g. car
+        matrix_import_path (Path): The path to the folder the matrices are saved in
     Returns:
         dict: Dictionary of splitting factors {purpose:{time_period:factors dataframe}}
     """
