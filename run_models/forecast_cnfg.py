@@ -3,8 +3,8 @@ from pathlib import Path
 from typing import Dict
 
 
-class ForecastParameters(config_base.BaseConfig):  # TODO Rewrite class as BaseConfig subclass
-    
+class ForecastParameters(config_base.BaseConfig):
+
     """Class for storing the parameters for running forecasting.
 
     Attributes
@@ -44,12 +44,10 @@ class ForecastParameters(config_base.BaseConfig):  # TODO Rewrite class as BaseC
     matrix_import_path: Path
     hb_purposes_needed: list[int]
     nhb_purposes_needed: list[int]
-    comparison_zone_systems: Dict[str,str]
-    mode: Dict[str,int]
+    comparison_zone_systems: Dict[str, str]
+    mode: Dict[str, int]
     time_periods: list[int]
     user_classes: list[str]
-
-
 
     @property
     def export_path(self) -> Path:
@@ -104,6 +102,7 @@ class ForecastParameters(config_base.BaseConfig):  # TODO Rewrite class as BaseC
             raise FileNotFoundError(f"cannot find vehicle occupancies CSV: {path}")
         return path
 
+
 if __name__ == "__main__":
     parameters = ForecastParameters(
         iteration="9.7-COVID",
@@ -113,19 +112,18 @@ if __name__ == "__main__":
         future_years=[2030, 2040],
         export_folder=Path(r"T:/MidMITs Demand/Forecasting"),
         tripend_path=Path(r"T:\MidMITs Demand\MiTEM\iter9.7-COVID\NTEM"),
-        matrix_import_path=Path(r"T:\MidMITs Demand\Distribution Model\iter9.7-COVID.1\car_and_passenger\Final Outputs\Full PA Matrices"),
-        hb_purposes_needed=list(range(1,9)),
-        nhb_purposes_needed = [12,13,14,15,16,18],
-        comparison_zone_systems={"trip end": 'lad_2020',
-        "matrix 1": "gor"},
-        mode = {'car':3},
-        time_periods=[1,2,3,4],
-        user_classes = ['commute', 'business', 'other']
+        matrix_import_path=Path(
+            r"T:\MidMITs Demand\Distribution Model\iter9.7-COVID.1\car_and_passenger\Final Outputs\Full PA Matrices"
+        ),
+        hb_purposes_needed=list(range(1, 9)),
+        nhb_purposes_needed=[12, 13, 14, 15, 16, 18],
+        comparison_zone_systems={"trip end": "lad_2020", "matrix 1": "gor"},
+        mode={"car": 3},
+        time_periods=[1, 2, 3, 4],
+        user_classes=["commute", "business", "other"],
     )
     outputpath = r"NorMITs-Demand\config"
-    Path(outputpath
-    ).mkdir(parents=True, exist_ok=True)
+    Path(outputpath).mkdir(parents=True, exist_ok=True)
 
-    parameters.save_yaml(
-        Path(outputpath) / "run_forecast.yml"
-    )
+    parameters.save_yaml(Path(outputpath) / "run_forecast.yml")
+

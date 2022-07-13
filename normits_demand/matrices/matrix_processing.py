@@ -44,7 +44,6 @@ from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 from normits_demand.utils import compress
 from normits_demand.utils import pandas_utils as pd_utils
-from normits_demand.utils import config_base
 
 from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.matrices import utils as mat_utils

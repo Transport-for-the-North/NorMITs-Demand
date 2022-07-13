@@ -21,12 +21,15 @@ from typing import Dict, Any, Optional
 sys.path.append("..")
 # Local imports
 # pylint: disable=import-error,wrong-import-position
+import forecast_cnfg
+import normits_demand as nd
 from normits_demand.models import mitem_forecast, ntem_forecast, tempro_trip_ends
 from normits_demand import logging as nd_log
-from normits_demand.utils import timing
 from normits_demand.reports import ntem_forecast_checks
-import normits_demand as nd
-import forecast_cnfg
+from normits_demand.utils import timing
+
+
+
 
 # pylint: enable=import-error,wrong-import-position
 
@@ -80,7 +83,6 @@ def model_mode_subset(
 def read_tripends(
     base_year: int, forecast_years: list[int]
 ) -> tempro_trip_ends.TEMProTripEnds:
-    # TODO Add docstring
     """
     Reads in trip-end dvectors from picklefiles
     Args:
@@ -103,9 +105,7 @@ def read_tripends(
             for year in [base_year] + forecast_years:
                 dvec = nd.DVector.load(
                     os.path.join(
-                        PARAMS.tripend_path,
-                        key,
-                        f"{i}_msoa_notem_segmented_{year}_dvec.pkl",
+                        PARAMS.tripend_path, key, f"{i}_msoa_notem_segmented_{year}_dvec.pkl",
                     )
                 )
                 if i == "nhb":
@@ -115,7 +115,7 @@ def read_tripends(
     return tempro_trip_ends.TEMProTripEnds(**dvectors)
 
 
-def main(params: forecast_config.ForecastParameters, init_logger: bool = True):
+def main(params: forecast_cnfg.ForecastParameters, init_logger: bool = True):
     """Main function for running the MiTEM forecasting.
 
     Parameters
@@ -151,26 +151,23 @@ def main(params: forecast_config.ForecastParameters, init_logger: bool = True):
         base_year=params.base_year, forecast_years=params.future_years
     )
     tripend_data = model_mode_subset(tripend_data, params.model_name)
-    tempro_growth = ntem_forecast.tempro_growth(tripend_data, params.model_name, params.base_year)
+    tempro_growth = ntem_forecast.tempro_growth(
+        tripend_data, params.model_name, params.base_year
+    )
     tempro_growth.save(params.export_path / "TEMPro Growth Factors")
-    # The following lines are only to save time when testing the process and should be commented out for a real run
-    # dvecs = {}
-    # for purp in ["hb", "nhb"]:
-    #     for pa in ["productions", "attractions"]:
-    #         years = {}
-    #         for year in params.future_years:
-    #             dvec = nd.DVector.load(
-    #                 params.export_path / "TEMPro Growth Factors" / f"{purp}_{pa}-{year}.pkl"
-    #             )
-    #             years[year] = dvec
-    #         dvecs[f"{purp}_{pa}"] = years
-    # tempro_growth = tempro_trip_ends.TEMProTripEnds(**dvecs)
     mitem_inputs = mitem_forecast.MiTEMImportMatrices(
         params.matrix_import_path, params.base_year, params.model_name,
     )
     pa_output_folder = params.export_path / "Matrices" / "PA"
     ntem_forecast.grow_all_matrices(mitem_inputs, tempro_growth, pa_output_folder)
-    ntem_forecast_checks.pa_matrix_comparison(mitem_inputs, pa_output_folder, tripend_data, list(params.mode.keys())[0],params.comparison_zone_systems, params.base_year)
+    ntem_forecast_checks.pa_matrix_comparison(
+        mitem_inputs,
+        pa_output_folder,
+        tripend_data,
+        list(params.mode.keys())[0],
+        params.comparison_zone_systems,
+        params.base_year,
+    )
     od_folder = pa_output_folder.with_name("OD")
     ntem_forecast.convert_to_od(
         pa_output_folder,
@@ -183,7 +180,7 @@ def main(params: forecast_config.ForecastParameters, init_logger: bool = True):
         params.iteration,
         params.time_periods,
         params.matrix_import_path,
-        params.export_path
+        params.export_path,
     )
 
     # Compile to output formats
@@ -198,7 +195,7 @@ def main(params: forecast_config.ForecastParameters, init_logger: bool = True):
         params.comparison_zone_systems["matrix 1"],
         params.user_classes,
         params.time_periods,
-        params.future_years
+        params.future_years,
     )
 
     LOG.info(
