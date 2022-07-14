@@ -62,7 +62,7 @@ def run_all_combinations():
             "cost_units": nd_core.CostUnits.KM,
             "bands_name": bands,
             "segmentation_name": seg,
-            "sample_threshold": 10,
+            "min_sample_size": 10,
         }
 
         extract.tld_generator(trip_filter_type=tlds.TripFilter.TRIP_OD, **kwargs)
@@ -95,7 +95,7 @@ def run_test():
         "cost_units": nd_core.CostUnits.KM,
         "bands_name": band_list[0],
         "segmentation_name": seg_list[0],
-        "sample_threshold": 10,
+        "min_sample_size": 10,
     }
 
     # North
@@ -126,7 +126,7 @@ def build_new_dimo_tlds():
         "cost_units": nd_core.CostUnits.KM,
     }
     generate_kwargs = path_kwargs.copy()
-    generate_kwargs.update({"sample_threshold": 10, "inter_smoothing": True})
+    generate_kwargs.update({"min_sample_size": 10, "inter_smoothing": True})
 
     for geo_area in [tlds.GeoArea.GB, tlds.GeoArea.NORTH_AND_MIDS]:
         # ## GENERATE HIGHWAY ## #
@@ -196,21 +196,22 @@ def build_new_traveller_segment_tlds():
         "cost_units": nd_core.CostUnits.KM,
     }
     generate_kwargs = path_kwargs.copy()
-    generate_kwargs.update({"sample_threshold": 10, "inter_smoothing": True})
+    generate_kwargs.update({"min_sample_size": 10, "inter_smoothing": True})
 
     # ## GENERATE RAIL TLDS ## #
     iterator = [
-        # ("uc_m_g_m6", "traveller_segment_m6_g"),
-        ("uc_m_soc_m6", "traveller_segment_m6_soc"),
-        # ("uc_m_ns_m6", "traveller_segment_m6_ns"),
+        # ("uc_m_g_m6", "traveller_segment_m6_g", "g"),
+        ("uc_m_soc_m6", "traveller_segment_m6_soc", "soc"),
+        # ("uc_m_ns_m6", "traveller_segment_m6_ns", "ns"),
     ]
 
-    for segmentation_name, copy_def_name in iterator:
+    for segmentation_name, copy_def_name, exc_seg in iterator:
         # Generate with CA combined and then split out
         # Generate with HB and NHB combined and then split out
         extract.tld_generator(
             bands_name="dia_gb_rail_bands",
             segmentation=nd_core.get_segmentation_level(segmentation_name),
+            aggregated_exclude_segments=exc_seg,
             **generate_kwargs,
         )
 

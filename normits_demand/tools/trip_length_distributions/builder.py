@@ -46,6 +46,8 @@ class TripLengthDistributionBuilder:
     _full_export_fname = "2. full_export.csv"
     _seg_report_fname = "3. {seg_name}_report.csv"
 
+    _distribution_fname_desc = "cost_distribution"
+
     # Maps for non-classified categories
     _household_type_to_ca = {
         "hh_type": [1, 2, 3, 4, 5, 6, 7, 8],
@@ -390,7 +392,18 @@ class TripLengthDistributionBuilder:
         return segmentation.generate_file_name(
             segment_params=segment_params,
             trip_origin=trip_origin,
-            file_desc="cost_distribution",
+            file_desc=TripLengthDistributionBuilder._distribution_fname_desc,
+        )
+
+    @staticmethod
+    def _generate_tld_name_template(
+        segmentation: nd_core.SegmentationLevel,
+        trip_origin: str = None,
+    ) -> str:
+        """Wrapper around `segmentation.generate_template_file_name()` for consistent filenames"""
+        return segmentation.generate_template_file_name(
+            trip_origin=trip_origin,
+            file_desc=TripLengthDistributionBuilder._distribution_fname_desc,
         )
 
     def _handle_sample_period(
@@ -703,6 +716,136 @@ class TripLengthDistributionBuilder:
         with open(output_path, "w") as f:
             f.write(run_log_str)
 
+    def build_aggregated_tlds(
+        self,
+        tld_data: pd.DataFrame,
+        bands: pd.DataFrame,
+        segmentation: nd_core.SegmentationLevel,
+        aggregated_exclude_segments: list[str],
+        cost_units: nd_core.CostUnits,
+        sample_threshold: int = 10,
+        trip_count_col: str = None,
+        trip_dist_col: str = None,
+        inter_smoothing: bool = False,
+    ) -> tuple[dict[str, cost.CostDistribution], dict[str, str], pd.DataFrame, pd.DataFrame]:
+        """Build a set of  aggregated trip length distributions
+
+        similar functionality to `self.build_tld`, but generates an aggregated
+        TLD instead based off of `segmentation` and `aggregated_exclude_segments`.
+        The aggregated TLD is defined by taking the `segmentation` and
+        removing the segments defined in `aggregated_exclude_segments`.
+        That is, if `segmentation` contains the segments ['p', 'm', 'soc] and
+        `aggregated_exclude_segments` is set to `soc` then the `soc` segment will
+        be ignored when generating the aggregated TLDs.
+
+        Parameters
+        ----------
+        tld_data:
+            Dataframe of pre-processed trip length distribution data
+
+        bands: pd.DataFrame:
+            Dataframe of bands with headings lower, upper
+
+        segmentation:
+            The segmentation to generate a group of TLDs for
+
+        aggregated_exclude_segments:
+            A list of the segment names to exclude from `segmentation` when
+            generated an aggregated segmentation.
+
+        cost_units:
+            The cost units to use in the output. The data will be multiplied
+            by a constant to convert.
+
+        sample_threshold: int = 10:
+            Sample size below which skip allocation to bands and fail out
+
+        trip_count_col:
+            The name of the column in `tld_data` containing the count of trips
+            being made.
+
+        trip_dist_col:
+            The name of the column in `tld_data` containing the distance of trips
+            being made. This should be in `self.input_cost_units` units.
+
+        inter_smoothing:
+            If set to True, then the generated distribution will be checked
+            for gaps. if gaps are found (i.e. 0 for a band where there is data
+            later on) then the missing value(s) will be interpolated.
+
+
+        Returns
+        ----------
+        name_to_distribution:
+            A dictionary with {tld_name: CostDistribution}
+
+        sample_size_log:
+            input segments with reported number of records and status
+
+        full_export:
+            A pandas dataframe containing all the generated TLDs alongside
+            their segment_params
+        """
+
+
+        return None, None, None, None
+
+
+    def _build_tld_from_segment_params(
+        self,
+        segment_params: dict[str, Any],
+        segment_naming_order: list[str],
+        raw_tld_data: pd.DataFrame,
+        band_edges: np.ndarray,
+        cost_units: nd_core.CostUnits,
+        sample_threshold: int,
+        inter_smoothing: bool,
+        trip_count_col: str,
+        trip_dist_col: str,
+        tld_name_template: str,     # Need to generate
+        segment_types: dict[str, type] = None,
+    ) -> tuple[cost.CostDistribution, str, dict[str, str]]:
+
+        # Filter to data for this segment
+        data_subset = raw_tld_data.copy()
+        data_subset = self._filter_nts_data(data_subset, segment_params)
+        sample_size = data_subset[trip_count_col].values.sum()
+
+        # Build the sample size log
+        log_line = segment_params.copy()
+        log_line["records"] = sample_size
+
+        # If sample size is too small, set warning to be dealt with later
+        if sample_size < sample_threshold:
+            log_line["status"] = "Failed"
+            LOG.warning(
+                "Not enough data was returned to create a TLD for segment "
+                f"{segment_params}. Lower limit set to {sample_threshold}, "
+                f"but only {sample_size} were found. No TLD will be generated."
+            )
+
+        log_line["status"] = "Passed"
+
+        # Build into a cost distribution
+        tld = self._build_cost_distribution(
+            data=data_subset,
+            band_edges=band_edges,
+            output_cost_units=cost_units,
+            trip_count_col=trip_count_col,
+            trip_dist_col=trip_dist_col,
+            inter_smoothing=inter_smoothing,
+            segment_params=segment_params,
+        )
+
+        segment_str = nd_core.SegmentationLevel.generate_template_segment_str(
+            naming_order=segment_naming_order,
+            segment_params=segment_params,
+            segment_types=segment_types,
+        )
+        tld_name = tld_name_template.format(segment_params=segment_str)
+
+        return tld, tld_name, log_line
+
     def build_tld(
         self,
         tld_data: pd.DataFrame,
@@ -768,47 +911,38 @@ class TripLengthDistributionBuilder:
         sample_size_log = list()
         full_export = list()
 
+        # Calculate band edges
+        min_bounds = bands["lower"].values
+        max_bounds = bands["upper"].values
+        band_edges = np.array([min_bounds[0]] + max_bounds.tolist())
+
         # Generate a TLD for each segment
         for segment_params in segmentation:
-            # Filter to data for this segment
-            data_subset = tld_data.copy()
-            data_subset = self._filter_nts_data(data_subset, segment_params)
-            sample_size = data_subset[trip_count_col].values.sum()
-
-            # Build the sample size log
-            log_line = segment_params.copy()
-            log_line["records"] = sample_size
-
-            if sample_size < sample_threshold:
-                log_line["status"] = "Failed"
-                LOG.warning(
-                    "Not enough data was returned to create a TLD for segment "
-                    f"{segment_params}. Lower limit set to {sample_threshold}, "
-                    f"but only {sample_size} were found. No TLD will be generated."
-                )
-                continue
-            log_line["status"] = "Passed"
-            sample_size_log.append(log_line)
-
-            # Build into a cost distribution
-            min_bounds = bands["lower"].values
-            max_bounds = bands["upper"].values
-            tld = self._build_cost_distribution(
-                data=data_subset,
-                band_edges=np.array([min_bounds[0]] + max_bounds.tolist()),
-                output_cost_units=cost_units,
-                trip_count_col=trip_count_col,
-                trip_dist_col=trip_dist_col,
-                inter_smoothing=inter_smoothing,
-                segment_params=segment_params,
+            # generate template name
+            tld_name_template = self._generate_tld_name_template(
+                segmentation,
+                trip_origin=segment_params.get("trip_origin", None),
             )
 
-            # Add to the full export
-            full_export.append(tld.to_df(additional_cols=segment_params))
+            # Build the TLD
+            tld, tld_name, log_line = self._build_tld_from_segment_params(
+                segment_params=segment_params,
+                segment_naming_order=segmentation.naming_order,
+                raw_tld_data=tld_data,
+                band_edges=band_edges,
+                cost_units=cost_units,
+                sample_threshold=sample_threshold,
+                inter_smoothing=inter_smoothing,
+                trip_count_col=trip_count_col,
+                trip_dist_col=trip_dist_col,
+                tld_name_template=tld_name_template,
+                segment_types=segmentation.segment_types,
+            )
 
-            # Add to dictionary
-            tld_name = self._generate_tld_name(segmentation, segment_params)
+            # Store the generated data
+            sample_size_log.append(log_line)
             name_to_distribution.update({tld_name: tld})
+            full_export.append(tld.to_df(additional_cols=segment_params))
 
         # Consolidate reports
         full_export = pd.concat(full_export, ignore_index=True)
@@ -895,14 +1029,25 @@ class TripLengthDistributionBuilder:
         self,
         bands_name: str,
         segmentation: nd_core.SegmentationLevel,
+        aggregated_exclude_segments: list[str],
         geo_area: tld_enums.GeoArea,
         sample_period: tld_enums.SampleTimePeriods,
         trip_filter_type: tld_enums.TripFilter,
         cost_units: nd_core.CostUnits = nd_core.CostUnits.MILES,
         inter_smoothing: bool = False,
-        sample_threshold: int = 10,
+        check_sample_size: int = 400,
+        min_sample_size: int = 10,
     ) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
         """Generate a trip length distribution
+
+        Checks that the sample sizes are reasonable (as defined by
+        `check_sample_size` and `min_sample_size`) and will default to an
+        aggregated TLD if the checks don't pass. The aggregated TLD is defined
+        by taking the `segmentation` and removing the segments defined in
+        `aggregated_exclude_segments`.
+        That is, if `segmentation` contains the segments ['p', 'm', 'soc] and
+        `aggregated_exclude_segments` is set to `soc` then the `soc` segment will
+        be ignored when generating the aggregated TLDs.
 
         Parameters
         ----------
@@ -912,6 +1057,10 @@ class TripLengthDistributionBuilder:
 
         segmentation:
             The segmentation to generate a group of TLDs for
+
+        aggregated_exclude_segments:
+            A list of the segment names to exclude from `segmentation` when
+            generated an aggregated segmentation.
 
         geo_area:
             The geographical area to limit the generated TLD to
@@ -935,10 +1084,16 @@ class TripLengthDistributionBuilder:
             for gaps. if gaps are found (i.e. 0 for a band where there is data
             later on) then the missing value(s) will be interpolated.
 
-        sample_threshold: int = 10:
-            Sample below which to not bother running an application to bands
-            Smallest possible number you would consider representative
-            Failures captured in output sample_size_log
+        check_sample_size:
+            When the sample size is below this value, additional checks are
+            carried out to ensure the generated TLD is reasonable.
+            Will ensure that values continue to decrease in greater bands.
+            If not, the aggregated TLD is used.
+
+        min_sample_size:
+            The minimum acceptable sample size. If the number of trips left
+            to generate a TLD is smaller than this number then the aggregated
+            TLD will be used instead.
 
         Returns
         ----------
@@ -1008,14 +1163,22 @@ class TripLengthDistributionBuilder:
         # If sample size is < 400
         # Check for later bands < earlier. If so, use average TLD
         # Instead. (Should we also do this if the sample size is too small?)
+        tld_kwargs = {
+            "tld_data": nts_data,
+            "bands": bands,
+            "segmentation": segmentation,
+            "cost_units": cost_units,
+            "sample_threshold": min_sample_size,
+            "inter_smoothing": inter_smoothing,
+        }
+
         # Build tld dictionary, return a proper name for the distributions
-        name_to_distribution, sample_size_log, full_export = self.build_tld(
-            tld_data=nts_data,
-            bands=bands,
-            segmentation=segmentation,
-            cost_units=cost_units,
-            sample_threshold=sample_threshold,
-            inter_smoothing=inter_smoothing,
+        name_to_distribution, sample_size_log, full_export = self.build_tld(**tld_kwargs)
+
+        # build the aggregated TLDs, and link back to above
+        agg_name_to_dist, name_to_agg_name, agg_sample_size_log, agg_full_export = self.build_aggregated_tlds(
+            aggregated_exclude_segments=aggregated_exclude_segments,
+            **tld_kwargs
         )
 
         # ## WRITE THINGS OUT ## #
