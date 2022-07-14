@@ -18,6 +18,7 @@ import normits_demand as nd
 from normits_demand import cost
 from normits_demand.cost import utils as cost_utils
 from normits_demand.concurrency import multiprocessing as mp
+from normits_demand.distribution import furness
 from normits_demand.utils import file_ops, math_utils
 from normits_demand.utils import utils as nup
 from normits_demand import logging as nd_log
@@ -269,9 +270,6 @@ def disaggregate_segments(
         If there are segments on the left hand side that aren't in the
         enhanced segmentation, aggregated them. Will
     """
-    # TODO What functionality is required when the user provides a time_period value
-    LOG.warning("Not yet implemented functionality for the time period")
-
     required_columns = ["matrix_type", "trip_origin", "yr", "m"]
     if model == nd.AssignmentModel.NORMS:
         required_columns.append("ca")
@@ -639,8 +637,8 @@ def _dissag_seg(
         target_a = np.array(target_a)
 
         # Initialise the output mat
-        new_mat = base_matrix / base_matrix.sum()
-        new_mat: np.ndarray = new_mat * target_p.sum()
+        new_mat = np.where(base_matrix.sum(axis=1) > 0, (base_matrix.T / base_matrix.sum(axis=1)), 0)
+        new_mat: np.ndarray = (new_mat * target_p).T
 
         target_te_totals = (target_p.sum(), target_a.sum())
         input_matrix_total = np.sum(base_matrix)
@@ -722,32 +720,10 @@ def _dissag_seg(
 
                 new_mat = k_factors * new_mat
 
-                # TODO Replace with furness function
-                fur_conv = False
-                for fur_loop in range(furness_loops):
-
-                    fur_loop += 1
-
-                    # Adjust attractions
-                    mat_d = np.sum(new_mat, axis=0)
-                    mat_d[mat_d == 0] = 1
-                    new_mat = new_mat * target_a / mat_d
-
-                    # Adjust productions
-                    mat_o = np.sum(new_mat, axis=1)
-                    mat_o[mat_o == 0] = 1
-                    new_mat = (new_mat.T * target_p / mat_o).T
-
-                    # Get pa diff
-                    mat_o = np.sum(new_mat, axis=1)
-                    mat_d = np.sum(new_mat, axis=0)
-                    pa_diff = math_utils.get_pa_diff(
-                        mat_o, target_p, mat_d, target_a
-                    )  # .max()
-
-                    if pa_diff < min_pa_diff or np.isnan(np.sum(new_mat)):
-                        fur_conv = True
-                        break
+                # TODO Add options for single constraint and no constraint
+                new_mat, fur_loop, pa_diff = furness.doubly_constrained_furness(
+                    new_mat, target_p, target_a, tol=min_pa_diff, max_iters=furness_loops
+                )
 
                 prior_bs_con = bs_con
 
@@ -762,6 +738,7 @@ def _dissag_seg(
                 bs_con = _calculate_bandshare_convergence(matrix_tld, target_tld)
 
                 # If tiny improvement, exit loop
+                # TODO Make parameter for this
                 if (np.absolute(bs_con - prior_bs_con) < 0.001) and (bs_con != 0):
                     break
 
@@ -779,11 +756,11 @@ def _dissag_seg(
                     maximum_k_factor=np.max(k_factors),
                     target_productions=target_te_totals[0],
                     target_attractions=target_te_totals[1],
-                    estimated_productions=np.sum(mat_o),
-                    estimated_attractions=np.sum(mat_d),
+                    estimated_productions=np.sum(new_mat),
+                    estimated_attractions=np.sum(new_mat),
                     target_trip_end_pa_difference=pa_diff,
                     furness_loops=fur_loop,
-                    furness_converged=fur_conv,
+                    furness_converged=pa_diff < min_pa_diff,
                     input_matrix_total=input_matrix_total,
                     segmented_matrix_total=np.sum(new_mat),
                 )
@@ -835,7 +812,11 @@ def _dissag_seg(
         )
 
         # Recalculate some summary stats
-        overwrite = ("bandshare_convergence", "segmented_matrix_total", "target_trip_end_pa_difference")
+        overwrite = (
+            "bandshare_convergence",
+            "segmented_matrix_total",
+            "target_trip_end_pa_difference",
+        )
         prev_summary = {k: v for k, v in disag_summary._asdict().items() if k not in overwrite}
         summary_results[i] = DisaggregationSummaryResults(
             bandshare_convergence=bs_con,

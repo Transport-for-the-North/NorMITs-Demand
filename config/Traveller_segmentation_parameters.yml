@@ -1,10 +1,10 @@
-iteration: 1.2b
+iteration: 1.3
 import_folder: I:\NorMITs Demand\import
 base_output_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Outputs\Matrix Decompilation
 notem_iteration: 9.10
 notem_export_home: I:\NorMITs Demand\NoTEM
 scenario: SC01_JAM
-matrix_folder: I:\NorMITs Demand\Distribution Model\iter9.10.1\train\Final Outputs\Full PA Matrices\translated
+matrix_folder: I:\NorMITs Demand\Distribution Model\iter9.10.3\train\Final Outputs\Full PA Matrices\translated
 model: NoRMS
 year: 2018
 disaggregation_output_segment: soc
@@ -14,7 +14,6 @@ disaggregation_settings:
   export_original: yes
   export_furness: no
   rounding: 5
-  time_period: 24hr
   intrazonal_cost_infill: 0.5
   maximum_furness_loops: 1999
   pa_furness_convergence: 0.1

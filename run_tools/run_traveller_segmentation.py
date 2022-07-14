@@ -230,7 +230,11 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
     matrix_folder = aggregate_purposes(params.matrix_folder, params.model, params.year)
 
     for to in nd.TripOrigin:
-        LOG.info("Decompiling %s matrices", to.value)
+        LOG.info(
+            "Splitting %s matrices to %s segmentation",
+            to.value,
+            params.disaggregation_output_segment.value,
+        )
 
         productions, attractions = trip_end_converter.get_trip_ends(
             to, nd.get_segmentation_level(MODEL_SEGMENTATIONS[to])
