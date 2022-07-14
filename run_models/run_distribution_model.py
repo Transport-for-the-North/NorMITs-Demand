@@ -40,9 +40,9 @@ TRAM_EXPORT_HOME = r"I:\NorMITs Demand\Tram"
 BASE_YEAR = 2018
 SCENARIO = nd.Scenario.SC01_JAM
 TARGET_TLD_VERSION = 'v2.0'
-DM_ITERATION_NAME = '9.10.1'
+DM_ITERATION_NAME = '9.10.2'
 DM_IMPORT_HOME = r"I:\NorMITs Demand\import"
-DM_EXPORT_HOME = r"E:\NorMITs Demand\Distribution Model"
+DM_EXPORT_HOME = r"F:\NorMITs Demand\Distribution Model"
 
 # General constants
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
@@ -61,7 +61,7 @@ def main():
     # mode = nd.Mode.TRAM
 
     # Running options
-    use_tram = False
+    use_tram = True
     memory_optimised_multi_area_grav = True
 
     calibrate_params = True
