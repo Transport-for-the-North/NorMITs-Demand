@@ -35,7 +35,6 @@ class DisaggregationSettings(pydantic.BaseModel):  # pylint: disable=no-member
     aggregate_surplus_segments: bool = True
     export_original: bool = True
     export_furness: bool = False
-    time_period: str = "24hr"
     intrazonal_cost_infill: float = 0.5
     maximum_furness_loops: int = 1999
     pa_furness_convergence: float = 0.1
@@ -43,6 +42,7 @@ class DisaggregationSettings(pydantic.BaseModel):  # pylint: disable=no-member
     max_bandshare_loops: int = 200
     multiprocessing_threads: int = -1
     pa_match_tolerance: float = 0.95
+    minimum_bandshare_change: float = 1e-8
 
 
 class DisaggregationSummaryResults(NamedTuple):
@@ -482,6 +482,7 @@ def _segment_build_worker(
         min_pa_diff=settings.pa_furness_convergence,
         bs_con_crit=settings.bandshare_convergence,
         max_bs_loops=settings.max_bandshare_loops,
+        min_bs_change=settings.minimum_bandshare_change,
     )
 
     for res in results:
@@ -493,8 +494,9 @@ def _segment_build_worker(
             trip_origin,
             export_furness=settings.export_furness,
             export_original=settings.export_original,
-            time_period=None,
         )
+
+    # TODO Add graphs which contain the input TLD and the TLDs for all output matrix
 
     return results
 
@@ -507,7 +509,6 @@ def _segment_disaggregator_outputs(
     trip_origin: nd.TripOrigin,
     export_furness: bool,
     export_original: bool,
-    time_period: Optional[str] = None,
 ) -> None:
     """Write matrices, summary spreadsheets and TLD graphs to `export_folder`."""
     if export_original:
@@ -519,7 +520,6 @@ def _segment_disaggregator_outputs(
         path = nup.build_path(
             export_folder / (trip_origin.value + "_enhpa"),
             {k: v for k, v in results.segmentation.items() if k != "trip_origin"},
-            tp=time_period,
         )
         mat.to_csv(path, index=False)
 
@@ -532,7 +532,6 @@ def _segment_disaggregator_outputs(
         path = nup.build_path(
             export_folder / (trip_origin.value + "_enhpafn"),
             {k: v for k, v in results.segmentation.items() if k != "trip_origin"},
-            tp=time_period,
         )
         furness_mat.to_csv(path, index=False)
 
@@ -541,7 +540,6 @@ def _segment_disaggregator_outputs(
     path = nup.build_path(
         reports_folder / (trip_origin.value + "_disagg_report"),
         {k: v for k, v in results.segmentation.items() if k != "trip_origin"},
-        tp=time_period,
     )
 
     with pd.ExcelWriter(path.with_suffix(".xlsx")) as excel:
@@ -575,19 +573,16 @@ def _segment_disaggregator_outputs(
     path = nup.build_path(
         reports_folder / (trip_origin.value + "_tld"),
         {k: v for k, v in results.segmentation.items() if k != "trip_origin"},
-        tp=time_period,
     )
     path = path.with_suffix(".pdf")
 
     tlds = []
     for nm, tld in (
-        ("Segmented", results.final_matrix_tld),
+        (f"Segmented {results.summary.bandshare_convergence:.3f}", results.final_matrix_tld),
         ("Observed", results.target_tld),
     ):
         tlds.append(cost_utils.PlotData(tld.band_means, tld.band_shares, f"{nm}"))
     cost_utils.plot_cost_distributions(tlds, path.stem, path=path)
-
-    # TODO Add graphs which contain the input TLD and the TLDs for all output matrix
 
 
 def _calculate_bandshare_convergence(
@@ -608,10 +603,11 @@ def _dissag_seg(
     base_matrix: pd.DataFrame,
     costs: pd.DataFrame,
     report_folder: pathlib.Path,
-    furness_loops=1500,
-    min_pa_diff=0.1,
-    bs_con_crit=0.975,
-    max_bs_loops: int = 300,
+    furness_loops: int,
+    min_pa_diff: float,
+    bs_con_crit: float,
+    max_bs_loops: int,
+    min_bs_change: float,
 ) -> List[DisaggregationResults]:  # TODO Update docstring
     out_mats = []
 
@@ -637,7 +633,9 @@ def _dissag_seg(
         target_a = np.array(target_a)
 
         # Initialise the output mat
-        new_mat = np.where(base_matrix.sum(axis=1) > 0, (base_matrix.T / base_matrix.sum(axis=1)), 0)
+        new_mat = np.where(
+            base_matrix.sum(axis=1) > 0, (base_matrix.T / base_matrix.sum(axis=1)), 0
+        )
         new_mat: np.ndarray = (new_mat * target_p).T
 
         target_te_totals = (target_p.sum(), target_a.sum())
@@ -738,8 +736,7 @@ def _dissag_seg(
                 bs_con = _calculate_bandshare_convergence(matrix_tld, target_tld)
 
                 # If tiny improvement, exit loop
-                # TODO Make parameter for this
-                if (np.absolute(bs_con - prior_bs_con) < 0.001) and (bs_con != 0):
+                if (np.absolute(bs_con - prior_bs_con) < min_bs_change) and (bs_con != 0):
                     break
 
                 tlb_loop += 1
