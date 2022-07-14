@@ -126,7 +126,7 @@ def build_new_dimo_tlds():
         "cost_units": nd_core.CostUnits.KM,
     }
     generate_kwargs = path_kwargs.copy()
-    generate_kwargs.update({"sample_threshold": 10})
+    generate_kwargs.update({"sample_threshold": 10, "inter_smoothing": True})
 
     for geo_area in [tlds.GeoArea.GB, tlds.GeoArea.NORTH_AND_MIDS]:
         # ## GENERATE HIGHWAY ## #
@@ -196,13 +196,13 @@ def build_new_traveller_segment_tlds():
         "cost_units": nd_core.CostUnits.KM,
     }
     generate_kwargs = path_kwargs.copy()
-    generate_kwargs.update({"sample_threshold": 10})
+    generate_kwargs.update({"sample_threshold": 10, "inter_smoothing": True})
 
     # ## GENERATE RAIL TLDS ## #
     iterator = [
-        ("uc_m_g_m6", "traveller_segment_m6_g"),
+        # ("uc_m_g_m6", "traveller_segment_m6_g"),
         ("uc_m_soc_m6", "traveller_segment_m6_soc"),
-        ("uc_m_ns_m6", "traveller_segment_m6_ns"),
+        # ("uc_m_ns_m6", "traveller_segment_m6_ns"),
     ]
 
     for segmentation_name, copy_def_name in iterator:

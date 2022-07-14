@@ -30,6 +30,7 @@ from normits_demand import logging as nd_log
 from normits_demand import constants as nd_consts
 from normits_demand.utils import file_ops
 from normits_demand.utils import timing
+from normits_demand.utils import math_utils
 from normits_demand.utils import functional as func_utils
 from normits_demand.utils import string_utils as str_utils
 from normits_demand.utils import pandas_utils as pd_utils
@@ -58,7 +59,7 @@ class TripLengthDistributionBuilder:
         output_folder: nd.PathLike,
         bands_definition_dir: str,
         segment_copy_definition_dir: str,
-        trip_miles_col: str = "trip_mile",
+        trip_miles_col: str = "TripDisIncSW",
         trip_count_col: str = "trips",
     ):
         """
@@ -196,13 +197,43 @@ class TripLengthDistributionBuilder:
 
         return output_dat
 
+    @staticmethod
+    def _distribution_smoothing_interpolation(distribution: np.ndarray, segment_params: dict[str, Any]) -> np.ndarray:
+        """Uses interpolation to smooth gaps in a distribution"""
+        # Check for zero values
+        if (distribution == 0).sum() <= 0:
+            return distribution
+
+        # Trim the 0s off the edges
+        min_ = np.argwhere(distribution).min().squeeze()
+        max_ = np.argwhere(distribution).max().squeeze()
+        trimmed = distribution[min_:max_+1]     # Plus one as not inclusive
+
+        # Check again for 0s within data
+        if (trimmed == 0).sum() <= 0:
+            return distribution
+
+        # If here, we need to interpolate something
+        LOG.info(
+            f"Gap found in {segment_params} distribution. Linear interpolation "
+            "will fill the gap."
+        )
+
+        # Interpolate, and fit back in place
+        interpolated = distribution.copy()
+        interpolated[min_:max_+1] = math_utils.interpolate_array(trimmed)
+        return interpolated
+
+
     def _build_cost_distribution(
         self,
         data: pd.DataFrame,
         band_edges: np.ndarray,
         output_cost_units: nd_core.CostUnits,
+        segment_params: dict[str, Any],
         trip_count_col: str = None,
         trip_dist_col: str = None,
+        inter_smoothing: bool = False,
     ) -> cost.CostDistribution:
         """Generates a CostDistribution from a dataframe of data and bands
 
@@ -222,13 +253,22 @@ class TripLengthDistributionBuilder:
         output_cost_units:
             The cost units to convert the data to from `self.input_cost_units`
 
+        segment_params:
+            A dictionary defining the segmentation used to generate this
+            cost distribution.
+
         trip_count_col:
             The name of the column in `data` containing the count of trips
             being made.
 
         trip_dist_col:
             The name of the column in `data` containing the distance of trips
-            being made. This should be in `self.input_cost_units`
+            being made. This should be in `self.input_cost_units` units.
+
+        inter_smoothing:
+            If set to True, then the generated distribution will be checked
+            for gaps. if gaps are found (i.e. 0 for a band where there is data
+            later on) then the missing value(s) will be interpolated.
 
         Returns
         -------
@@ -236,10 +276,10 @@ class TripLengthDistributionBuilder:
             A `CostDistribution` storing all the cost distribution data
         """
         # Init
-        data = data.copy()
-        sample_size = len(data)
         trip_count_col = self.trip_count_col if trip_count_col is None else trip_count_col
         trip_dist_col = self.trip_distance_col if trip_dist_col is None else trip_dist_col
+        data = data.copy()
+        sample_size = data[trip_count_col].values.sum()
 
         # Convert distances to output cost
         conv_factor = self.input_cost_units.get_conversion_factor(output_cost_units)
@@ -266,11 +306,23 @@ class TripLengthDistributionBuilder:
             all_band_trips.append(band_trips)
             all_band_mean_cost.append(band_mean_cost)
 
+        # Convert to numpy arrays
+        all_band_trips = np.array(all_band_trips)
+        all_band_mean_cost = np.array(all_band_mean_cost)
+
+        # Check for gaps. If gaps, then interpolate - add this as an option
+        if inter_smoothing:
+            all_band_trips = self._distribution_smoothing_interpolation(
+                distribution=np.array(all_band_trips),
+                segment_params=segment_params,
+            )
+
+
         return cost.CostDistribution(
             edges=band_edges,
-            band_trips=np.array(all_band_trips),
+            band_trips=all_band_trips,
             cost_units=output_cost_units,
-            band_mean_cost=np.array(all_band_mean_cost),
+            band_mean_cost=all_band_mean_cost,
             sample_size=sample_size,
         )
 
@@ -658,6 +710,9 @@ class TripLengthDistributionBuilder:
         segmentation: nd_core.SegmentationLevel,
         cost_units: nd_core.CostUnits,
         sample_threshold: int = 10,
+        trip_count_col: str = None,
+        trip_dist_col: str = None,
+        inter_smoothing: bool = False,
     ) -> tuple[dict[str, cost.CostDistribution], pd.DataFrame, pd.DataFrame]:
         """
         Build a set of trip length distributions
@@ -680,6 +735,20 @@ class TripLengthDistributionBuilder:
         sample_threshold: int = 10:
             Sample size below which skip allocation to bands and fail out
 
+        trip_count_col:
+            The name of the column in `tld_data` containing the count of trips
+            being made.
+
+        trip_dist_col:
+            The name of the column in `tld_data` containing the distance of trips
+            being made. This should be in `self.input_cost_units` units.
+
+        inter_smoothing:
+            If set to True, then the generated distribution will be checked
+            for gaps. if gaps are found (i.e. 0 for a band where there is data
+            later on) then the missing value(s) will be interpolated.
+
+
         Returns
         ----------
         name_to_distribution:
@@ -693,6 +762,8 @@ class TripLengthDistributionBuilder:
             their segment_params
         """
         # Init
+        trip_count_col = self.trip_count_col if trip_count_col is None else trip_count_col
+        trip_dist_col = self.trip_distance_col if trip_dist_col is None else trip_dist_col
         name_to_distribution = dict()
         sample_size_log = list()
         full_export = list()
@@ -702,7 +773,7 @@ class TripLengthDistributionBuilder:
             # Filter to data for this segment
             data_subset = tld_data.copy()
             data_subset = self._filter_nts_data(data_subset, segment_params)
-            sample_size = len(data_subset)
+            sample_size = data_subset[trip_count_col].values.sum()
 
             # Build the sample size log
             log_line = segment_params.copy()
@@ -726,6 +797,10 @@ class TripLengthDistributionBuilder:
                 data=data_subset,
                 band_edges=np.array([min_bounds[0]] + max_bounds.tolist()),
                 output_cost_units=cost_units,
+                trip_count_col=trip_count_col,
+                trip_dist_col=trip_dist_col,
+                inter_smoothing=inter_smoothing,
+                segment_params=segment_params,
             )
 
             # Add to the full export
@@ -824,6 +899,7 @@ class TripLengthDistributionBuilder:
         sample_period: tld_enums.SampleTimePeriods,
         trip_filter_type: tld_enums.TripFilter,
         cost_units: nd_core.CostUnits = nd_core.CostUnits.MILES,
+        inter_smoothing: bool = False,
         sample_threshold: int = 10,
     ) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
         """Generate a trip length distribution
@@ -854,18 +930,21 @@ class TripLengthDistributionBuilder:
             The cost units to use in the output. The data will be multiplied
             by a constant to convert.
 
+        inter_smoothing:
+            If set to True, then the generated distributions will be checked
+            for gaps. if gaps are found (i.e. 0 for a band where there is data
+            later on) then the missing value(s) will be interpolated.
+
         sample_threshold: int = 10:
             Sample below which to not bother running an application to bands
             Smallest possible number you would consider representative
             Failures captured in output sample_size_log
 
-        verbose: bool = True,
-            Echo to terminal or not
-
         Returns
         ----------
         name_to_distribution: dict
             A dictionary with {description of tld: tld DataFrame}
+
         full_export: pd.DataFrame
             A compiled, concatenated version of the DataFrames in name_to_distribution
 
@@ -925,6 +1004,10 @@ class TripLengthDistributionBuilder:
             trip_filter_type=trip_filter_type,
         )
 
+        # TODO: INSERT SMOOTHING WHEN SAMPLE SIZES LOW AND GAPS
+        # If sample size is < 400
+        # Check for later bands < earlier. If so, use average TLD
+        # Instead. (Should we also do this if the sample size is too small?)
         # Build tld dictionary, return a proper name for the distributions
         name_to_distribution, sample_size_log, full_export = self.build_tld(
             tld_data=nts_data,
@@ -932,6 +1015,7 @@ class TripLengthDistributionBuilder:
             segmentation=segmentation,
             cost_units=cost_units,
             sample_threshold=sample_threshold,
+            inter_smoothing=inter_smoothing,
         )
 
         # ## WRITE THINGS OUT ## #

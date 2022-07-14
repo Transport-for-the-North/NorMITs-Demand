@@ -74,7 +74,7 @@ class CostDistribution:
         self._cost_units = cost_units
 
         self.edges = edges
-        self.sample_size = sample_size
+        self.sample_size = int(sample_size)
         self.min_bounds = edges[:-1]
         self.max_bounds = edges[1:]
         self.mid_bounds = (self.min_bounds + self.max_bounds) / 2
