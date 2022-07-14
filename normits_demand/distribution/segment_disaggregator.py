@@ -7,8 +7,7 @@ Created on Fri Nov 20 13:47:56 2020
 
 import enum
 import pathlib
-from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Union
-import warnings
+from typing import Any, Dict, List, NamedTuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -73,6 +72,7 @@ class DisaggregationResults(NamedTuple):
 
 class DisaggregationOutputSegment(nd_enum.IsValidEnumWithAutoNameLower):
     """Adding segmentation to disaggregate the matrix too."""
+
     G = enum.auto()
     SOC = enum.auto()
     NS = enum.auto()
@@ -102,7 +102,7 @@ def _build_enhanced_pa(
     value_col: str,
     ia_name: str = None,
     unq_zone_list: np.ndarray = None,
-) -> pd.DataFrame:
+) -> np.ndarray:
     """
     Private
     """
@@ -147,26 +147,16 @@ def _control_a_to_seed_matrix(sd, attr_list):
     new_attr:
         Updated vector
     """
-    cell_sum = []
-    for a in attr_list:
-        cell_sum.append(a)
-    cell_sum = np.where(sum(cell_sum) == 0, 0.000001, sum(cell_sum))
-
-    cell_splits = []
-    for a in attr_list:
-        cell_splits.append(a / cell_sum)
+    cell_sum = np.where(sum(attr_list) == 0, 0.000001, sum(attr_list))
 
     mat_attr = sd.sum(axis=0)
 
     new_attr = attr_list.copy()
 
-    for ait, dat in enumerate(new_attr, 0):
-        new_attr[ait] = mat_attr * cell_splits[ait]
+    for ait, a in enumerate(attr_list):
+        new_attr[ait] = mat_attr * (a / cell_sum)
 
-    audit_sum = []
-    for a in new_attr:
-        audit_sum.append(a)
-    audit_sum = sum(audit_sum)
+    audit_sum = sum(new_attr)
     audit = audit_sum.round() == mat_attr.round()
 
     return new_attr, audit
@@ -178,7 +168,10 @@ def _is_nan(value: Any) -> bool:
     return np.isnan(value)
 
 
-def _control_a_to_enhanced_p(prod_list, attr_list):
+def _control_a_to_enhanced_p(
+    productions: list[np.ndarray],
+    attractions: list[np.ndarray],
+):
     """
     Function to control a best estimate list of attraction vectors to a similar
     enhanced list of production vectors, as production vectors are more reliable.
@@ -201,67 +194,29 @@ def _control_a_to_enhanced_p(prod_list, attr_list):
     """
     # TODO Fix errors with now only passing the productions
     # and attractions dataframes without the calib params
-    # Define empty list for output
-    new_attr = []
-    for prod in prod_list:
-        # Build empty dict for calib params only
-        p_types = {}
-        # Get sum of productions
-        p_tot = prod["trips"].sum()
+    # TODO Update docstring
+    if len(productions) != len(attractions):
+        raise ValueError(
+            "productions and attractions lists are not the same lengths, "
+            f"{len(productions)} and {len(attractions)} respectively"
+        )
 
-        # Iterate over prod items and build calib params dict
-        for p_item, p_dat in prod.items():
-            if p_item != "trips":
-                p_types.update({p_item: p_dat})
+    new_attractions: list[np.ndarray] = []
+    audit: list[bool] = []
+    for prod, attr in zip(productions, attractions):
+        prod_tot = np.sum(prod)
 
-        # Iterate over attr items
-        for attr in attr_list:
-            work_dict = attr.copy()
-            # Find one that matches
-            for item, dat in work_dict.items():
-                record_match = True
-                # If they don't match kick the loop
-                if item in p_types.keys():
-                    # Continue if both values are NaN
-                    if _is_nan(dat) and _is_nan(p_types[item]):
-                        continue
-                    if dat != p_types[item]:
-                        record_match = False
-                        break
+        # Get attractions demand as factor
+        new_attr = attr / np.sum(attr)
+        # Multiply factor by production demand
+        new_attr = new_attr * prod_tot
 
-            # If the record matches, build out calib params and balance
-            if record_match:
-                # Update dict with anything not there
-                for p_item, p_dat in p_types.items():
-                    if p_item not in work_dict.keys():
-                        work_dict.update({p_item: p_dat})
-                # Balance - make copy of original
-                new_frame = work_dict["trips"].copy()
-                # Get demand as factor
-                new_frame = new_frame / sum(new_frame)
-                # Multiply factor by production demand
-                new_frame = new_frame * p_tot
-                # Put new df in dict
-                work_dict.update({"trips": new_frame})
-                new_attr.append(work_dict)
-                # Don't do it again (will square)
-                break
+        new_attractions.append(new_attr)
 
-    audit = []
-    # Audit balance
-    for ri in list(range(len(prod_list))):
+        # Check trip end totals
+        audit.append(prod_tot.round(0) == np.sum(new_attr).round(0))
 
-        a = prod_list[ri]["trips"].sum().round(0)
-        b = new_attr[ri]["trips"].sum().round(0)
-
-        if a == b:
-            audit.append(True)
-        else:
-            audit.append(False)
-
-    # Lists should have popped in order and so x_prod, should equal x_attr
-
-    return (new_attr, audit)
+    return new_attractions, audit
 
 
 def _set_dataframe_dtypes(df: pd.DataFrame, dtypes: Dict[str, str]) -> pd.DataFrame:
@@ -296,7 +251,7 @@ def disaggregate_segments(
         enhanced segmentation, aggregated them. Will
     """
     # TODO What functionality is required when the user provides a time_period value
-    warnings.warn("Not yet implemented functionality for the time period", UserWarning)
+    LOG.warning("Not yet implemented functionality for the time period")
 
     required_columns = ["matrix_type", "trip_origin", "yr", "m"]
     if model == nd.AssignmentModel.NORMS:
@@ -366,7 +321,7 @@ def disaggregate_segments(
 
     # Check trip ends are provided at the correct segmentation,
     # and aggregate any unecessary columns
-    segment_columns.remove("trip_origin")
+    trip_end_seg_cols = [c for c in segment_columns if c != "trip_origin"]
     unique_zones = base_productions.zoning_system.unique_zones
     zone_col_name = base_productions.zone_col
     dvecs = {"productions": base_productions, "attractions": base_attractions}
@@ -374,11 +329,12 @@ def disaggregate_segments(
     trip_ends = []
     for nm, dvec in dvecs.items():
         df = dvec.to_df().rename(columns={"val": nm})
-        missing = [c for c in segment_columns if c not in df.columns]
+        missing = [c for c in trip_end_seg_cols if c not in df.columns]
         if missing:
             raise KeyError(f"columns missing from {nm} trip ends: {', '.join(missing)}")
 
-        trip_ends.append(df.groupby([zone_col_name] + segment_columns).agg({nm: "sum"}))
+        trip_ends.append(df.groupby([zone_col_name] + trip_end_seg_cols).agg({nm: "sum"}))
+
     trip_ends = pd.concat(trip_ends, axis=1, verify_integrity=True).reset_index()
     # TODO Check that TLDs and trip ends contain the same segment values for all columns
 
@@ -465,8 +421,8 @@ def _segment_build_worker(
         raise ValueError("base matrix zones not equal to expected zones")
 
     # Filter productions and attractions for each output segment
-    productions_list: List[pd.DataFrame] = []
-    attractions_list: List[pd.DataFrame] = []
+    productions_list: list[np.ndarray] = []
+    attractions_list: list[np.ndarray] = []
     for seg in segmentation_parameters:
         productions_list.append(
             _build_enhanced_pa(seg, trip_ends, "productions", zone_col_name, unique_zones)
@@ -489,7 +445,7 @@ def _segment_build_worker(
         )
 
     # Setup generator which will read TLDs
-    tld_gen = (cost.CostDistribution.from_csv(p, tld_units) for p in tld_paths)
+    tld_gen = [cost.CostDistribution.from_csv(p, tld_units) for p in tld_paths]
 
     costs = get_costs(cost_folder, matrix_segmentation, unique_zones)
 
@@ -623,7 +579,7 @@ def _dissag_seg(
     segmentation_list: list[dict[str, Any]],
     prod_list: List[pd.DataFrame],
     attr_list: List[pd.DataFrame],
-    tld_list: Iterator[cost.CostDistribution],
+    tld_list: list[cost.CostDistribution],
     base_matrix: pd.DataFrame,
     costs: pd.DataFrame,
     furness_loops=1500,
@@ -632,6 +588,9 @@ def _dissag_seg(
     max_bs_loops: int = 300,
 ) -> List[DisaggregationResults]:  # TODO Update docstring
     out_mats = []
+
+    base_matrix: np.ndarray = np.array(base_matrix)
+    costs: np.ndarray = np.array(costs)
 
     seg_cube = np.ndarray((len(base_matrix), len(base_matrix), len(prod_list)))
     factor_cube = np.ndarray((len(base_matrix), len(base_matrix), len(prod_list)))
@@ -645,9 +604,14 @@ def _dissag_seg(
         # Build audit dict
         audit_dict = {"segmentation": segmentation}
 
+        # Convert to arrays because all the matrix calculations
+        # are done as arrays instead of DataFrames
+        target_p = np.array(target_p)
+        target_a = np.array(target_a)
+
         # Initialise the output mat
         new_mat = base_matrix / base_matrix.sum()
-        new_mat = new_mat * target_p.sum()
+        new_mat: np.ndarray = new_mat * target_p.sum()
 
         # Update audit_dict
         audit_dict["target_p"] = target_p.sum()
@@ -656,21 +620,21 @@ def _dissag_seg(
         # Calculate matrix tlb
         audit_dict["input_matrix_tld"] = cost.CostDistribution.from_trips(
             base_matrix,
-            costs.values,
+            costs,
             target_tld.min_bounds,
             target_tld.max_bounds,
             target_tld.cost_units,
         )
         audit_dict["cost_tld"] = cost.CostDistribution.from_trips(
-            np.ones_like(costs.values),
-            costs.values,
+            np.ones_like(costs),
+            costs,
             target_tld.min_bounds,
             target_tld.max_bounds,
             target_tld.cost_units,
         )
         matrix_tld = cost.CostDistribution.from_trips(
             new_mat,
-            costs.values,
+            costs,
             target_tld.min_bounds,
             target_tld.max_bounds,
             target_tld.cost_units,
@@ -682,10 +646,11 @@ def _dissag_seg(
         tlb_loop = 1
         conv_fail = False
         audit_dict["initial_bs_convergence"] = bs_con
+        # TODO Open a text file for dumping TLB convergence loop stats to, should use CSV format
         while bs_con < bs_con_crit:
 
             # Calculating K factors for cells based on which distance band they're in
-            k_factors = np.ones_like(costs.values)
+            k_factors = np.ones_like(costs)
             for min_, max_, obs, mat in zip(
                 target_tld.min_bounds,
                 target_tld.max_bounds,
@@ -735,7 +700,7 @@ def _dissag_seg(
             # Calculate new TLD and bandshare convergence
             matrix_tld = cost.CostDistribution.from_trips(
                 new_mat,
-                costs.values,
+                costs,
                 target_tld.min_bounds,
                 target_tld.max_bounds,
                 target_tld.cost_units,
@@ -797,7 +762,7 @@ def _dissag_seg(
         # Get trip length by band
         matrix_tld = cost.CostDistribution.from_trips(
             out_cube[:, :, i],
-            costs.values,
+            costs,
             target_tld.min_bounds,
             target_tld.max_bounds,
             target_tld.cost_units,
@@ -810,8 +775,6 @@ def _dissag_seg(
 
         out_dict = {"furness_mat": seg_cube[:, :, i], "mat": out_cube[:, :, i]}
 
-        # Add lavels back on to export list
-        out_dict.update({k: v for k, v in prod.items() if k != "trips"})
         out_mats.append(out_dict)
 
     out_sd = out_cube.sum(axis=2)
