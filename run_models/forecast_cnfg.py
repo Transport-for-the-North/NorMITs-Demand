@@ -106,14 +106,14 @@ class ForecastParameters(config_base.BaseConfig):
 if __name__ == "__main__":
     parameters = ForecastParameters(
         iteration="9.7-COVID",
-        import_path=Path(r"I:/NorMITs Demand\import"),
+        import_path=Path(r"I:/NorMITs Demand/import"),
         model_name="miham",
         base_year=2021,
         future_years=[2030, 2040],
         export_folder=Path(r"T:/MidMITs Demand/Forecasting"),
         tripend_path=Path(r"T:\MidMITs Demand\MiTEM\iter9.7-COVID\NTEM"),
         matrix_import_path=Path(
-            r"T:\MidMITs Demand\Distribution Model\iter9.7-COVID.1\car_and_passenger\Final Outputs\Full PA Matrices"
+            r"T:\MidMITs Demand\Distribution Model\iter9.7-COVID.2\car_and_passenger\Final Outputs\Full PA Matrices"
         ),
         hb_purposes_needed=list(range(1, 9)),
         nhb_purposes_needed=[12, 13, 14, 15, 16, 18],

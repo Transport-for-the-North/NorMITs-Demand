@@ -2,17 +2,14 @@
 """
     Module for running the NTEM forecast.
 """
-# todo
 ##### IMPORTS #####
 from __future__ import annotations
-from ast import For, Str
 
 # Standard imports
-import configparser
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional
+
 
 
 # Third party imports
@@ -36,7 +33,6 @@ from normits_demand.utils import timing
 ##### CONSTANTS #####
 LOG_FILE = "Forecast.log"
 LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_models.run_forecast")
-PARAMS = forecast_cnfg.ForecastParameters.load_yaml("config/run_forecast.yml")
 
 
 ##### FUNCTIONS #####
@@ -81,7 +77,8 @@ def model_mode_subset(
 
 
 def read_tripends(
-    base_year: int, forecast_years: list[int]
+    base_year: int, forecast_years: list[int],
+    tripend_path: Path
 ) -> tempro_trip_ends.TEMProTripEnds:
     """
     Reads in trip-end dvectors from picklefiles
@@ -105,7 +102,7 @@ def read_tripends(
             for year in [base_year] + forecast_years:
                 dvec = nd.DVector.load(
                     os.path.join(
-                        PARAMS.tripend_path, key, f"{i}_msoa_notem_segmented_{year}_dvec.pkl",
+                        tripend_path, key, f"{i}_msoa_notem_segmented_{year}_dvec.pkl",
                     )
                 )
                 if i == "nhb":
@@ -148,7 +145,7 @@ def main(params: forecast_cnfg.ForecastParameters, init_logger: bool = True):
     LOG.info("Input parameters: %r", params)
 
     tripend_data = read_tripends(
-        base_year=params.base_year, forecast_years=params.future_years
+        params.base_year, params.future_years, params.tripend_path
     )
     tripend_data = model_mode_subset(tripend_data, params.model_name)
     tempro_growth = ntem_forecast.tempro_growth(
@@ -207,7 +204,7 @@ def main(params: forecast_cnfg.ForecastParameters, init_logger: bool = True):
 ##### MAIN #####
 if __name__ == "__main__":
     try:
-        main(PARAMS)
+        main(forecast_cnfg.ForecastParameters.load_yaml("config/run_forecast.yml"))
     except Exception as err:
         LOG.critical("MiTEM forecasting error:", exc_info=True)
         raise

@@ -2153,7 +2153,7 @@ def calc_nhb_props(
             )
             times[name] = matrix
         summed = reduce(lambda x, y: x + y, times.values())
-        final[f'{file_name}_yr{year}_p{purp}_m{mode}'] = {k: v / summed for k, v in times.items()}
+        final[f'{file_name}_yr{year}_p{purp}_m{mode}'] = {k: v / summed for k, v in times.items()}.fillna(0)
     return final
 
 

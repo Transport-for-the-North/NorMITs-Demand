@@ -867,7 +867,7 @@ def _compare_od_matrices(
         forecast.columns = pd.to_numeric(forecast.columns, downcast="integer")
         if forecast.isnull().values.any():
             LOG.warning(
-                "Forecast matrix at %s contains %s null values.  These are"
+                "Forecast matrix at %s contains %s null values.  These are "
                 "set to zero internally for reporting but consider checking the matrix.",
                 path,
                 forecast.isnull().sum().sum(),
