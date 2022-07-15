@@ -486,7 +486,7 @@ def _segment_build_worker(
     )
 
     for res in results:
-        _segment_disaggregator_outputs(
+        reports_folder = _segment_disaggregator_outputs(
             res,
             export_folder,
             unique_zones,
@@ -496,7 +496,32 @@ def _segment_build_worker(
             export_original=settings.export_original,
         )
 
-    # TODO Add graphs which contain the input TLD and the TLDs for all output matrix
+    # Graph comparing segmented matrix TLDs to original
+    tlds = [
+        cost_utils.PlotData(
+            results[0].input_matrix_tld.band_means,
+            results[0].input_matrix_tld.band_shares,
+            "Original Matrix",
+        )
+    ]
+
+    for res in results:
+        label = trip_origin.value.upper() + " ".join(
+            f"{k}{v}" for k, v in res.segmentation.items() if k != "trip_origin"
+        )
+        tlds.append(
+            cost_utils.PlotData(
+                res.final_matrix_tld.band_means, res.final_matrix_tld.band_shares, label
+            )
+        )
+
+    path = nup.build_path(
+        reports_folder / (trip_origin.value + "_tld"),
+        {k: v for k, v in matrix_segmentation.items() if k != "trip_origin"},
+    )
+    path = path.with_suffix(".png")
+    cost_utils.plot_cost_distributions(tlds, path.stem, path=path)
+    print(f"Created: {path.name}")
 
     return results
 
@@ -509,7 +534,7 @@ def _segment_disaggregator_outputs(
     trip_origin: nd.TripOrigin,
     export_furness: bool,
     export_original: bool,
-) -> None:
+) -> pathlib.Path:
     """Write matrices, summary spreadsheets and TLD graphs to `export_folder`."""
     if export_original:
         mat = pd.DataFrame(
@@ -574,7 +599,7 @@ def _segment_disaggregator_outputs(
         reports_folder / (trip_origin.value + "_tld"),
         {k: v for k, v in results.segmentation.items() if k != "trip_origin"},
     )
-    path = path.with_suffix(".pdf")
+    path = path.with_suffix(".png")
 
     tlds = []
     for nm, tld in (
@@ -582,7 +607,10 @@ def _segment_disaggregator_outputs(
         ("Observed", results.target_tld),
     ):
         tlds.append(cost_utils.PlotData(tld.band_means, tld.band_shares, f"{nm}"))
+
     cost_utils.plot_cost_distributions(tlds, path.stem, path=path)
+
+    return reports_folder
 
 
 def _calculate_bandshare_convergence(
