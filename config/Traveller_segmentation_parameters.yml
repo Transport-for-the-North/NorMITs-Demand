@@ -1,4 +1,4 @@
-iteration: 1.3
+iteration: 1.4
 import_folder: I:\NorMITs Demand\import
 base_output_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Outputs\Matrix Decompilation
 notem_iteration: 9.10
@@ -13,10 +13,12 @@ disaggregation_settings:
   aggregate_surplus_segments: yes
   export_original: yes
   export_furness: no
-  rounding: 5
   intrazonal_cost_infill: 0.5
   maximum_furness_loops: 1999
   pa_furness_convergence: 0.1
   bandshare_convergence: 0.975
   max_bandshare_loops: 200
   multiprocessing_threads: -1
+  pa_match_tolerance: 0.95
+  minimum_bandshare_change: 1e-04
+  trip_end_constraint: single

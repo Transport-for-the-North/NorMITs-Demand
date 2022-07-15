@@ -8,7 +8,7 @@ Created on Fri Nov 20 13:47:56 2020
 import csv
 import enum
 import pathlib
-from typing import Any, Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -29,6 +29,14 @@ LOG = nd_log.get_logger(__name__)
 _TINY_INFILL = 1 * 10 ** -8
 
 
+class TripEndConstraint(nd_enum.IsValidEnumWithAutoNameLower):
+    """Constraint to use for target trip ends within the matrix disaggregation."""
+
+    DOUBLE = enum.auto()
+    SINGLE = enum.auto()
+    NONE = enum.auto()
+
+
 class DisaggregationSettings(pydantic.BaseModel):  # pylint: disable=no-member
     """Optional settings for adjusting `disaggregate_segments`."""
 
@@ -43,6 +51,7 @@ class DisaggregationSettings(pydantic.BaseModel):  # pylint: disable=no-member
     multiprocessing_threads: int = -1
     pa_match_tolerance: float = 0.95
     minimum_bandshare_change: float = 1e-8
+    trip_end_constraint: TripEndConstraint = TripEndConstraint.DOUBLE
 
 
 class DisaggregationSummaryResults(NamedTuple):
@@ -483,6 +492,7 @@ def _segment_build_worker(
         bs_con_crit=settings.bandshare_convergence,
         max_bs_loops=settings.max_bandshare_loops,
         min_bs_change=settings.minimum_bandshare_change,
+        trip_end_constraint=settings.trip_end_constraint,
     )
 
     for res in results:
@@ -636,6 +646,7 @@ def _dissag_seg(
     bs_con_crit: float,
     max_bs_loops: int,
     min_bs_change: float,
+    trip_end_constraint: TripEndConstraint,
 ) -> List[DisaggregationResults]:  # TODO Update docstring
     out_mats = []
 
@@ -746,10 +757,34 @@ def _dissag_seg(
 
                 new_mat = k_factors * new_mat
 
-                # TODO Add options for single constraint and no constraint
-                new_mat, fur_loop, pa_diff = furness.doubly_constrained_furness(
-                    new_mat, target_p, target_a, tol=min_pa_diff, max_iters=furness_loops
-                )
+                if trip_end_constraint == TripEndConstraint.DOUBLE:
+                    new_mat, fur_loop, pa_diff = furness.doubly_constrained_furness(
+                        new_mat, target_p, target_a, tol=min_pa_diff, max_iters=furness_loops
+                    )
+
+                elif trip_end_constraint == TripEndConstraint.SINGLE:
+                    # Constrain matrix to productions
+                    new_mat = np.where(
+                        new_mat.sum(axis=1) > 0, (new_mat.T / new_mat.sum(axis=1)), 0
+                    )
+                    new_mat = (new_mat * target_p).T
+
+                    fur_loop = 0.5
+                    pa_diff = math_utils.get_pa_diff(
+                        new_mat.sum(axis=1), target_p, new_mat.sum(axis=0), target_a
+                    )
+
+                elif trip_end_constraint == TripEndConstraint.NONE:
+                    fur_loop = 0
+                    pa_diff = math_utils.get_pa_diff(
+                        new_mat.sum(axis=1), target_p, new_mat.sum(axis=0), target_a
+                    )
+
+                else:
+                    raise ValueError(
+                        "invalid value for trip_end_constraint, "
+                        f"expected {TripEndConstraint} got {trip_end_constraint}"
+                    )
 
                 prior_bs_con = bs_con
 
