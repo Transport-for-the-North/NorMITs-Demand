@@ -798,14 +798,7 @@ def _dissag_seg(
                 )
                 bs_con = _calculate_bandshare_convergence(matrix_tld, target_tld)
 
-                # If tiny improvement, exit loop
-                if (np.absolute(bs_con - prior_bs_con) < min_bs_change) and (bs_con != 0):
-                    break
-
                 tlb_loop += 1
-
-                if tlb_loop >= max_bs_loops:
-                    conv_fail = True
 
                 # Log loop results
                 disag_summary = DisaggregationSummaryResults(
@@ -826,7 +819,12 @@ def _dissag_seg(
                 )
                 report_csv.writerow(disag_summary)
 
-                if conv_fail:
+                # If tiny improvement, exit loop
+                if (np.absolute(bs_con - prior_bs_con) < min_bs_change) and (bs_con != 0):
+                    break
+
+                if tlb_loop >= max_bs_loops:
+                    conv_fail = True
                     break
 
         # Append segmentations
