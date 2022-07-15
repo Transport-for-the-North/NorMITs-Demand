@@ -39,8 +39,8 @@ TRAM_EXPORT_HOME = r"I:\NorMITs Demand\Tram"
 # Distribution running args
 BASE_YEAR = 2018
 SCENARIO = nd.Scenario.SC01_JAM
-TARGET_TLD_VERSION = 'v2.0'
-DM_ITERATION_NAME = '9.10.2'
+TARGET_TLD_VERSION = 'v2.1'
+DM_ITERATION_NAME = '9.10.3'
 DM_IMPORT_HOME = r"I:\NorMITs Demand\import"
 DM_EXPORT_HOME = r"F:\NorMITs Demand\Distribution Model"
 
@@ -61,14 +61,14 @@ def main():
     # mode = nd.Mode.TRAM
 
     # Running options
-    use_tram = True
+    use_tram = False
     memory_optimised_multi_area_grav = True
 
     calibrate_params = True
 
     # Choose what to run
-    run_hb = True
-    run_nhb = False
+    run_hb = False
+    run_nhb = True
 
     run_all = False
     run_upper_model = False

@@ -613,17 +613,17 @@ class DistributionModel(DistributionModelExportPaths):
             matrices_desc=self._pa_matrix_desc,
         )
 
+        # Generate file names
+        template_pa_name = self.running_segmentation.generate_template_file_name(
+            file_desc=self._pa_matrix_desc,
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            compressed=True,
+        )
+
         if not self.running_segmentation.has_time_period_segments():
             self._logger.info("Splitting PA matrices by time period")
             kwargs = self.arg_builder.build_pa_split_by_tp_arguments()
-
-            # Generate file names
-            template_pa_name = self.running_segmentation.generate_template_file_name(
-                file_desc=self._pa_matrix_desc,
-                trip_origin=self.trip_origin,
-                year=str(self.year),
-                compressed=True,
-            )
 
             pa_to_od.factors_split_by_tp(
                 import_dir=pathlib.Path(compile_in_path),
@@ -633,6 +633,15 @@ class DistributionModel(DistributionModelExportPaths):
                 template_out_name=template_pa_name,
                 process_count=self.process_count,
                 **kwargs
+            )
+        else:
+            self._logger.info("Matrices already split by time period. Copying over.")
+            file_ops.copy_template_segment_files(
+                src_dir=pathlib.Path(compile_in_path),
+                dst_dir=pathlib.Path(self.export_paths.full_tp_pa_dir),
+                segmentation=self.running_segmentation,
+                input_template_filename=template_pa_name,
+                process_count=self.process_count,
             )
 
     def run_od_matrix_reports(self):
