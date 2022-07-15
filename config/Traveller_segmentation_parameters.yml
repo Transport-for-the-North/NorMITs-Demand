@@ -1,4 +1,4 @@
-iteration: 1.4
+iteration: 1.5
 import_folder: I:\NorMITs Demand\import
 base_output_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Outputs\Matrix Decompilation
 notem_iteration: 9.10
@@ -7,8 +7,8 @@ scenario: SC01_JAM
 matrix_folder: I:\NorMITs Demand\Distribution Model\iter9.10.3\train\Final Outputs\Full PA Matrices\translated
 model: NoRMS
 year: 2018
-disaggregation_output_segment: soc
-trip_length_distribution_folder: I:\NorMITs Demand\import\traveller_segment_tool\trip_length_distributions\v1.0\uc_m_soc_m6
+disaggregation_output_segment: ns
+trip_length_distribution_folder: I:\NorMITs Demand\import\traveller_segment_tool\trip_length_distributions\v1.1\uc_m_ns_m6
 disaggregation_settings:
   aggregate_surplus_segments: yes
   export_original: yes
@@ -21,4 +21,4 @@ disaggregation_settings:
   multiprocessing_threads: -1
   pa_match_tolerance: 0.95
   minimum_bandshare_change: 1e-04
-  trip_end_constraint: single
+  trip_end_constraint: none

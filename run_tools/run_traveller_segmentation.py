@@ -88,8 +88,16 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         return self._build_cost_folder(self.import_folder, self.model)
 
     @property
+    def iteration_folder(self) -> pathlib.Path:
+        """Iteration output folder."""
+        iteration_folder = self.base_output_folder / f"iter{self.iteration}"
+        iteration_folder.mkdir(exist_ok=True)
+        return iteration_folder
+
+    @property
     def output_folder(self) -> pathlib.Path:
-        output_folder = self.base_output_folder / f"iter{self.iteration}"
+        """Output folder for specific disaggregation segment."""
+        output_folder = self.iteration_folder / str(self.disaggregation_output_segment.value)
         output_folder.mkdir(exist_ok=True)
         return output_folder
 
@@ -207,7 +215,7 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
         scenario=params.scenario,
         notem_iteration_name=params.notem_iteration,
         export_home=params.notem_export_home,
-        cache_dir=params.output_folder / ".cache",
+        cache_dir=params.iteration_folder / ".cache",
     )
     LOG.info(
         "Trip ends used:\nHB productions: %s\nHB attractions: %s\n"
