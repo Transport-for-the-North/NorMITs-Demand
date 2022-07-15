@@ -74,13 +74,17 @@ class CostDistribution:
         self._cost_units = cost_units
 
         self.edges = edges
-        self.sample_size = sample_size
+        self.sample_size = int(sample_size)
         self.min_bounds = edges[:-1]
         self.max_bounds = edges[1:]
         self.mid_bounds = (self.min_bounds + self.max_bounds) / 2
         self.band_means = band_mean_cost
         self.band_trips = band_trips
-        self.band_shares = band_trips / np.sum(band_trips)
+
+        if np.sum(band_trips) > 0:
+            self.band_shares = band_trips / np.sum(band_trips)
+        else:
+            self.band_shares = np.zeros_like(band_trips)
 
         # Band means to use when plotting - can't be -1
         self._plot_band_means = np.where(
@@ -98,6 +102,23 @@ class CostDistribution:
     def __repr__(self) -> str:
         df = self.to_df()
         return repr(df)
+
+    def is_empty(self) -> bool:
+        """Check if this CostDistribution is empty
+
+        A CostDistribution is empty when `self.band_trips` and
+        `self.band_means` are set to arrays of 0s, and `self.sample_size is
+        set to -1.`
+        """
+        if self.sample_size != -1:
+            return False
+
+        # Check if arrays of 0s
+        for array in (self.band_trips, self.band_means):
+            if (array == 0).sum() != len(array):
+                return False
+
+        return True
 
     @property
     def cost_units(self) -> nd_core.CostUnits:
@@ -368,4 +389,35 @@ class CostDistribution:
             cost_units=cost_units,
             band_mean_cost=band_mean_cost,
             sample_size=sample_size,
+        )
+
+    @staticmethod
+    def build_empty(edges: np.ndarray, cost_units: nd_core.CostUnits) -> CostDistribution:
+        """Build an empty CostDistribution
+
+        When `self.is_empty()` is checks, this class will return True.
+        A CostDistribution is empty when `self.band_trips` and
+        `self.band_means` are set to arrays of 0s, and `self.sample_size is
+        set to -1.`
+
+        Parameters
+        ----------
+        edges:
+            The band edges that would be used, if the data existed. E.g.
+            `[1, 2, 3]` defines 2 bands: 1->2 and 2->3
+
+        cost_units:
+            The cost units being used in `edges`.
+
+        Returns
+        -------
+        cost_distribution:
+            The generated empty CostDistribution object
+        """
+        return CostDistribution(
+            edges=edges,
+            band_trips=np.zeros((len(edges) - 1, )),
+            cost_units=cost_units,
+            band_mean_cost=np.zeros((len(edges) - 1, )),
+            sample_size=-1,
         )
