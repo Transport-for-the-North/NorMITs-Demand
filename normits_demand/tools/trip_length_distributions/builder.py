@@ -744,7 +744,7 @@ class TripLengthDistributionBuilder:
         segmentation: nd_core.SegmentationLevel,
         aggregated_exclude_segments: list[str],
         cost_units: nd_core.CostUnits,
-        sample_threshold: int = 10,
+        sample_threshold: int,
         trip_count_col: str = None,
         trip_dist_col: str = None,
         inter_smoothing: bool = False,
@@ -977,22 +977,24 @@ class TripLengthDistributionBuilder:
             LOG.warning(
                 "Not enough data was returned to create a TLD for segment "
                 "%s. Lower limit set to %s, "
-                "but only %s were found. No TLD will be generated."
+                "but only %.2f were found. No TLD will be generated."
                 % (segment_params, sample_threshold, sample_size)
             )
 
-        log_line["status"] = "Passed"
+            tld = cost.CostDistribution.build_empty(edges=band_edges, cost_units=cost_units)
 
-        # Build into a cost distribution
-        tld = self._build_cost_distribution(
-            data=data_subset,
-            band_edges=band_edges,
-            output_cost_units=cost_units,
-            trip_count_col=trip_count_col,
-            trip_dist_col=trip_dist_col,
-            inter_smoothing=inter_smoothing,
-            segment_params=segment_params,
-        )
+        else:
+            # Build into a cost distribution
+            log_line["status"] = "Passed"
+            tld = self._build_cost_distribution(
+                data=data_subset,
+                band_edges=band_edges,
+                output_cost_units=cost_units,
+                trip_count_col=trip_count_col,
+                trip_dist_col=trip_dist_col,
+                inter_smoothing=inter_smoothing,
+                segment_params=segment_params,
+            )
 
         segment_str = nd_core.SegmentationLevel.generate_template_segment_str(
             naming_order=segment_naming_order,
@@ -1009,7 +1011,7 @@ class TripLengthDistributionBuilder:
         bands: pd.DataFrame,
         segmentation: nd_core.SegmentationLevel,
         cost_units: nd_core.CostUnits,
-        sample_threshold: int = 10,
+        sample_threshold: int,
         trip_count_col: str = None,
         trip_dist_col: str = None,
         inter_smoothing: bool = False,
@@ -1192,7 +1194,7 @@ class TripLengthDistributionBuilder:
         cost_units: nd_core.CostUnits = nd_core.CostUnits.MILES,
         inter_smoothing: bool = False,
         check_sample_size: int = 400,
-        min_sample_size: int = 10,
+        min_sample_size: int = 40,
     ) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
         """Generate a trip length distribution
 

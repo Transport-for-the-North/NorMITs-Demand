@@ -62,7 +62,9 @@ def run_all_combinations():
             "cost_units": nd_core.CostUnits.KM,
             "bands_name": bands,
             "segmentation_name": seg,
-            "min_sample_size": 10,
+            "min_sample_size": 40,
+            "check_sample_size": 400,
+            "inter_smoothing": True,
         }
 
         extract.tld_generator(trip_filter_type=tlds.TripFilter.TRIP_OD, **kwargs)
@@ -126,7 +128,11 @@ def build_new_dimo_tlds():
         "cost_units": nd_core.CostUnits.KM,
     }
     generate_kwargs = path_kwargs.copy()
-    generate_kwargs.update({"min_sample_size": 10, "inter_smoothing": True})
+    generate_kwargs.update({
+        "min_sample_size": 40,
+        "check_sample_size": 400,
+        "inter_smoothing": True,
+    })
 
     for geo_area in [tlds.GeoArea.GB, tlds.GeoArea.NORTH_AND_MIDS]:
         # ## GENERATE HIGHWAY ## #
@@ -196,7 +202,11 @@ def build_new_traveller_segment_tlds():
         "cost_units": nd_core.CostUnits.KM,
     }
     generate_kwargs = path_kwargs.copy()
-    generate_kwargs.update({"min_sample_size": 10, "inter_smoothing": True})
+    generate_kwargs.update({
+        "min_sample_size": 40,
+        "check_sample_size": 400,
+        "inter_smoothing": True,
+    })
 
     # ## GENERATE RAIL TLDS ## #
     iterator = [

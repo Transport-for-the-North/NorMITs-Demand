@@ -80,7 +80,11 @@ class CostDistribution:
         self.mid_bounds = (self.min_bounds + self.max_bounds) / 2
         self.band_means = band_mean_cost
         self.band_trips = band_trips
-        self.band_shares = band_trips / np.sum(band_trips)
+
+        if np.sum(band_trips) > 0:
+            self.band_shares = band_trips / np.sum(band_trips)
+        else:
+            self.band_shares = np.zeros_like(band_trips)
 
         # Band means to use when plotting - can't be -1
         self._plot_band_means = np.where(
