@@ -75,11 +75,6 @@ class CostDistribution:
         self.band_means = band_mean_cost
         self.band_trips = band_trips
 
-        if self.sample_size > 0:
-            self.band_shares = band_trips / self.sample_size
-        else:
-            self.band_shares = np.zeros_like(band_trips)
-
         # Band means to use when plotting - can't be -1
         self._plot_band_means = np.where(
             self.band_means > 0,
@@ -132,6 +127,15 @@ class CostDistribution:
         adj_factor = new_sample_size / self.sample_size
         self.band_trips *= adj_factor
         self._sample_size = new_sample_size
+
+    @property
+    def band_shares(self) -> np.ndarray:
+        """An array of band shares that corresponds to self.edges"""
+        if self.sample_size > 0:
+            return self.band_trips / self.sample_size
+        else:
+            return np.zeros_like(self.band_trips)
+
 
     @staticmethod
     def _get_col_names(cost_units: nd_core.CostUnits) -> tuple[str, str, str, str, str, str]:
