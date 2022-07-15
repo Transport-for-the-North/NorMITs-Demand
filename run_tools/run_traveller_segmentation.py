@@ -59,6 +59,7 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         "notem_export_home",
         "trip_length_distribution_folder",
         "base_output_folder",
+        allow_reuse=True,
     )  # pylint: disable=no-self-argument
     def _folder_exists(cls, value) -> pathlib.Path:
         try:
@@ -74,7 +75,7 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
             import_folder / "modal" / model.get_mode().get_name() / "costs" / model.get_name()
         )
 
-    @pydantic.root_validator(skip_on_failure=True)
+    @pydantic.root_validator(skip_on_failure=True, allow_reuse=True)
     def _check_cost_folder(  # pylint: disable=no-self-argument
         cls, values: dict[str, Any]
     ) -> dict[str, Any]:
@@ -256,6 +257,45 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
         LOG.info("Finished %s", to.value)
 
     LOG.info("Finished traveller segmentation")
+
+
+def example_config(path: pathlib.Path) -> None:
+    """Writes an example of the input config YAML file to `path`."""
+
+    class ExampleTSP(TravellerSegmentationParameters):
+        """New sub-class which turns of path validation for writing example config."""
+
+        @pydantic.validator(
+            "import_folder",
+            "matrix_folder",
+            "notem_export_home",
+            "trip_length_distribution_folder",
+            "base_output_folder",
+            allow_reuse=True,
+        )  # pylint: disable=no-self-argument
+        def _folder_exists(cls, value) -> pathlib.Path:
+            return value
+
+        @pydantic.root_validator(skip_on_failure=True, allow_reuse=True)
+        def _check_cost_folder(cls, values: dict[str, Any]) -> dict[str, Any]:
+            return values
+
+    example = ExampleTSP(
+        iteration="1",
+        import_folder="path/to/import/folder",
+        base_output_folder="path/to/output/folder",
+        notem_export_home="path/to/NoTEM/base/export/folder",
+        notem_iteration="1",
+        scenario=nd.Scenario.SC01_JAM,
+        matrix_folder="path/to/folder/containing/matrices/for/segmentation",
+        model=nd.AssignmentModel.NORMS,
+        year=2018,
+        disaggregation_output_segment=segment_disaggregator.DisaggregationOutputSegment.SOC,
+        trip_length_distribution_folder="path/to/tld/folder",
+    )
+
+    example.save_yaml(path)
+    print(f"Written example config to: {path}")
 
 
 ##### MAIN #####
