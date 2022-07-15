@@ -838,8 +838,8 @@ class TripLengthDistributionBuilder:
             agg_segment_params.pop(aggregated_exclude_segments, None)
 
             agg_naming_order = func_utils.list_safe_remove(
-                segmentation.naming_order.copy(),
-                ["soc"],
+                segmentation.naming_order,
+                [aggregated_exclude_segments],
             )
 
             agg_segment_types = segmentation.segment_types.copy()
@@ -1340,7 +1340,7 @@ class TripLengthDistributionBuilder:
 
             LOG.info(
                 "%s has a sample size less than %s."
-                % (name, {check_sample_size})
+                % (name, check_sample_size)
             )
             if not self._passing_tld_checks(dist):
                 LOG.info(
