@@ -221,8 +221,6 @@ def _control_a_to_enhanced_p(
     audit:
         Boolean - did it work
     """
-    # TODO Fix errors with now only passing the productions
-    # and attractions dataframes without the calib params
     # TODO Update docstring
     if len(productions) != len(attractions):
         raise ValueError(

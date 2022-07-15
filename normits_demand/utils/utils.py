@@ -1970,7 +1970,7 @@ def parse_mat_output(list_dir,
 # TODO Move these out of this utils module
 def parse_matrix_name(filename: str) -> Dict[str, Union[str, int]]:
     sep = r"(?:\b|[_.])"
-    int_values = {"yr", "m", "p", "ca", "soc", "ns"}
+    int_values = {"yr", "m", "p", "ca", "soc", "ns", "g"}
     naming_formats = {
         "trip_origin": r"(n?hb)",
         "matrix_type": r"(pa|od_from|od_to)",
@@ -1981,6 +1981,7 @@ def parse_matrix_name(filename: str) -> Dict[str, Union[str, int]]:
         "ca": r"ca(\d)",
         "soc": r"soc(\d)",
         "ns": r"ns(\d)",
+        "g": r"g(\d)",
     }
 
     data: Dict[str, Union[str, int]] = {}

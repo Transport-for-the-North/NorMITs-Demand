@@ -7,8 +7,8 @@ scenario: SC01_JAM
 matrix_folder: I:\NorMITs Demand\Distribution Model\iter9.10.3\train\Final Outputs\Full PA Matrices\translated
 model: NoRMS
 year: 2018
-disaggregation_output_segment: ns
-trip_length_distribution_folder: I:\NorMITs Demand\import\traveller_segment_tool\trip_length_distributions\v1.1\uc_m_ns_m6
+disaggregation_output_segment: g
+trip_length_distribution_folder: I:\NorMITs Demand\import\traveller_segment_tool\trip_length_distributions\v1.1\uc_m_g_m6
 disaggregation_settings:
   aggregate_surplus_segments: yes
   export_original: yes
