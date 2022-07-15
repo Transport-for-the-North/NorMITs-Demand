@@ -45,6 +45,8 @@ class TripLengthDistributionBuilder:
     _running_log_fname = "1. input_params.txt"
     _full_export_fname = "2. full_export.csv"
     _seg_report_fname = "3. {seg_name}_report.csv"
+    _agg_full_export_fname = "4. aggregated_full_export.csv"
+    _agg_seg_report_fname = "5. {seg_name}_aggregated_report.csv"
 
     _distribution_fname_desc = "cost_distribution"
 
@@ -217,8 +219,9 @@ class TripLengthDistributionBuilder:
 
         # If here, we need to interpolate something
         LOG.info(
-            f"Gap found in {segment_params} distribution. Linear interpolation "
+            f"Gap found in %s distribution. Linear interpolation "
             "will fill the gap."
+            % segment_params
         )
 
         # Interpolate, and fit back in place
@@ -226,6 +229,25 @@ class TripLengthDistributionBuilder:
         interpolated[min_:max_+1] = math_utils.interpolate_array(trimmed)
         return interpolated
 
+    @staticmethod
+    def _passing_tld_checks(distribution: cost.CostDistribution) -> bool:
+        """Checks if a TLD looks valid"""
+        # make sure it's not empty
+        if distribution.is_empty():
+            return False
+
+        # Trim the 0s off the edges
+        trips = distribution.band_trips
+        min_ = np.argwhere(trips).min().squeeze()
+        max_ = np.argwhere(trips).max().squeeze()
+        trimmed_trips = trips[min_:max_+1]     # Plus one as not inclusive
+
+        # Check if the values get smaller across bands
+        for prev, cur in func_utils.pairwise(trimmed_trips):
+            if prev < cur:
+                return False
+
+        return True
 
     def _build_cost_distribution(
         self,
@@ -309,22 +331,21 @@ class TripLengthDistributionBuilder:
             all_band_mean_cost.append(band_mean_cost)
 
         # Convert to numpy arrays
-        all_band_trips = np.array(all_band_trips)
-        all_band_mean_cost = np.array(all_band_mean_cost)
+        np_all_band_trips = np.array(all_band_trips)
+        np_all_band_mean_cost = np.array(all_band_mean_cost)
 
         # Check for gaps. If gaps, then interpolate - add this as an option
         if inter_smoothing:
-            all_band_trips = self._distribution_smoothing_interpolation(
-                distribution=np.array(all_band_trips),
+            np_all_band_trips = self._distribution_smoothing_interpolation(
+                distribution=np.array(np_all_band_trips),
                 segment_params=segment_params,
             )
 
-
         return cost.CostDistribution(
             edges=band_edges,
-            band_trips=all_band_trips,
+            band_trips=np_all_band_trips,
             cost_units=output_cost_units,
-            band_mean_cost=all_band_mean_cost,
+            band_mean_cost=np_all_band_mean_cost,
             sample_size=sample_size,
         )
 
@@ -861,7 +882,6 @@ class TripLengthDistributionBuilder:
 
         return name_to_distribution, name_to_agg_name, sample_size_log, full_export
 
-
     def _build_tld_from_segment_params(
         self,
         segment_params: dict[str, Any],
@@ -956,8 +976,9 @@ class TripLengthDistributionBuilder:
             log_line["status"] = "Failed"
             LOG.warning(
                 "Not enough data was returned to create a TLD for segment "
-                f"{segment_params}. Lower limit set to {sample_threshold}, "
-                f"but only {sample_size} were found. No TLD will be generated."
+                "%s. Lower limit set to %s, "
+                "but only %s were found. No TLD will be generated."
+                % (segment_params, sample_threshold, sample_size)
             )
 
         log_line["status"] = "Passed"
@@ -1312,14 +1333,24 @@ class TripLengthDistributionBuilder:
             **tld_kwargs
         )
 
-        # TODO: INSERT SMOOTHING WHEN SAMPLE SIZES LOW AND GAPS
-        # If sample size is < 400
-        # Check for later bands < earlier. If so, use average TLD
-        # Instead. (Should we also do this if the sample size is too small?)
+        # Are any of the sample sizes small enough for further checks?
+        for name, dist in name_to_distribution.items():
+            if dist.sample_size > check_sample_size:
+                continue
 
-        print(agg_sample_size_log)
-        print(name_to_agg_name)
-        exit()
+            LOG.info(
+                "%s has a sample size less than %s."
+                % (name, {check_sample_size})
+            )
+            if not self._passing_tld_checks(dist):
+                LOG.info(
+                    "%s did not pass further checks. Reverting to "
+                    "aggregated TLD." % name
+                )
+                agg_dist = agg_name_to_dist[name_to_agg_name[name]]
+                name_to_distribution[name] = agg_dist
+            else:
+                LOG.info("%s looks OK. Leaving as is." % name)
 
         # ## WRITE THINGS OUT ## #
         # Write the run log
@@ -1336,14 +1367,21 @@ class TripLengthDistributionBuilder:
         with open(output_path, "w") as f:
             f.write(run_log_str)
 
-        # Write sample_size_log
-        _seg_report_fname = self._seg_report_fname.format(seg_name=segmentation.name)
-        report_path = tld_out_path / _seg_report_fname
+        # Write sample_size_logs
+        seg_report_fname = self._seg_report_fname.format(seg_name=segmentation.name)
+        report_path = tld_out_path / seg_report_fname
         file_ops.safe_dataframe_to_csv(sample_size_log, report_path, index=False)
 
-        # Write final compiled tld
+        agg_seg_report_fname = self._agg_seg_report_fname.format(seg_name=segmentation.name)
+        report_path = tld_out_path / agg_seg_report_fname
+        file_ops.safe_dataframe_to_csv(agg_sample_size_log, report_path, index=False)
+
+        # Write final compiled tlds
         full_export_path = tld_out_path / self._full_export_fname
         file_ops.safe_dataframe_to_csv(full_export, full_export_path, index=False)
+
+        full_export_path = tld_out_path / self._agg_full_export_fname
+        file_ops.safe_dataframe_to_csv(agg_full_export, full_export_path, index=False)
 
         # Write individual tlds
         for name, tld in name_to_distribution.items():
