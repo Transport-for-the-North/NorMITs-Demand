@@ -8,7 +8,7 @@ Created on Fri Nov 20 13:47:56 2020
 import csv
 import enum
 import pathlib
-from typing import Any, Dict, List, NamedTuple
+from typing import Any, Dict, List, NamedTuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -20,7 +20,7 @@ from normits_demand.cost import utils as cost_utils
 from normits_demand.concurrency import multiprocessing as mp
 from normits_demand.distribution import furness
 from normits_demand.utils import file_ops, math_utils
-from normits_demand.utils import utils as nup
+from normits_demand.utils import utils as nup  # TODO Remove dependancy on this
 from normits_demand import logging as nd_log
 from normits_demand import constants
 from normits_demand.core import enumerations as nd_enum
@@ -523,11 +523,11 @@ def _segment_build_worker(
             )
         )
 
-    path = nup.build_path(
+    path = build_path(
         reports_folder / (trip_origin.value + "_tld"),
         {k: v for k, v in matrix_segmentation.items() if k != "trip_origin"},
+        suffix=".png",
     )
-    path = path.with_suffix(".png")
     cost_utils.plot_cost_distributions(tlds, path.stem, path=path)
     print(f"Created: {path.name}")
 
@@ -550,9 +550,11 @@ def _segment_disaggregator_outputs(
         ).reset_index()
         mat = mat.rename(columns={"index": zones_name})
 
-        path = nup.build_path(
-            export_folder / (trip_origin.value + "_enhpa"),
+        OUTPUT_NAME = "_pa"
+        path = build_path(
+            export_folder / (trip_origin.value + OUTPUT_NAME),
             {k: v for k, v in results.segmentation.items() if k != "trip_origin"},
+            suffix=".csv.bz2",
         )
         mat.to_csv(path, index=False)
 
@@ -562,20 +564,22 @@ def _segment_disaggregator_outputs(
         ).reset_index()
         furness_mat = furness_mat.rename(columns={"index": zones_name})
 
-        path = nup.build_path(
-            export_folder / (trip_origin.value + "_enhpafn"),
+        path = build_path(
+            export_folder / (trip_origin.value + OUTPUT_NAME + "_fn"),
             {k: v for k, v in results.segmentation.items() if k != "trip_origin"},
+            suffix=".csv.bz2",
         )
         furness_mat.to_csv(path, index=False)
 
     # Output Excel based reports
     reports_folder = export_folder / "Reports"
-    path = nup.build_path(
+    path = build_path(
         reports_folder / (trip_origin.value + "_disagg_report"),
         {k: v for k, v in results.segmentation.items() if k != "trip_origin"},
+        suffix=".xlsx",
     )
 
-    with pd.ExcelWriter(path.with_suffix(".xlsx")) as excel:
+    with pd.ExcelWriter(path) as excel:
         summary = pd.DataFrame.from_dict(
             results.summary._asdict(), columns=["Value"], orient="index"
         )
@@ -603,11 +607,11 @@ def _segment_disaggregator_outputs(
         pd.concat(tlds, axis=1).to_excel(excel, sheet_name="Cost Distribution")
 
     # Output TLD graphs
-    path = nup.build_path(
+    path = build_path(
         reports_folder / (trip_origin.value + "_tld"),
         {k: v for k, v in results.segmentation.items() if k != "trip_origin"},
+        suffix=".png",
     )
-    path = path.with_suffix(".png")
 
     tlds = []
     for nm, tld in (
@@ -703,9 +707,10 @@ def _dissag_seg(
         # Calculate the band share convergence
         bs_con = _calculate_bandshare_convergence(matrix_tld, target_tld)
 
-        report_path = nup.build_path(
+        report_path = build_path(
             report_folder / (segmentation["trip_origin"] + "_tld_log"),
             {k: v for k, v in segmentation.items() if k != "trip_origin"},
+            suffix=".csv",
         )
         print(f"Writing TLD loop log to {report_path.name}")
         with open(report_path, "wt", newline="") as file:
@@ -973,3 +978,53 @@ def get_costs(
         return costs[0]
 
     return pd.DataFrame(np.mean(costs, axis=0), index=costs[0].index, columns=costs[0].columns)
+
+
+def build_path(
+    base_path: pathlib.Path,
+    segmentation_params: dict[str, Any],
+    tp: Optional[str] = None,
+    suffix: Optional[str] = None,
+) -> pathlib.Path:
+    """Build file name from segmentation parameters.
+
+    Parameters
+    ----------
+    base_path : pathlib.Path
+        Initial file path to add segmentation parameters to.
+    segmentation_params : dict[str, Any]
+        Segmentation parameter names and values.
+    tp : Optional[str], optional
+        Time period to add to file name, by default None
+    suffix : Optional[str], optional
+        Suffix to append to path, by default None
+
+    Returns
+    -------
+    pathlib.Path
+        Path containing segmentation information.
+    """
+    path = pathlib.Path(base_path)
+
+    suffixes = "".join(path.suffixes)
+    name = path.name.removesuffix(suffixes)
+
+    for index, cp in segmentation_params.items():
+        if index == "tlb":
+            continue  # Ignore trip length bands
+
+        if not _isnull(cp):
+            # Don't include UC before user classes
+            if index.lower() == "uc":
+                name += f"_{cp}"
+            else:
+                name += f"_{index}{cp}"
+
+    if tp:
+        name += "_tp" + str(tp)
+
+    path = path.parent / name
+    if suffix:
+        path = path.with_suffix(suffix)
+
+    return path
