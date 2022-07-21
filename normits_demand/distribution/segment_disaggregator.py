@@ -674,8 +674,11 @@ def _dissag_seg(
         target_a = np.array(target_a)
 
         # Initialise the output mat
-        new_mat = np.where(
-            base_matrix.sum(axis=1) > 0, (base_matrix.T / base_matrix.sum(axis=1)), 0
+        new_mat = np.divide(
+            base_matrix.T,
+            base_matrix.sum(axis=1),
+            out=np.zeros_like(base_matrix),
+            where=base_matrix.sum(axis=1) > 0,
         )
         new_mat: np.ndarray = (new_mat * target_p).T
 
@@ -767,8 +770,11 @@ def _dissag_seg(
 
                 elif trip_end_constraint == TripEndConstraint.SINGLE:
                     # Constrain matrix to productions
-                    new_mat = np.where(
-                        new_mat.sum(axis=1) > 0, (new_mat.T / new_mat.sum(axis=1)), 0
+                    new_mat = np.divide(
+                        base_matrix.T,
+                        base_matrix.sum(axis=1),
+                        out=np.zeros_like(base_matrix),
+                        where=base_matrix.sum(axis=1) > 0,
                     )
                     new_mat = (new_mat * target_p).T
 
