@@ -239,8 +239,8 @@ class UserClass(IsValidEnumWithAutoNameLower):
             UserClass.HB_COMMUTE: [1],
             UserClass.HB_BUSINESS: [2],
             UserClass.HB_OTHER: [3, 4, 5, 6, 7, 8],
-            UserClass.NHB_BUSINESS: [12],
-            UserClass.NHB_OTHER: [13, 14, 15, 16, 18],
+            UserClass.NHB_BUSINESS: [11, 12],
+            UserClass.NHB_OTHER: [13, 14, 15, 16, 17, 18],
         }
 
         # Add combinations of other values
