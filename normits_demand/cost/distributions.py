@@ -22,9 +22,11 @@ import numpy as np
 import pandas as pd
 
 # Local Imports
+# pylint: disable=import-error,wrong-import-position
 from normits_demand import core as nd_core
 from normits_demand.utils import file_ops
 from normits_demand.cost import utils as cost_utils
+# pylint: enable=import-error,wrong-import-position
 
 # TODO(BT): Build class to handle a segmentationLevel collection of these
 
@@ -38,6 +40,7 @@ class CostDistribution:
         band_trips: np.ndarray,
         cost_units: nd_core.CostUnits,
         band_mean_cost: np.ndarray = None,
+        sample_size: int = -1,
     ):
         """
         Parameters
@@ -57,7 +60,12 @@ class CostDistribution:
         band_mean_cost:
             Similar to `band_trips`. The mean cost in each band, as defined by
             `edges`. If left as None, this defaults to all -1 values.
+
+        sample_size:
+            The size of the sample used to create this TLD.
         """
+        # TODO(BT): Fully integrate the sample_size into csv/df IO
+
         # Set initial values
         if band_mean_cost is None:
             band_mean_cost = np.full(band_trips.shape, -1)
@@ -66,12 +74,17 @@ class CostDistribution:
         self._cost_units = cost_units
 
         self.edges = edges
+        self.sample_size = int(sample_size)
         self.min_bounds = edges[:-1]
         self.max_bounds = edges[1:]
         self.mid_bounds = (self.min_bounds + self.max_bounds) / 2
         self.band_means = band_mean_cost
         self.band_trips = band_trips
-        self.band_shares = band_trips / np.sum(band_trips)
+
+        if np.sum(band_trips) > 0:
+            self.band_shares = band_trips / np.sum(band_trips)
+        else:
+            self.band_shares = np.zeros_like(band_trips)
 
         # Band means to use when plotting - can't be -1
         self._plot_band_means = np.where(
@@ -89,6 +102,23 @@ class CostDistribution:
     def __repr__(self) -> str:
         df = self.to_df()
         return repr(df)
+
+    def is_empty(self) -> bool:
+        """Check if this CostDistribution is empty
+
+        A CostDistribution is empty when `self.band_trips` and
+        `self.band_means` are set to arrays of 0s, and `self.sample_size is
+        set to -1.`
+        """
+        if self.sample_size != -1:
+            return False
+
+        # Check if arrays of 0s
+        for array in (self.band_trips, self.band_means):
+            if (array == 0).sum() != len(array):
+                return False
+
+        return True
 
     @property
     def cost_units(self) -> nd_core.CostUnits:
@@ -232,9 +262,12 @@ class CostDistribution:
             "aspect_ratio": 9 / 16,
             "dpi": 300,
         }
-
         default_graph_kwargs.update(graph_kwargs)
         graph_kwargs = default_graph_kwargs
+
+        # Build the output label
+        if self.sample_size > 0:
+            label = f"{label} | n={self.sample_size}"
 
         # Gather plotting data
         plot_data = cost_utils.PlotData(
@@ -281,6 +314,7 @@ class CostDistribution:
         max_bounds_col: str = None,
         trips_col: str = None,
         mean_col: str = None,
+        sample_size: int = -1,
     ) -> CostDistribution:
         """Reads in data from a csv to build a CostDistribution
 
@@ -309,6 +343,10 @@ class CostDistribution:
         mean_col:
             The name of the column containing the mean distance of the trips
             in each band
+
+        sample_size:
+            The size of the sample used to create this TLD. Will be passed
+            directly to the class constructor.
 
         Returns
         -------
@@ -350,4 +388,56 @@ class CostDistribution:
             band_trips=band_trips,
             cost_units=cost_units,
             band_mean_cost=band_mean_cost,
+            sample_size=sample_size,
+        )
+
+    @staticmethod
+    def build_empty(edges: np.ndarray, cost_units: nd_core.CostUnits) -> CostDistribution:
+        """Build an empty CostDistribution
+
+        When `self.is_empty()` is checks, this class will return True.
+        A CostDistribution is empty when `self.band_trips` and
+        `self.band_means` are set to arrays of 0s, and `self.sample_size is
+        set to -1.`
+
+        Parameters
+        ----------
+        edges:
+            The band edges that would be used, if the data existed. E.g.
+            `[1, 2, 3]` defines 2 bands: 1->2 and 2->3
+
+        cost_units:
+            The cost units being used in `edges`.
+
+        Returns
+        -------
+        cost_distribution:
+            The generated empty CostDistribution object
+        """
+        return CostDistribution(
+            edges=edges,
+            band_trips=np.zeros((len(edges) - 1, )),
+            cost_units=cost_units,
+            band_mean_cost=np.zeros((len(edges) - 1, )),
+            sample_size=-1,
+        )
+
+    @staticmethod
+    def from_trips(
+        trips: np.ndarray,
+        cost_matrix: np.ndarray,
+        min_bounds: np.ndarray,
+        max_bounds: np.ndarray,
+        cost_units: nd_core.CostUnits,
+    ) -> CostDistribution:
+        # TODO Add docstring
+        return CostDistribution(
+            edges=np.array([min_bounds[0]] + max_bounds.tolist()),
+            band_trips=cost_utils.cost_distribution(
+                trips, cost_matrix, min_bounds, max_bounds
+            ),
+            cost_units=cost_units,
+            band_mean_cost=cost_utils.calculate_average_cost_in_bounds(
+                min_bounds, max_bounds, cost_matrix, trips
+            ),
         )

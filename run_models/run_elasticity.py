@@ -287,16 +287,17 @@ def merge_internal_external(scenario,
 
 def main():
     # Controls I/O
-    scenario = efs_consts.SC04_UZC
-    iter_num = '3k'
+    scenario = consts.SC04_UZC
+    iter_num = '3i'
     import_home = "I:/"
     export_home = "I:/"
 
     base_year = 2018
     # future_years = [2033, 2040, 2050]
-    future_years = [2050]
+    future_years = [2038, 2045, 2055]
     use_bespoke_zones = False
-    use_wfh_adj = True
+    use_wfh_adj_int = True
+    use_wfh_adj_ext = False
 
     initialise(
         scenario=scenario,
@@ -306,7 +307,7 @@ def main():
         base_year=base_year,
         future_years=future_years,
         use_bespoke_zones=use_bespoke_zones,
-        use_wfh_adj=use_wfh_adj,
+        use_wfh_adj=use_wfh_adj_int,
     )
 
     run_elasticity()
@@ -319,7 +320,7 @@ def main():
         base_year=base_year,
         future_years=future_years,
         use_bespoke_zones=use_bespoke_zones,
-        use_wfh_adj=use_wfh_adj,
+        use_wfh_adj=use_wfh_adj_ext,
     )
 
 

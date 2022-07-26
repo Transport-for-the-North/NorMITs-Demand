@@ -38,19 +38,22 @@ from tqdm import tqdm
 import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
+from normits_demand import logging as nd_log
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 from normits_demand.utils import compress
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.matrices import pa_to_od as pa2od
-from normits_demand.matrices import utils as mat_utils
 from normits_demand.matrices import compilation as mat_comp
 from normits_demand.distribution import furness
 from normits_demand.concurrency import multiprocessing
 from normits_demand.validation import checks
 
 from normits_demand.matrices.tms_matrix_processing import *
+
+
+LOG = nd_log.get_logger(__name__)
 
 
 def _aggregate(import_dir: str,
@@ -70,8 +73,9 @@ def _aggregate(import_dir: str,
 
     if in_fnames == list():
         raise nd.NormitsDemandError(
-            "Couldn't find any matrices to aggregate up to create %s!"
-            % os.path.basename(export_path)
+            "Couldn't find any matrices to aggregate up to create %s!\n"
+            "Looking in %s"
+            % (os.path.basename(export_path), import_dir)
         )
 
     for fname in in_fnames:
@@ -386,7 +390,6 @@ def aggregate_matrices(import_dir: str,
         fn=_aggregate_matrices_internal,
         kwargs=kwarg_list,
         process_count=process_count,
-        # process_count=0,
 
     )
 
@@ -1598,8 +1601,8 @@ def build_norms_compile_params(import_dir: str,
     return out_paths
 
 
-def build_compile_params(import_dir: str,
-                         export_dir: str,
+def build_compile_params(import_dir: nd.PathLike,
+                         export_dir: nd.PathLike,
                          matrix_format: str,
                          years_needed: Iterable[int],
                          m_needed: List[int] = efs_consts.MODES_NEEDED,
@@ -1708,8 +1711,8 @@ def build_compile_params(import_dir: str,
 
                 # Narrow down further if we're using ca
                 if ca is not None:
-                    ca_str = '_ca' + str(ca) + '_'
-                    compile_mats = [x for x in compile_mats if ca_str in x]
+                    ca_strs = [f'_ca{ca}{x}' for x in "_."]
+                    compile_mats = [x for x in compile_mats if du.is_in_string(ca_strs, x)]
 
                 # Narrow down again if we're using tp
                 if tp is not None:
@@ -2401,14 +2404,15 @@ def _compile_matrices_internal(mat_import,
     return decompile_factors
 
 
-def compile_matrices(mat_import: str,
-                     mat_export: str,
-                     compile_params_path: str,
+def compile_matrices(mat_import: nd.PathLike,
+                     mat_export: nd.PathLike,
+                     compile_params_path: nd.PathLike,
                      factor_pickle_path: str = None,
                      round_dp: int = consts.DEFAULT_ROUNDING,
                      factors_fname: str = 'od_compilation_factors.pickle',
                      avoid_zero_splits: bool = False,
                      process_count: int = consts.PROCESS_COUNT,
+                     overwrite: bool = True,
                      ) -> nd.PathLike:
     """
     Compiles the matrices in mat_import, writes to mat_export
@@ -2442,6 +2446,11 @@ def compile_matrices(mat_import: str,
         factors. Where there would have been zero splits, this will be
         replaced with even splits across inputs.
 
+    overwrite: bool, default True
+        If False, checks if any of the compiled matrices already exist and
+        doesn't recreate them. If all output matrices already exist then the
+        function will return early.
+
     Returns
     -------
     None
@@ -2465,6 +2474,28 @@ def compile_matrices(mat_import: str,
     # Init
     compile_params = pd.read_csv(compile_params_path)
     compiled_names = compile_params['compilation'].unique()
+
+    if not overwrite:
+        # Don't bother recreating any outputs that already exist
+        export_folder = pathlib.Path(mat_export)
+        exists = []
+        for nm in compiled_names:
+            if (export_folder / nm).is_file():
+                exists.append(nm)
+        del export_folder
+
+        compiled_names = [i for i in compiled_names if i not in exists]
+        if compiled_names == []:
+            LOG.info("All compiled matrices already exist and aren't being overwritten")
+            return
+
+        if exists != []:
+            LOG.info(
+                "%s compiled matrices already exist and aren't being overwritten: %s",
+                len(exists),
+                ", ".join(exists),
+            )
+        del exists
 
     # Need to get the size of the output matrices
     check_mat_name = compile_params.loc[0, 'distribution_name']
@@ -2739,10 +2770,10 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
         matrix_format = checks.validate_matrix_format(temp_seg_dict['matrix_format'])
 
         # Figure out which column names we should use
-        if matrix_format in consts.PA_MATRIX_FORMATS:
+        if matrix_format in efs_consts.PA_MATRIX_FORMATS:
             p_or_o_val_name = 'productions'
             a_or_d_val_name = 'attractions'
-        elif matrix_format in consts.OD_MATRIX_FORMATS:
+        elif matrix_format in efs_consts.OD_MATRIX_FORMATS:
             p_or_o_val_name = 'origin'
             a_or_d_val_name = 'destination'
         else:
@@ -2781,7 +2812,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
                     continue
 
                 # Extract just the zones we need
-                zone_mask = mat_utils.get_wide_mask(
+                zone_mask = pd_utils.get_wide_mask(
                     df=matrix,
                     zones=zone_nums,
                     join_fn=join_fn,
@@ -2978,15 +3009,15 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
 
     # Figure out the file paths we should be using
     if matrix_format == 'pa':
-        hb_p_or_o_fname = consts.PRODS_FNAME % ('cache', 'hb')
-        nhb_p_or_o_fname = consts.PRODS_FNAME % ('cache', 'nhb')
-        hb_a_or_o_fname = consts.ATTRS_FNAME % ('cache', 'hb')
-        nhb_a_or_o_fname = consts.ATTRS_FNAME % ('cache', 'nhb')
+        hb_p_or_o_fname = efs_consts.PRODS_FNAME % ('cache', 'hb')
+        nhb_p_or_o_fname = efs_consts.PRODS_FNAME % ('cache', 'nhb')
+        hb_a_or_o_fname = efs_consts.ATTRS_FNAME % ('cache', 'hb')
+        nhb_a_or_o_fname = efs_consts.ATTRS_FNAME % ('cache', 'nhb')
     elif matrix_format == 'od':
-        hb_p_or_o_fname = consts.ORIGS_FNAME % ('cache', 'hb')
-        nhb_p_or_o_fname = consts.ORIGS_FNAME % ('cache', 'nhb')
-        hb_a_or_o_fname = consts.DESTS_FNAME % ('cache', 'hb')
-        nhb_a_or_o_fname = consts.DESTS_FNAME % ('cache', 'nhb')
+        hb_p_or_o_fname = efs_consts.ORIGS_FNAME % ('cache', 'hb')
+        nhb_p_or_o_fname = efs_consts.ORIGS_FNAME % ('cache', 'nhb')
+        hb_a_or_o_fname = efs_consts.DESTS_FNAME % ('cache', 'hb')
+        nhb_a_or_o_fname = efs_consts.DESTS_FNAME % ('cache', 'nhb')
     else:
         raise ValueError(
             "%s seems to be a valid matrix format, but I don't know what to "

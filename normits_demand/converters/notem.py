@@ -21,7 +21,11 @@ from typing import Union
 
 # Local Imports
 from normits_demand import core as nd_core
+from normits_demand import logging as nd_log
 from normits_demand.pathing import NoTEMExportPaths
+
+
+LOG = nd_log.get_logger(__name__)
 
 
 class ToDistributionModel:
@@ -493,6 +497,7 @@ class ToDistributionModel:
         # Return the cache only if it's safe to
         if cache_path is not None:
             if not ignore_cache and cache_path.is_file():
+                LOG.debug("Loading trip ends from cache: %s", cache_path)
                 dvec = nd_core.DVector.load(cache_path)
 
                 # Do a few checks
@@ -511,6 +516,7 @@ class ToDistributionModel:
 
         # Save into cache and return
         if cache_path is not None:
+            cache_path.parent.mkdir(exist_ok=True, parents=True)
             converted_dvec.save(cache_path)
         return converted_dvec
 
