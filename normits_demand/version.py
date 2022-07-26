@@ -3,7 +3,7 @@
 import re
 import subprocess
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 
 # fmt: off
 # Regex taken from semver.org
