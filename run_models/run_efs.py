@@ -47,19 +47,19 @@ def main():
 
     # Compiling matrices
     run_pa_to_od = False
-    run_compile_mats = False
+    run_compile_mats = True
     run_decompile_post_me = True
 
     # Controls matrix conversion
-    output_years = efs_consts.ALL_YEARS
+    # output_years = efs_consts.ALL_YEARS
     output_years = efs_consts.FUTURE_YEARS
-    output_years = [2050]
 
     # Controls I/O
-    scenario = consts.SC04_UZC
-    iter_num = '3j'
+    scenario = consts.SC01_JAM
+    iter_num = '3i'
     import_home = "I:/"
-    export_home = "E:/"
+    export_home = "I:/"
+    # export_home = "I:/"
     model_name = efs_consts.MODEL_NAME
 
     # ## RUN START ## #
@@ -119,12 +119,11 @@ def main():
         )
 
     if run_compile_mats:
-        for year in output_years:
-            efs.compile_matrices(
-                year=year,
-                use_bespoke_pa=(not ignore_bespoke_zones),
-                use_elasticity_pa=use_elasticity_to_od,
-            )
+        efs.compile_matrices(
+            years=output_years,
+            use_bespoke_pa=(not ignore_bespoke_zones),
+            use_elasticity_pa=use_elasticity_to_od,
+        )
 
     if run_decompile_post_me:
         # Decompiles post-me base year matrices

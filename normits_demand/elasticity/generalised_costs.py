@@ -312,7 +312,7 @@ class CostBuilder:
             val_diff = cost_adj[str(upper)] - cost_adj[str(lower)]
             wanted_year_diff = year - lower
             wanted_diff = val_diff * wanted_year_diff / year_diff
-            cost_adj[str(year)] = cost_adj[str(upper)] + wanted_diff
+            cost_adj[str(year)] = cost_adj[str(lower)] + wanted_diff
 
         # ## ADD ELASTICITY TYPES ## #
         # Function to apply to df to pull out elast type

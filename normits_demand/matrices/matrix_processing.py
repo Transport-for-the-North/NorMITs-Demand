@@ -45,7 +45,6 @@ from normits_demand.utils import compress
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.matrices import pa_to_od as pa2od
-from normits_demand.matrices import utils as mat_utils
 from normits_demand.matrices import compilation as mat_comp
 from normits_demand.distribution import furness
 from normits_demand.concurrency import multiprocessing
@@ -74,8 +73,9 @@ def _aggregate(import_dir: str,
 
     if in_fnames == list():
         raise nd.NormitsDemandError(
-            "Couldn't find any matrices to aggregate up to create %s!"
-            % os.path.basename(export_path)
+            "Couldn't find any matrices to aggregate up to create %s!\n"
+            "Looking in %s"
+            % (os.path.basename(export_path), import_dir)
         )
 
     for fname in in_fnames:
@@ -390,7 +390,6 @@ def aggregate_matrices(import_dir: str,
         fn=_aggregate_matrices_internal,
         kwargs=kwarg_list,
         process_count=process_count,
-        # process_count=0,
 
     )
 
@@ -2771,10 +2770,10 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
         matrix_format = checks.validate_matrix_format(temp_seg_dict['matrix_format'])
 
         # Figure out which column names we should use
-        if matrix_format in consts.PA_MATRIX_FORMATS:
+        if matrix_format in efs_consts.PA_MATRIX_FORMATS:
             p_or_o_val_name = 'productions'
             a_or_d_val_name = 'attractions'
-        elif matrix_format in consts.OD_MATRIX_FORMATS:
+        elif matrix_format in efs_consts.OD_MATRIX_FORMATS:
             p_or_o_val_name = 'origin'
             a_or_d_val_name = 'destination'
         else:
@@ -2813,7 +2812,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
                     continue
 
                 # Extract just the zones we need
-                zone_mask = mat_utils.get_wide_mask(
+                zone_mask = pd_utils.get_wide_mask(
                     df=matrix,
                     zones=zone_nums,
                     join_fn=join_fn,
@@ -3010,15 +3009,15 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
 
     # Figure out the file paths we should be using
     if matrix_format == 'pa':
-        hb_p_or_o_fname = consts.PRODS_FNAME % ('cache', 'hb')
-        nhb_p_or_o_fname = consts.PRODS_FNAME % ('cache', 'nhb')
-        hb_a_or_o_fname = consts.ATTRS_FNAME % ('cache', 'hb')
-        nhb_a_or_o_fname = consts.ATTRS_FNAME % ('cache', 'nhb')
+        hb_p_or_o_fname = efs_consts.PRODS_FNAME % ('cache', 'hb')
+        nhb_p_or_o_fname = efs_consts.PRODS_FNAME % ('cache', 'nhb')
+        hb_a_or_o_fname = efs_consts.ATTRS_FNAME % ('cache', 'hb')
+        nhb_a_or_o_fname = efs_consts.ATTRS_FNAME % ('cache', 'nhb')
     elif matrix_format == 'od':
-        hb_p_or_o_fname = consts.ORIGS_FNAME % ('cache', 'hb')
-        nhb_p_or_o_fname = consts.ORIGS_FNAME % ('cache', 'nhb')
-        hb_a_or_o_fname = consts.DESTS_FNAME % ('cache', 'hb')
-        nhb_a_or_o_fname = consts.DESTS_FNAME % ('cache', 'nhb')
+        hb_p_or_o_fname = efs_consts.ORIGS_FNAME % ('cache', 'hb')
+        nhb_p_or_o_fname = efs_consts.ORIGS_FNAME % ('cache', 'nhb')
+        hb_a_or_o_fname = efs_consts.DESTS_FNAME % ('cache', 'hb')
+        nhb_a_or_o_fname = efs_consts.DESTS_FNAME % ('cache', 'nhb')
     else:
         raise ValueError(
             "%s seems to be a valid matrix format, but I don't know what to "

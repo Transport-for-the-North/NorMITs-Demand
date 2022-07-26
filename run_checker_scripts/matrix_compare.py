@@ -22,6 +22,7 @@ import pandas as pd
 from tqdm import tqdm
 
 sys.path.append('..')
+import normits_demand as nd
 from normits_demand.concurrency import multiprocessing
 from normits_demand import constants as consts
 
@@ -97,8 +98,8 @@ def starts_with(s, x):
 def compare_mats_fn(mat_fname):
     report = dict()
 
-    orig = pd.read_csv(os.path.join(ORIGINAL_DIR, mat_fname), index_col=0)
-    comp = pd.read_csv(os.path.join(COMPARE_DIR, mat_fname), index_col=0)
+    orig = nd.read_df(os.path.join(ORIGINAL_DIR, mat_fname), index_col=0)
+    comp = nd.read_df(os.path.join(COMPARE_DIR, mat_fname), index_col=0)
 
     # Check the dimensions
     # noinspection PyTypeChecker
@@ -110,7 +111,7 @@ def compare_mats_fn(mat_fname):
         )
 
     # noinspection PyTypeChecker
-    if all(orig.index != comp.index):
+    if len(orig.index) != len(comp.index) or all(orig.index != comp.index):
         raise ValueError(
             "The index names of matrix %s do not match in the original "
             "and compare directories. Please check manually."
