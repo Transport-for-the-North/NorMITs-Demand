@@ -26,12 +26,16 @@ from normits_demand import converters
 from normits_demand.models import DistributionModel
 from normits_demand.pathing.distribution_model import DistributionModelArgumentBuilder
 
+###########################################
+# LAST RAN ON VERSION "0.5.0" OF CODEBASE #
+###########################################
 
 # ## CONSTANTS ## #
 # Trip end import args
 notem_iteration_name = '9.3'
 notem_export_home = r"I:\NorMITs Demand\NoTEM"
-tram_export_home = ""   # Not needed as not using TRAM # Set locally for now for a local cache
+tram_export_home = ""   # Not needed as not using TRAM
+
 
 # Tour props version
 TOUR_PROPS_VERSION = 'v9.8'

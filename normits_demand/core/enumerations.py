@@ -14,12 +14,7 @@ from __future__ import annotations
 
 # Built-Ins
 import enum
-
-from typing import Any
-from typing import Dict
-from typing import List
-
-# Third Party
+from typing import Any, Dict, List
 
 # Local Imports
 import normits_demand as nd
@@ -270,6 +265,7 @@ class MatrixFormat(IsValidEnum):
 
 class CostUnits(IsValidEnum):
     """Valid cost units for the TLD builder"""
+
     KM = "km"
     KILOMETRES = "km"
     KILOMETERS = "km"
@@ -335,3 +331,62 @@ class CostUnits(IsValidEnum):
     @staticmethod
     def _m_to_miles_factor() -> float:
         return 1 / CostUnits._miles_to_m_factor()
+
+
+@enum.unique
+class AssignmentModel(IsValidEnum):
+    """Network assignment models NorMITs demand is used with."""
+
+    NOHAM = "NoHAM"
+    NORMS = "NoRMS"
+
+    @classmethod
+    def from_str(cls, model_name: str) -> AssignmentModel:
+        """Parse string and return AssignmentModel if valid.
+
+        Parameters
+        ----------
+        model_name : str
+            Name of the assignment model.
+
+        Returns
+        -------
+        AssignmentModel
+            AssignmentModel enum with the given name.
+
+        Raises
+        ------
+        ValueError
+            If no assignment models exist with `model_name`.
+        """
+        name = model_name.strip().lower()
+        for model in cls:
+            if model.value.lower() == name:
+                return model
+
+        raise ValueError(f"'{model_name}' isn't a valid AssignmentModel")
+
+    def get_name(self) -> str:
+        """Return the model name."""
+        return self.value
+
+    def get_zoning_system(self) -> nd.ZoningSystem:
+        """Return the zone system for the assignment model."""
+        return nd.get_zoning_system(self.get_name().lower())
+
+    @classmethod
+    def mode_lookup(cls) -> Dict[AssignmentModel, Mode]:
+        """Dictionary lookup for the assignment model modes."""
+        return {
+            cls.NOHAM: Mode.CAR,
+            cls.NORMS: Mode.TRAIN,
+        }
+
+    def get_mode(self) -> Mode:
+        """Return the assignment model mode."""
+        return self.mode_lookup()[self]
+
+    @classmethod
+    def tfn_models(cls) -> Set[AssignmentModel]:
+        """Transport for the North's assignment models."""
+        return {cls.NOHAM, cls.NORMS}
