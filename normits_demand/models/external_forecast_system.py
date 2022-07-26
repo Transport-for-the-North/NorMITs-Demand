@@ -1346,7 +1346,7 @@ class ExternalForecastSystem:
         }
 
         # Convert HB to OD via tour proportions
-        pa2od.build_od_from_fh_th_factors(
+        pa2od.build_od_from_fh_th_factors_old(
             pa_import=self.exports['aggregated_pa'],
             od_export=self.exports['od'],
             fh_th_factors_dir=self.imports['post_me_fh_th_factors'],

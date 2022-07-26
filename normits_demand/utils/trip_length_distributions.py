@@ -24,27 +24,6 @@ import pandas as pd
 import normits_demand as nd
 
 
-def calculate_average_trip_lengths(min_bounds: np.ndarray,
-                                   max_bounds: np.ndarray,
-                                   trip_lengths: np.ndarray,
-                                   trips: np.ndarray,
-                                   ) -> np.ndarray:
-    ave_trip_lengths = list()
-    for min_val, max_val in zip(min_bounds, max_bounds):
-        band_mask = (trip_lengths >= min_val) & (trip_lengths < max_val)
-        band_distance = (trips * band_mask * trip_lengths).sum()
-        band_trips = (trips * band_mask).sum()
-
-        if band_trips == 0:
-            average_tl = 0
-        else:
-            average_tl = band_distance / band_trips
-
-        ave_trip_lengths.append(average_tl)
-
-    return np.array(ave_trip_lengths)
-
-
 def get_trip_length_distributions(import_dir: nd.PathLike,
                                   segment_params: nd.SegmentParams,
                                   trip_origin: str,
@@ -74,6 +53,7 @@ def get_trip_length_distributions(import_dir: nd.PathLike,
 
     """
     # TODO(BT): Tidy up get_trip_length_distributions
+    # TODO(BT): On last LEGS REMOVE WHEN TMS REMOVED
     # Append name of tlb area
 
     # Index folder
@@ -98,9 +78,9 @@ def get_trip_length_distributions(import_dir: nd.PathLike,
 
     if len(import_files) <= 0:
         raise IOError(
-            "Cannot find any %s trip length bands.\n"
+            "Cannot find any %s, %s trip length bands.\n"
             "import folder: %s"
-            % (trip_origin, import_dir)
+            % (trip_origin,  segment_params, import_dir)
         )
 
     for key, value in segment_params.items():
@@ -152,27 +132,13 @@ def get_trip_length_by_band(band_atl,
     global_atl = get_trip_length(distance, internal_pa)
     total_cells = internal_pa.shape[0] * internal_pa.shape[1]
 
-    # Get min max for each
-    if 'tlb_desc' in list(band_atl):
-        # R built
-        ph = band_atl['tlb_desc'].str.split('-', n=1, expand=True)
-        band_atl['min'] = ph[0].str.replace('(', '')
-        band_atl['max'] = ph[1].str.replace('[', '')
-        band_atl['min'] = band_atl['min'].str.replace('(', '').values
-        band_atl['max'] = band_atl['max'].str.replace(']', '').values
-        del(ph)
-    elif 'lower' in list(band_atl):
-        # Convert bands to km
-        band_atl['min'] = band_atl['lower']*1.61
-        band_atl['max'] = band_atl['upper']*1.61
-
     dist_mat = list()
     bs_mat = list()
 
     # Loop over rows in band_atl
     for index, row in band_atl.iterrows():
         # Get a mask of trips in this distance band
-        distance_mask = (distance >= float(row['min'])) & (distance < float(row['max']))
+        distance_mask = (distance >= float(row['min (km)'])) & (distance < float(row['max (km)']))
         distance_bool = np.where(distance_mask, 1, 0)
 
         # Get subset matrix for distance
@@ -193,12 +159,12 @@ def get_trip_length_by_band(band_atl,
 
         dist_mat.append({
             'tlb_index': index,
-            'ttl': row['ave_km'],
+            'ttl': row['mean (km)'],
             'atl': atl,
         })
         bs_mat.append({
             'tlb_index': index,
-            'tbs': row['band_share'],
+            'tbs': row['share'],
             'bs': band_share,
             'cell count': distance_bool.sum(),
             'cell proportion': distance_bool.sum() / total_cells,

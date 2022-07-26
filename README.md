@@ -1,9 +1,14 @@
 
 ![Transport for the North Logo](docs/TFN_Landscape_Colour_CMYK.png)
 
-----
+<h1 align="center">NorMITs Demand</h1>
 
-# NorMITs Demand
+<p align="center">
+<a href="https://www.gnu.org/licenses/gpl-3.0.en.html"><img alt="License: GNU GPL v3.0" src="https://img.shields.io/badge/license-GPLv3-blueviolet.svg"></a>
+<a href="https://github.com/PyCQA/pylint"><img alt="linting: pylint" src="https://img.shields.io/badge/linting-pylint-yellowgreen"></a>
+<a href="https://google.github.io/styleguide/pyguide.html"><img alt="code format: Google Style Guide" src="https://img.shields.io/badge/code%20style-Google%20Style%20Guide-blue"></a>
+<a href="https://github.com/psf/black"><img alt="code style: black" src="https://img.shields.io/badge/code%20format-black-000000.svg"></a>
+</p>
 
 In short, NorMITs Demand is Transport for the North's (TfN) mainland GB
 demand tools.
@@ -31,6 +36,7 @@ see [support](#sharing) for more information.
    - [Northern Trip End Model](#northern-trip-end-model)
    - [Travel Market Synthesiser](#travel-market-synthesiser)
    - [External Forecast System](#external-forecast-system)
+   - [NTEM Forecasting](#ntem-forecasting)
    - [Elasticity](#elasticity-model)
    - [NorMITs Matrix Tools](#matrix-tools)
 
@@ -289,6 +295,9 @@ in each section.
 ### [External Forecast System](#contents)
 - Working from home adjustments
 - Bespoke zone handling
+
+### [NTEM Forecasting](#contents)
+![NTEM forecasting process flow](docs/op_models/Images/NTEM_forecast.png)
 
 ### [Elasticity Model](#contents)
 - Types of elasticities

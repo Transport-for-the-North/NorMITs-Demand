@@ -25,6 +25,8 @@ PathLike = Union[str, pathlib.Path]
 SegmentAggregationDict = Dict[str, Dict[str, List[Any]]]
 FactorsDict = Dict[str, Dict[str, np.array]]
 
+TimePeriodNestedDict = Dict[int, Dict[int, np.array]]
+
 SegmentParams = Dict[str, Any]
 
 # Core

@@ -16,7 +16,8 @@ import os
 
 
 # Local imports
-from normits_demand import efs_constants as consts
+from normits_demand import constants
+from normits_demand import efs_constants
 
 from normits_demand.utils import general as du
 from normits_demand.utils import output_converter as oc
@@ -35,7 +36,7 @@ def tms_segmentation_tests(model_name,
                            audit_tol=0.001
                            ):
     if model_name == 'norms' or model_name == 'norms_2015':
-        ca_needed = consts.CA_NEEDED
+        ca_needed = efs_constants.CA_NEEDED
         from_pcu = False
     elif model_name == 'noham':
         ca_needed = None
@@ -68,7 +69,7 @@ def tms_segmentation_tests(model_name,
             import_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_noham',
             export_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
             matrix_format='od',
-            year=consts.BASE_YEAR,
+            year=efs_constants.BASE_YEAR,
             m_needed=m_needed,
             user_class=True,
             to_wide=True,
@@ -81,7 +82,7 @@ def tms_segmentation_tests(model_name,
             od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
             od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
             decompile_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params/od_compilation_factors.pickle',
-            year=consts.BASE_YEAR,
+            year=efs_constants.BASE_YEAR,
             audit_tol=audit_tol
         )
 
@@ -95,7 +96,7 @@ def tms_segmentation_tests(model_name,
             tour_proportions_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
             zone_translate_dir=r'Y:\NorMITs Demand\import\zone_translation',
             model_name=model_name,
-            year=consts.BASE_YEAR,
+            year=efs_constants.BASE_YEAR,
             seg_level=seg_level,
             seg_params=seg_params,
             process_count=process_count
@@ -106,7 +107,7 @@ def tms_segmentation_tests(model_name,
             import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\PA Matrices',
             export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params',
             matrix_format='pa',
-            years_needed=[consts.BASE_YEAR],
+            years_needed=[efs_constants.BASE_YEAR],
             m_needed=m_needed,
             ca_needed=ca_needed,
             split_hb_nhb=True
@@ -117,8 +118,8 @@ def tms_segmentation_tests(model_name,
             import_dir=os.path.join(base_path, 'PA Matrices'),
             export_dir=os.path.join(base_path, '24hr PA Matrices'),
             matrix_format='pa',
-            p_needed=consts.ALL_HB_P,
-            year_needed=consts.BASE_YEAR,
+            p_needed=constants.ALL_HB_P,
+            year_needed=efs_constants.BASE_YEAR,
             m_needed=m_needed,
             ca_needed=ca_needed,
         )
@@ -127,19 +128,19 @@ def tms_segmentation_tests(model_name,
             import_dir=os.path.join(base_path, 'PA Matrices'),
             export_dir=os.path.join(base_path, '24hr PA Matrices'),
             matrix_format='pa',
-            year_needed=consts.BASE_YEAR,
+            year_needed=efs_constants.BASE_YEAR,
             m_needed=m_needed,
-            p_needed=consts.ALL_NHB_P,
+            p_needed=constants.ALL_NHB_P,
             ca_needed=ca_needed,
         )
 
-        pa2od.build_od_from_fh_th_factors(
+        pa2od.build_od_from_fh_th_factors_old(
             pa_import=os.path.join(base_path, '24hr PA Matrices'),
             od_export=os.path.join(base_path, 'Test OD Matrices'),
             tour_proportions_dir=r'I:\NorMITs Demand\import\noham\post_me_tour_proportions',
             zone_translate_dir=r'I:\NorMITs Demand\import\zone_translation\one_to_one',
             model_name=model_name,
-            years_needed=[consts.BASE_YEAR],
+            years_needed=[efs_constants.BASE_YEAR],
             seg_level=seg_level,
             seg_params=seg_params,
             process_count=process_count
@@ -156,13 +157,13 @@ def tms_segmentation_tests(model_name,
             import_dir=os.path.join(base_path, 'Test OD Matrices'),
             export_dir=os.path.join(base_path, 'Test Compile Params'),
             matrix_format='od',
-            years_needed=[consts.BASE_YEAR],
+            years_needed=[efs_constants.BASE_YEAR],
             m_needed=m_needed,
             ca_needed=ca_needed,
-            tp_needed=consts.TIME_PERIODS
+            tp_needed=efs_constants.TIME_PERIODS
         )
 
-        compile_params_fname = du.get_compile_params_name('od', str(consts.BASE_YEAR))
+        compile_params_fname = du.get_compile_params_name('od', str(efs_constants.BASE_YEAR))
         compile_param_path = os.path.join(base_path, 'Test Compile Params', compile_params_fname)
 
         du.compile_od(
@@ -193,7 +194,7 @@ def vdm_segmentation_tests(model_name,
                            seg_level='vdm',
                            audit_tol=0.001):
     if model_name == 'norms' or model_name == 'norms_2015':
-        ca_needed = consts.CA_NEEDED
+        ca_needed = efs_constants.CA_NEEDED
         from_pcu = False
     elif model_name == 'noham':
         ca_needed = None
@@ -203,9 +204,10 @@ def vdm_segmentation_tests(model_name,
                          % str(model_name))
 
     decompile_od_bool = False
-    gen_tour_proportions_bool = False
-    create_outputs_for_vdm = True
+    gen_tour_proportions_bool = True
+    create_outputs_for_vdm = False
     pa_back_to_od_check = False
+    file_home = r'E:\post_me_test'
 
     # Validate inputs
     seg_level = du.validate_seg_level(seg_level)
@@ -214,10 +216,10 @@ def vdm_segmentation_tests(model_name,
 
     seg_params = {
         'to_needed': ['hb'],
-        'uc_needed': consts.USER_CLASSES,
+        'uc_needed': efs_constants.USER_CLASSES,
         'm_needed': m_needed,
         'ca_needed': ca_needed,
-        'tp_needed': consts.TIME_PERIODS
+        'tp_needed': efs_constants.TIME_PERIODS
     }
 
     # TODO: Add VDM OD Matrices, VDM PA Matrices, VDM 24hr PA Matrices into
@@ -225,63 +227,63 @@ def vdm_segmentation_tests(model_name,
 
     if decompile_od_bool:
         od2pa.convert_to_efs_matrices(
-            import_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices\from_noham',
-            export_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
+            import_path=os.path.join(file_home, r'Compiled OD Matrices\from_noham'),
+            export_path=os.path.join(file_home, r'Compiled OD Matrices'),
             matrix_format='od',
-            year=consts.BASE_YEAR,
+            year=efs_constants.BASE_YEAR,
             m_needed=m_needed,
             user_class=True,
             to_wide=True,
             wide_col_name=model_name + '_zone_id',
             from_pcu=from_pcu,
-            vehicle_occupancy_import=r'Y:\NorMITs Demand\import'
+            vehicle_occupancy_import=r'I:\NorMITs Demand\import'
         )
 
         od2pa.decompile_od(
-            od_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\Compiled OD Matrices',
-            od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
-            decompile_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Compile Params/od_compilation_factors.pickle',
-            year=consts.BASE_YEAR,
+            od_import=os.path.join(file_home, r'Compiled OD Matrices'),
+            od_export=os.path.join(file_home, r'OD Matrices'),
+            decompile_factors_path=os.path.join(file_home, r'(od_compilation_factors.pickle'),
+            year=efs_constants.BASE_YEAR,
             audit_tol=audit_tol
         )
 
         # Build path for compile params
-        output_fname = du.get_compile_params_name('vdm_od', consts.BASE_YEAR)
+        output_fname = du.get_compile_params_name('vdm_od', efs_constants.BASE_YEAR)
         compile_param_path = os.path.join(r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Test Compile Params',
                                           output_fname)
 
         # Compile to VDM
         mat_p.build_compile_params(
-            import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
-            export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Test Compile Params',
+            import_dir=os.path.join(file_home, r'OD Matrices'),
+            export_dir=os.path.join(file_home, r'Test Compile Params'),
             matrix_format='od',
-            years_needed=[consts.BASE_YEAR],
+            years_needed=[efs_constants.BASE_YEAR],
             m_needed=m_needed,
             ca_needed=ca_needed,
-            tp_needed=consts.TIME_PERIODS,
+            tp_needed=efs_constants.TIME_PERIODS,
             split_hb_nhb=True,
             split_od_from_to=True,
             output_fname=output_fname
         )
 
         mat_p.compile_matrices(
-            mat_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\OD Matrices',
-            mat_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM OD Matrices',
+            mat_import=os.path.join(file_home, r'OD Matrices'),
+            mat_export=os.path.join(file_home, r'VDM OD Matrices'),
             compile_params_path=compile_param_path,
             factors_fname='test.pkl'
         )
 
     if gen_tour_proportions_bool:
-        od_import = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM OD Matrices'
-        pa_export = r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM PA Matrices'
+        od_import = os.path.join(file_home, r'VDM OD Matrices')
+        pa_export = os.path.join(file_home, r'VDM PA Matrices')
 
         mat_p.generate_tour_proportions(
             od_import=od_import,
             pa_export=pa_export,
-            tour_proportions_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
-            zone_translate_dir=r'Y:\NorMITs Demand\import\zone_translation',
+            tour_proportions_export=os.path.join(file_home, r'Tour Proportions'),
+            zone_translate_dir=r'I:\NorMITs Demand\import\zone_translation',
             model_name=model_name,
-            year=consts.BASE_YEAR,
+            year=efs_constants.BASE_YEAR,
             seg_level=seg_level,
             seg_params=seg_params,
             process_count=process_count
@@ -293,7 +295,7 @@ def vdm_segmentation_tests(model_name,
             import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM PA Matrices',
             export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
             matrix_format='pa',
-            years_needed=[consts.BASE_YEAR],
+            years_needed=[efs_constants.BASE_YEAR],
             **seg_params
         )
 
@@ -301,7 +303,7 @@ def vdm_segmentation_tests(model_name,
         oc.noham_vdm_tour_proportions_out(
             input_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
             output_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Noham Tour Proportions',
-            year=consts.BASE_YEAR,
+            year=efs_constants.BASE_YEAR,
             seg_level=seg_level,
             seg_params=seg_params,
         )
@@ -313,7 +315,7 @@ def vdm_segmentation_tests(model_name,
             import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM OD Matrices',
             export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
             matrix_format='od',
-            years_needed=[consts.BASE_YEAR],
+            years_needed=[efs_constants.BASE_YEAR],
             split_factors_path=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Noham Tour Proportions',
             **out_seg_params
         )
@@ -324,17 +326,17 @@ def vdm_segmentation_tests(model_name,
             import_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM PA Matrices',
             export_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
             matrix_format='pa',
-            years_needed=[consts.BASE_YEAR],
+            years_needed=[efs_constants.BASE_YEAR],
             **seg_params
         )
 
-        pa2od.build_od_from_fh_th_factors(
+        pa2od.build_od_from_fh_th_factors_old(
             pa_import=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM 24hr PA Matrices',
             od_export=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Matrices\Post-ME Matrices\VDM Test OD Matrices',
             tour_proportions_dir=r'E:\NorMITs Demand\noham\v2_2-EFS_Output\iter0\Params\Tour Proportions',
             zone_translate_dir=r'Y:\NorMITs Demand\import\zone_translation',
             model_name=model_name,
-            years_needed=[consts.BASE_YEAR],
+            years_needed=[efs_constants.BASE_YEAR],
             seg_level=seg_level,
             seg_params=seg_params,
             process_count=process_count
@@ -360,14 +362,14 @@ def main():
     model_name = 'noham'
     m_needed = [3]
     process_count = 5
-    p_needed = consts.ALL_HB_P
+    p_needed = constants.ALL_HB_P
 
     # Audit as we go
     audit_tol = 0.001
 
     # Control Flow
-    run_tms_seg_tests = True
-    run_tms_vdm_tests = False
+    run_tms_seg_tests = False
+    run_tms_vdm_tests = True
 
     # TODO: Check how OD2PA works with new norms/norms_2015
 
@@ -412,10 +414,10 @@ def rename():
         od_import=r'I:\NorMITs Demand\import\noham\post_me\renamed',
         od_export=r'I:\NorMITs Demand\import\noham\post_me\tms_seg',
         decompile_factors_path=r"I:\NorMITs Demand\import\noham\params\post_me_tms_decompile_factors.pkl",
-        year=consts.BASE_YEAR,
+        year=efs_constants.BASE_YEAR,
     )
 
 
 if __name__ == '__main__':
-    # main()
-    rename()
+    main()
+    # rename()

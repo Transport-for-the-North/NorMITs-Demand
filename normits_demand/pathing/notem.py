@@ -24,6 +24,7 @@ from typing import Tuple
 
 # Local imports
 import normits_demand as nd
+from normits_demand import core as nd_core
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
 
@@ -171,7 +172,7 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
     # HB Attractions
     _hb_attractions_dname = "hb_attractions"
     _hba_trip_weight_fname = "hb_trip_weights_v{version}.csv"
-    _hba_mode_split_fname = "hb_mode_splits_v{version}.csv"
+    _hba_non_resi_fname = "hb_non_resi_data_{year}_v{version}.csv"
 
     # NHB Productions
     _nhb_productions_dname = "nhb_productions"
@@ -183,7 +184,7 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
 
     def __init__(self,
                  import_home: nd.PathLike,
-                 scenario: str,
+                 scenario: nd_core.Scenario,
                  years: List[int],
                  land_use_import_home: nd.PathLike,
                  by_land_use_iter: str,
@@ -203,7 +204,7 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
             NoTEMImportPath._normits_land_use in there.
 
         scenario:
-            The name of the scenario to run for.
+            The scenario to run for.
 
         years:
             List of years to run NoTEM for. Will assume that the smallest
@@ -250,7 +251,7 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
         )
 
     def _generate_land_use_paths(self,
-                                 scenario: str,
+                                 scenario: nd_core.Scenario,
                                  years: List[int],
                                  land_use_import_home: nd.PathLike,
                                  by_land_use_iter: str,
@@ -278,7 +279,7 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
             fy_land_use_iter,
             'outputs',
             'scenarios',
-            scenario,
+            scenario.value,
         )
 
         # Because of the way land use is written, we have this weird legacy
@@ -332,12 +333,15 @@ class NoTEMImportPaths(NoTEMImportPathsBase):
         # Generate the paths
         import_home = os.path.join(self.import_home, self._hb_attractions_dname)
         trip_weights = self._hba_trip_weight_fname.format(version=self.hb_attraction_import_version)
-        mode_split = self._hba_mode_split_fname.format(version=self.hb_attraction_import_version)
+        non_resi = self._hba_non_resi_fname.format(
+            version=self.hb_attraction_import_version, year="{year}"
+        )
 
         return {
             'employment_paths': self.employment_paths,
             'trip_weights_path': os.path.join(import_home, trip_weights),
-            'mode_splits_path': os.path.join(import_home, mode_split),
+            # TODO Remove temporary path replacement for land use data
+            'non_resi_path': os.path.join(import_home, non_resi)
         }
 
     def generate_nhb_production_imports(self) -> Dict[str, nd.PathLike]:
@@ -425,7 +429,7 @@ class NoTEMExportPaths:
 
     def __init__(self,
                  path_years: List[int],
-                 scenario: str,
+                 scenario: nd_core.Scenario,
                  iteration_name: str,
                  export_home: nd.PathLike,
                  ):
@@ -438,7 +442,7 @@ class NoTEMExportPaths:
             A list of the years the models are running for.
 
         scenario:
-            The name of the scenario to run for.
+            The scenario to run for.
 
         iteration_name:
             The name of this iteration of the NoTEM models. Will have 'iter'
@@ -455,7 +459,7 @@ class NoTEMExportPaths:
         self.path_years = path_years
         self.scenario = scenario
         self.iteration_name = du.create_iter_name(iteration_name)
-        self.export_home = os.path.join(export_home, self.iteration_name, self.scenario)
+        self.export_home = os.path.join(export_home, self.iteration_name, self.scenario.value)
         file_ops.create_folder(self.export_home)
 
         # ## BUILD ALL MODEL PATHS ## #

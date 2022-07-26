@@ -38,6 +38,7 @@ from tqdm import tqdm
 import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
+from normits_demand import logging as nd_log
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 from normits_demand.utils import compress
@@ -50,6 +51,9 @@ from normits_demand.concurrency import multiprocessing
 from normits_demand.validation import checks
 
 from normits_demand.matrices.tms_matrix_processing import *
+
+
+LOG = nd_log.get_logger(__name__)
 
 
 def _aggregate(import_dir: str,
@@ -1597,8 +1601,8 @@ def build_norms_compile_params(import_dir: str,
     return out_paths
 
 
-def build_compile_params(import_dir: str,
-                         export_dir: str,
+def build_compile_params(import_dir: nd.PathLike,
+                         export_dir: nd.PathLike,
                          matrix_format: str,
                          years_needed: Iterable[int],
                          m_needed: List[int] = efs_consts.MODES_NEEDED,
@@ -1682,7 +1686,7 @@ def build_compile_params(import_dir: str,
     tp_needed = [None] if tp_needed is None else tp_needed
     to_needed = [None] if not split_hb_nhb else ['hb', 'nhb']
     od_from_to = [None] if not split_od_from_to else ['od_from', 'od_to']
-    all_od_matrices = du.list_files(import_dir)
+    all_od_matrices = du.list_files(import_dir, consts.VALID_MAT_FTYPES)
     out_paths = list()
 
     if output_headers is None:
@@ -1695,20 +1699,20 @@ def build_compile_params(import_dir: str,
                 # Init
                 compile_mats = all_od_matrices.copy()
 
-                # include _ before and after to avoid clashes
+                # include _ or . before and after to avoid clashes
                 ps = ['_p' + str(x) + '_' for x in purposes]
-                mode_str = '_m' + str(mode) + '_'
-                year_str = '_yr' + str(year) + '_'
+                mode_strs = ['_m' + str(mode) + x for x in ['_', '.']]
+                year_strs = ['_yr' + str(year) + x for x in ['_', '.']]
 
                 # Narrow down to matrices for this compilation
-                compile_mats = [x for x in compile_mats if year_str in x]
+                compile_mats = [x for x in compile_mats if du.is_in_string(year_strs, x)]
                 compile_mats = [x for x in compile_mats if du.is_in_string(ps, x)]
-                compile_mats = [x for x in compile_mats if mode_str in x]
+                compile_mats = [x for x in compile_mats if du.is_in_string(mode_strs, x)]
 
                 # Narrow down further if we're using ca
                 if ca is not None:
-                    ca_str = '_ca' + str(ca) + '_'
-                    compile_mats = [x for x in compile_mats if ca_str in x]
+                    ca_strs = [f'_ca{ca}{x}' for x in "_."]
+                    compile_mats = [x for x in compile_mats if du.is_in_string(ca_strs, x)]
 
                 # Narrow down again if we're using tp
                 if tp is not None:
@@ -2112,7 +2116,11 @@ def _nhb_tp_split_via_factors_internal(import_dir,
 
     # Apply the splitting factors and write out
     for tp, factors in tp_dict.items():
-        tp_mat = mat_24hr * factors
+        tp_mat = pd.DataFrame(
+            data=mat_24hr.values * factors.values,
+            columns=mat_24hr.columns,
+            index=mat_24hr.index,
+        )
 
         # Figure out the output_fname
         in_params = du.fname_to_calib_params(mat_24hr_fname)
@@ -2365,7 +2373,7 @@ def _compile_matrices_internal(mat_import,
     for mat_name in input_mat_names:
         in_path = os.path.join(mat_import, mat_name)
         df = file_ops.read_df(in_path, index_col=0)
-        df.columns = df.columns.astype(int)
+        df.columns = df.columns.astype(df.index.dtype)
         in_mats.append(df)
 
     # Combine all matrices together
@@ -2396,14 +2404,15 @@ def _compile_matrices_internal(mat_import,
     return decompile_factors
 
 
-def compile_matrices(mat_import: str,
-                     mat_export: str,
-                     compile_params_path: str,
+def compile_matrices(mat_import: nd.PathLike,
+                     mat_export: nd.PathLike,
+                     compile_params_path: nd.PathLike,
                      factor_pickle_path: str = None,
                      round_dp: int = consts.DEFAULT_ROUNDING,
                      factors_fname: str = 'od_compilation_factors.pickle',
                      avoid_zero_splits: bool = False,
                      process_count: int = consts.PROCESS_COUNT,
+                     overwrite: bool = True,
                      ) -> nd.PathLike:
     """
     Compiles the matrices in mat_import, writes to mat_export
@@ -2437,6 +2446,11 @@ def compile_matrices(mat_import: str,
         factors. Where there would have been zero splits, this will be
         replaced with even splits across inputs.
 
+    overwrite: bool, default True
+        If False, checks if any of the compiled matrices already exist and
+        doesn't recreate them. If all output matrices already exist then the
+        function will return early.
+
     Returns
     -------
     None
@@ -2460,6 +2474,28 @@ def compile_matrices(mat_import: str,
     # Init
     compile_params = pd.read_csv(compile_params_path)
     compiled_names = compile_params['compilation'].unique()
+
+    if not overwrite:
+        # Don't bother recreating any outputs that already exist
+        export_folder = pathlib.Path(mat_export)
+        exists = []
+        for nm in compiled_names:
+            if (export_folder / nm).is_file():
+                exists.append(nm)
+        del export_folder
+
+        compiled_names = [i for i in compiled_names if i not in exists]
+        if compiled_names == []:
+            LOG.info("All compiled matrices already exist and aren't being overwritten")
+            return
+
+        if exists != []:
+            LOG.info(
+                "%s compiled matrices already exist and aren't being overwritten: %s",
+                len(exists),
+                ", ".join(exists),
+            )
+        del exists
 
     # Need to get the size of the output matrices
     check_mat_name = compile_params.loc[0, 'distribution_name']
@@ -2628,7 +2664,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
     matrices being the second 4.
     If neither internal or external matrices is set, the first 4 returns are
     the full matrices, and the second 4 will be empty.
-    If only the external zones is set the first 4 returns will be empty, and
+    If only the internal zones is set the first 4 returns will be empty, and
     the second 4 will be the external matrices.
 
     Parameters
@@ -3420,8 +3456,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
 
 def _recombine_internal_external_internal(in_paths,
                                           output_path,
-                                          force_csv_out,
-                                          force_compress_out,
+                                          output_suffix,
                                           ) -> None:
     # Read in the matrices and compile
     partial_mats = [file_ops.read_df(x, index_col=0, find_similar=True) for x in in_paths]
@@ -3434,16 +3469,117 @@ def _recombine_internal_external_internal(in_paths,
         columns=partial_mats[0].columns,
     )
 
-    if force_csv_out:
-        output_path = file_ops.cast_to_pathlib_path(output_path)
-        output_path = output_path.parent / (output_path.stem + '.csv')
-
-    if force_compress_out:
-        output_path = file_ops.cast_to_pathlib_path(output_path)
-        output_path = output_path.parent / (output_path.stem + consts.COMPRESSION_SUFFIX)
+    # Sort out the output suffix
+    base_path = file_ops.remove_suffixes(pathlib.Path(output_path))
+    output_path = base_path.with_suffix(output_suffix)
 
     # Write the complete matrix to disk
     file_ops.write_df(full_mat, output_path)
+    
+    
+def combine_partial_matrices(import_dirs: List[nd.PathLike],
+                             export_dir: List[nd.PathLike],
+                             segmentation: nd.SegmentationLevel,
+                             import_suffixes: List[str] = None,
+                             csv_out: bool = False,
+                             process_count: int = consts.PROCESS_COUNT,
+                             pbar_kwargs: Dict[str, Any] = None,
+                             **file_kwargs,
+                             ) -> None:
+    """Combines the matrices in import_dirs and writes out to export_dir
+
+    Parameters
+    ----------
+    import_dirs:
+        A list of the directories to read files from to combine
+
+    export_dir:
+        The directory to output the combined matrices to
+
+    segmentation:
+        The segmentation to use to generate the filenames
+
+    import_suffixes:
+        A list of the suffixes for each directory in import_dirs. Should be
+        a parallel list to import_dirs. Any directories without a suffix
+        should be set to None.
+
+    csv_out:
+        Whether to write the combined matrices out as csvs. If False, files
+        will be written out in compressed format.
+
+    process_count:
+        The number of processes to use when combining matrices.
+
+    pbar_kwargs:
+        A dictionary of keyword arguments to pass into tqdm.tqdm to make a 
+        progress bar. If left as None, not progress bar will be shown.
+    
+    file_kwargs:
+        Any additional arguments to pass to segmentation.generate_file_name().
+    """
+    # Init
+    if import_suffixes is None:
+        import_suffixes = [None] * len(import_dirs)
+
+    # Check paths exist
+    if not os.path.exists(export_dir):
+        raise FileExistsError(
+            "No directory exists for exporting files. Looking here:\n%s"
+            % export_dir
+        )
+
+    for in_dir in import_dirs:
+        if not os.path.exists(in_dir):
+            raise FileExistsError(
+                "One of the import directories does not exist. Looking here:\n%s"
+                % in_dir
+            )
+
+    # ## BUILD DICTIONARY OF MATRICES TO COMBINE ## #
+    combine_dict = dict()
+    for segment_params in segmentation:
+        # Get the output path
+        out_fname = segmentation.generate_file_name(
+            segment_params=segment_params,
+            compressed=True,
+            **file_kwargs,
+        )
+        out_path = os.path.join(export_dir, out_fname)
+
+        # Generate the input path
+        in_paths = list()
+        for in_dir, suffix in zip(import_dirs, import_suffixes):
+            fname = segmentation.generate_file_name(
+                segment_params=segment_params,
+                suffix=suffix,
+                **file_kwargs,
+            )
+            in_paths.append(os.path.join(in_dir, fname))
+
+        combine_dict[out_path] = in_paths
+
+    if csv_out:
+        output_suffix = ".csv"
+    else:
+        output_suffix = ".csv.bz2"
+
+    # ## COMPILE THE MATRICES ## #
+    kwarg_list = list()
+    for output_path, in_paths in combine_dict.items():
+        kwarg_list.append({
+            'output_path': output_path,
+            'in_paths': in_paths,
+            'output_suffix': output_suffix,
+        })
+
+    multiprocessing.multiprocess(
+        fn=_recombine_internal_external_internal,
+        kwargs=kwarg_list,
+        process_count=process_count,
+        # process_count=0,
+        pbar_kwargs=pbar_kwargs,
+    )
 
 
 def recombine_internal_external(internal_import: nd.PathLike,

@@ -48,7 +48,7 @@ def main():
     # Compiling matrices
     run_pa_to_od = False
     run_compile_mats = True
-    run_decompile_post_me = False
+    run_decompile_post_me = True
 
     # Controls matrix conversion
     # output_years = efs_consts.ALL_YEARS

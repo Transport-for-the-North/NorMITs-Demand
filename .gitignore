@@ -1,3 +1,7 @@
+# ## PACKAGE FILES ## #
+*config.py
+
+# ## PROJECT FILES ## #
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -133,3 +137,6 @@ dmypy.json
 
 # Don't bring this with us - it's massive
 docs/systra_splitting_factors/Params
+
+# VS Code workspace settings
+.vscode

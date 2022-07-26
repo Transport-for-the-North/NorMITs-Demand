@@ -1,7 +1,7 @@
 # Release Notes
 
 The NorMITs Demand codebase follows [Semantic Versioning](https://semver.org/); the convention
-for most software products. In Summary this means the version numbers should be read in the 
+for most software products. In Summary this means the version numbers should be read in the
 following way.
 
 Given a version number MAJOR.MINOR.PATCH (e.g. 1.0.0), increment the:
@@ -19,16 +19,24 @@ there.
 
 Below, a brief summary of patches made since the previous version can be found.
 
-### V0.4.7
-- TramModel
-  - takes further segmentation from NoTEM Bus Trip Ends
-  - Fixed an issue so the attractions are balanced to the productions 
-- TMS Updates
-  - Optional read in of TramModel trip ends into TMS
-  - Gravity Model Updates
-    - Updated to read in initial cost params based on cost function names
-      by default
-    - Updated the furness to calculate Root Mean Squared Error weighted by the
-      number of zones
-- Reports
-  - Added code to automatically generate a report pack at TfN Sectors
+### V0.5.1
+- Tools
+  - TLD Tool
+    - Built a class to handle the `CostDistributions`. Will be used internally to integrate 
+      TLDs more efficiently.
+    - Output graphs and a log of the run alongside the generated TLD csv
+    - Built a front end to generate all the TLDs needed for the Distribution Model
+    - Integrated `SegmentationLevels` into TLD tool
+  - Core
+    - Updated how `SegmentationLevel` handles name generation. Segment types are now used
+      to cast the outputs and NaN values are ignored to add support for 
+      non-complete segmentations.
+  - Traveller Segment Tool
+    - Major updates carried out to bring this in line with NoTEM and DiMo
+      processes
+    - Can now read in NoTEM trip ends
+    - SOC, NS, Gender segment flexible - further work needed still
+    - Minor bug fixes worked out
+- Bug Fixes
+  - Fixed a bug where segment parts were being added twice while generating segment names
+  - 

@@ -19,6 +19,7 @@ from typing import List
 
 # Local Imports
 import normits_demand as nd
+from normits_demand import core as nd_core
 
 from normits_demand.models.notem import HBProductionModel
 from normits_demand.models.notem import NHBProductionModel
@@ -35,11 +36,12 @@ class NoTEM(NoTEMExportPaths):
 
     def __init__(self,
                  years: List[int],
-                 scenario: str,
+                 scenario: nd_core.Scenario,
                  iteration_name: str,
                  import_builder: nd.pathing.NoTEMImportPathsBase,
                  export_home: nd.PathLike,
-                 attraction_balance_zoning: nd.core.zoning.ZoningSystem = None,
+                 hb_attraction_balance_zoning: nd.BalancingZones = None,
+                 nhb_attraction_balance_zoning: nd.BalancingZones = None,
                  ):
         """
         Assigns the attributes needed for NoTEM model.
@@ -56,7 +58,7 @@ class NoTEM(NoTEMExportPaths):
             set to '3i' the iteration folder would be called 'iter3i'.
 
         scenario:
-            The name of the scenario to run for.
+            The scenario to run for.
 
         import_builder:
             A subclass of nd.pathing.NoTEMImportPathsBase. This class will
@@ -70,11 +72,17 @@ class NoTEM(NoTEMExportPaths):
             nd.pathing.NoTEMExportPaths for more info on how these paths
             will be built.
 
-        attraction_balance_zoning:
-            The zoning system to balance the attractions to the productions at.
-            A translation must exist between this and the running zoning
-            system, which is MSOA by default. If left as None, then no spatial
-            balance is done, only a segmental balance.
+        hb_attraction_balance_zoning:
+            The zoning systems to balance the home-based attractions to the productions
+            at, for each segment of the attractions segmentation. A translation must exist
+            between this and the running zoning system, which is MSOA by default.
+            If left as None, then no spatial balance is done, only a segmental balance.
+
+        nhb_attraction_balance_zoning:
+            The zoning systems to balance the non-home-based attractions to the productions
+            at, for each segment of the attractions segmentation. A translation must exist
+            between this and the running zoning system, which is MSOA by default.
+            If left as None, then no spatial balance is done, only a segmental balance.
         """
         # Validate inputs
         if not isinstance(import_builder, nd.pathing.NoTEMImportPathsBase):
@@ -86,9 +94,9 @@ class NoTEM(NoTEMExportPaths):
 
         # Assign
         self.years = years
-        self.scenario = scenario
         self.import_builder = import_builder
-        self.attraction_balance_zoning = attraction_balance_zoning
+        self.hb_attraction_balance_zoning = hb_attraction_balance_zoning
+        self.nhb_attraction_balance_zoning = nhb_attraction_balance_zoning
 
         # Generate the export paths
         super().__init__(
@@ -117,7 +125,7 @@ class NoTEM(NoTEMExportPaths):
         out_lines = [
             'Code Version: %s' % str(nd.__version__),
             'NoTEM Iteration: %s' % str(self.iteration_name),
-            'Scenario: %s' % str(self.scenario),
+            'Scenario: %s' % str(self.scenario.value),
             '',
             '### HB Productions ###',
             'import_files: %s' % self.import_builder.generate_hb_production_imports(),
@@ -266,13 +274,12 @@ class NoTEM(NoTEMExportPaths):
             production_balance_paths=control_production_paths,
             constraint_paths=None,
             export_home=self.hb_attraction.export_paths.home,
-            balance_zoning=self.attraction_balance_zoning,
+            balance_zoning=self.hb_attraction_balance_zoning,
         )
 
         self._logger.info("Running the Home-Based Attraction Model")
         hb_attr.run(
             export_pure_attractions=False,
-            export_fully_segmented=False,
             export_notem_segmentation=True,
             export_reports=True,
         )
@@ -327,7 +334,7 @@ class NoTEM(NoTEMExportPaths):
             nhb_production_paths=nhb_production_paths,
             export_home=self.nhb_attraction.export_paths.home,
             constraint_paths=None,
-            balance_zoning=self.attraction_balance_zoning,
+            balance_zoning=self.nhb_attraction_balance_zoning,
         )
 
         self._logger.info("Running the Non-Home-Based Attraction Model")

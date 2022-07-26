@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on: Fri September 11 12:46:25 2020
+Created on: 11/09/2020
 Updated on:
 
 Original author: Ben Taylor
@@ -11,32 +11,44 @@ File purpose:
 Collection of functions for translating PA matrices into OD matrices.
 TODO: After integrations with TMS, combine with pa_to_od.py
   to create a general pa_to_od.py file
-
 """
+from __future__ import annotations
 
-import numpy as np
-import pandas as pd
+# Built-Ins
+import pathlib
+import operator
+import functools
 
 from typing import Any
 from typing import List
 from typing import Dict
-from itertools import product
+from typing import Tuple
 
-from tqdm import tqdm
+# Third Party
+import numpy as np
+import pandas as pd
 
-# self imports
+# Local Imports
 import normits_demand as nd
+from normits_demand import core as nd_core
+from normits_demand import logging as nd_log
 
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
-from normits_demand.utils import general as du
-from normits_demand.utils import file_ops
 from normits_demand.concurrency import multiprocessing
+from normits_demand.concurrency import multithreading
 
 from normits_demand.matrices import utils as mat_utils
+from normits_demand.utils import general as du
+from normits_demand.utils import file_ops
+from normits_demand.utils import math_utils
 
 # Can call tms pa_to_od.py functions from here
 from normits_demand.matrices.tms_pa_to_od import *
+
+
+LOG = nd_log.get_logger(__name__)
+
 
 def trip_end_pa_to_od(pa_productions,
                       phi_lookup_folder: str,
@@ -813,24 +825,97 @@ def maybe_get_aggregated_tour_proportions(orig: int,
     return od_tour_props
 
 
-def to_od_via_tour_props(n_od_vals,
-                         pa_24,
-                         fh_factor_dict,
-                         th_factor_dict,
-                         tp_needed,
-                         ):
-    # TODO: Write to_od_via_tour_props() docs
+def to_od_via_fh_th_factors(
+    pa_24: pd.DataFrame,
+    fh_factor_dict: Dict[int, np.ndarray],
+    th_factor_dict: Dict[int, np.ndarray],
+    tp_needed: List[int] = None,
+    validate_tidality: bool = True,
+) -> Tuple[Dict[int, pd.DataFrame], Dict[int, pd.DataFrame]]:
+    """Convert 24hr PA matrix into tp split OD-to and OD-from
+
+    OD_from is simply the 24hr PA matrix split into time periods (which is
+    the `fh_factors_dict`). OD_to is the transpose of PA 24hr which has been
+    split into the `th_factor_dict` time periods.
+
+    NOTE that the produced od_to matrices will be calculated with the
+    following calculation:
+    `(pa_24 * th_factor_dict[tp]).T`
+
+    Parameters
+    ----------
+    pa_24:
+        A pandas DataFrame containing the 24hr Demand. The index and the
+        columns will be retained and copied into the produced od_from and
+        od_to matrices. This means they should likely be the model zoning.
+
+    fh_factor_dict:
+        A Dictionary of {tp: fh_factor} values. Where `tp` is an integer time
+        period that should be one of `tp_needed`, and `fh_factor` is a
+        numpy array of shape `pa_24.shape` factors to generate the time
+        period split od_from matrices.
+
+    th_factor_dict:
+        A Dictionary of {tp: th_factor} values. Where `tp` is an integer time
+        period that should be one of `tp_needed`, and `th_factor` is a
+        numpy array of shape `pa_24.shape` factors to generate the time
+        period split od_to matrices.
+        NOTE that after multiplication, the result will be transposed to
+        generate the true od_to matrices, i.e.
+        `(pa_24 * th_factor_dict[tp]).T`
+    
+    tp_needed:
+        The time periods to be expected in the output. If left as None, the
+        `fh_factor_dict` and `th_factor_dict` provided are the source of truth
+        for which tps should be output.
+
+    validate_tidality:
+        Whether to validate the tidality of the generated from-home and
+        to-home matrices. That is, every trip which leaves a cell (from-home)
+        must also return back to that cell (to-home) over all the time periods.
+        We don't need to worry about non-home-based trips here as they're
+        not used in this conversion.
+
+    Returns
+    -------
+    od_from_matrices:
+        A dictionary in the same format as fh_factor_dict, but the values
+        will be pandas DataFrames of each from home matrix at a time period.
+
+    od_to_matrices:
+        A dictionary in the same format as th_factor_dict, but the values
+        will be pandas DataFrames of each from home matrix at a time period.
+
+    Raises
+    ------
+    NormitsDemandError:
+        If any of the following three checks fail:
+        - The total of the from-home and the to-home matrices are not similar
+          enough
+        - The total of the from-home and the to-home matrices do not sum
+          together the total twice the sum of the given `pa_24` matrix
+        - If `validate_tidality` is `True` and the check described above does
+          not pass.
+    """
+    # Make sure we have a square matrix
+    if len(pa_24.index) != len(pa_24.columns):
+        raise ValueError(
+            "Expected pa24 to be a square matrix where the index and columns "
+            "are the zone numbers. Instead, got a matrix of shape "
+            f"'{pa_24.shape}'"
+        )
+
     # Make sure the given factors are the correct shape
     mat_utils.check_fh_th_factors(
         factor_dict=fh_factor_dict,
         tp_needed=tp_needed,
-        n_row_col=n_od_vals,
+        n_row_col=len(pa_24.index),
     )
 
     mat_utils.check_fh_th_factors(
         factor_dict=th_factor_dict,
         tp_needed=tp_needed,
-        n_row_col=n_od_vals,
+        n_row_col=len(pa_24.index),
     )
 
     # Create the from home OD matrices
@@ -841,7 +926,7 @@ def to_od_via_tour_props(n_od_vals,
     # Create the to home OD matrices
     th_mats = dict.fromkeys(th_factor_dict.keys())
     for tp, factor_mat in th_factor_dict.items():
-        th_mats[tp] = pa_24 * factor_mat
+        th_mats[tp] = (pa_24 * factor_mat).T
 
     # Validate return matrix totals
     fh_total = np.sum([x.values.sum() for x in fh_mats.values()])
@@ -849,24 +934,42 @@ def to_od_via_tour_props(n_od_vals,
     od_total = fh_total + th_total
 
     # From home and to home should be the same total
-    if not du.is_almost_equal(fh_total, th_total, significant=0):
+    if not math_utils.is_almost_equal(fh_total, th_total):
         raise nd.NormitsDemandError(
-            "From-home and to-home OD matrix totals are not the same."
+            "From-home and to-home OD matrix totals are not the same. "
             "Are the given splitting factors correct?\n"
-            "from-home total: %.2f\n"
-            "to-home total: %.2f\n"
-            % (float(fh_total), float(th_total))
+            f"from-home total: {float(fh_total):.2f}\n"
+            f"to-home total: {float(th_total):.2f}\n"
         )
 
     # OD total should be double the input PA
-    if not du.is_almost_equal(od_total, pa_24.values.sum() * 2, significant=-1):
+    if not math_utils.is_almost_equal(od_total, pa_24.values.sum() * 2):
         raise nd.NormitsDemandError(
             "OD Matrices total is not 2 * the input PA input."
             "Are the given splitting factors correct?"
-            "2 * PA total total: %.2f\n"
-            "OD total: %.2f\n"
-            % (float(pa_24.values.sum() * 2), float(od_total))
+            f"2 * PA total total: {float(pa_24.values.sum() * 2):.2f}\n"
+            f"OD total: {float(od_total):.2f}\n"
         )
+
+    # Check the tidality. I.E. Everyone who leaves a place, must return there
+    # over the course of all the time periods.
+    fh_24 = functools.reduce(operator.add, fh_mats.values())
+    th_24 = functools.reduce(operator.add, th_mats.values())
+    total_error = (fh_24.values - th_24.values.T).sum()
+
+    # Write out the message depending on the errors
+    if not total_error < 1:
+        msg = (
+            "The generated od-to and od-from matrices did not pass the "
+            "tidality check. Please perform a manual check. Perhaps the "
+            "given splitting factors are incorrect.\n"
+            f"Total Error: {total_error:.4f}"
+        )
+
+        if not validate_tidality:
+            LOG.warning(msg)
+        else:
+            raise nd.NormitsDemandError(msg)
 
     return fh_mats, th_mats
 
@@ -903,10 +1006,6 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
     pa_24.columns = pa_24.columns.astype(int)
     pa_24.index = pa_24.index.astype(int)
 
-    # Get a list of the zone names for iterating - make sure integers
-    orig_vals = [int(x) for x in pa_24.index.values]
-    dest_vals = [int(x) for x in list(pa_24)]
-
     # ## Load the from home and to home factors - always generated on base year ## #
     # Load the model zone tour proportions
     fh_factor_fname = du.get_dist_name(
@@ -924,8 +1023,7 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
     th_factor_fname = fh_factor_fname.replace('fh_factors', 'th_factors')
     th_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, th_factor_fname))
 
-    fh_mats, th_mats = to_od_via_tour_props(
-        n_od_vals=len(orig_vals),
+    fh_mats, th_mats = to_od_via_fh_th_factors(
         pa_24=pa_24,
         fh_factor_dict=fh_factor_dict,
         th_factor_dict=th_factor_dict,
@@ -961,7 +1059,7 @@ def _tms_od_from_fh_th_factors_internal(pa_import,
             compressed=True
         )
         # Need to transpose to_home before writing
-        file_ops.write_df(mat.T, os.path.join(od_export, dist_name))
+        file_ops.write_df(mat, os.path.join(od_export, dist_name))
 
 
 def _tms_od_from_fh_th_factors(pa_import: str,
@@ -1105,10 +1203,6 @@ def _vdm_od_from_fh_th_factors_internal(pa_import,
     pa_24.columns = pa_24.columns.astype(int)
     pa_24.index = pa_24.index.astype(int)
 
-    # Get a list of the zone names for iterating - make sure integers
-    orig_vals = [int(x) for x in pa_24.index.values]
-    dest_vals = [int(x) for x in list(pa_24)]
-
     # ## Load the from home and to home factors - always generated on base year ## #
     # Load the model zone tour proportions
     fh_factor_fname = du.get_vdm_dist_name(
@@ -1125,8 +1219,7 @@ def _vdm_od_from_fh_th_factors_internal(pa_import,
     th_factor_fname = fh_factor_fname.replace('fh_factors', 'th_factors')
     th_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, th_factor_fname))
 
-    fh_mats, th_mats = to_od_via_tour_props(
-        n_od_vals=len(orig_vals),
+    fh_mats, th_mats = to_od_via_fh_th_factors(
         pa_24=pa_24,
         fh_factor_dict=fh_factor_dict,
         th_factor_dict=th_factor_dict,
@@ -1162,7 +1255,7 @@ def _vdm_od_from_fh_th_factors_internal(pa_import,
             csv=True
         )
         # Need to transpose to_home before writing
-        mat.T.to_csv(os.path.join(od_export, dist_name))
+        mat.to_csv(os.path.join(od_export, dist_name))
 
 
 def _vdm_od_from_fh_th_factors(pa_import: str,
@@ -1225,18 +1318,190 @@ def _vdm_od_from_fh_th_factors(pa_import: str,
         # Repeat loop for every wanted year
 
 
-def build_od_from_fh_th_factors(pa_import: str,
-                                od_export: str,
-                                fh_th_factors_dir: str,
-                                seg_level: str,
-                                seg_params: Dict[str, Any],
-                                base_year: str = efs_consts.BASE_YEAR,
-                                years_needed: List[int] = efs_consts.FUTURE_YEARS,
-                                pa_matrix_desc: str = 'pa',
-                                od_to_matrix_desc: str = 'od_to',
-                                od_from_matrix_desc: str = 'od_from',
-                                process_count: int = consts.PROCESS_COUNT,
-                                ) -> None:
+def _build_od_from_fh_th_factors_internal(
+    segmentation: nd_core.SegmentationLevel,
+    segment_params: Dict[str, Any],
+    pa_24_path: pathlib.Path,
+    fh_factor_path: pathlib.Path,
+    th_factor_path: pathlib.Path,
+    od_export_dir: pathlib.Path,
+    template_od_from_name: str,
+    template_od_to_name: str,
+) -> None:
+    """Internal multiprocessed function of build_od_from_fh_th_factors"""
+    # Convert into od-from and od-to
+    od_from, od_to = to_od_via_fh_th_factors(
+        pa_24=file_ops.read_df(pa_24_path, index_col=0),
+        fh_factor_dict=file_ops.read_pickle(fh_factor_path),
+        th_factor_dict=file_ops.read_pickle(th_factor_path),
+    )
+
+    # Write out to disk
+    iterator = [
+        (od_from, template_od_from_name),
+        (od_to, template_od_to_name),
+    ]
+
+    writing_threads = list()
+    for mat_dict, template in iterator:
+        for tp, mat in mat_dict.items():
+            mat = mat.round(8)
+            segment_params.update({'tp': tp})
+            segment_str = segmentation.generate_template_segment_str(
+                naming_order=segmentation.naming_order + ['tp'],
+                segment_params=segment_params,
+            )
+            fname = template.format(segment_params=segment_str)
+            thread = file_ops.write_df_threaded(mat, od_export_dir / fname)
+            writing_threads.append(thread)
+
+    # Wait for all the threads to finish
+    multithreading.wait_for_thread_return_or_error(writing_threads)
+
+
+def build_od_from_fh_th_factors(
+    pa_import_dir: pathlib.Path,
+    od_export_dir: pathlib.Path,
+    factor_dir: pathlib.Path,
+    segmentation: nd_core.SegmentationLevel,
+    template_pa_name: str,
+    template_od_from_name: str,
+    template_od_to_name: str,
+    template_fh_factor_name: str,
+    template_th_factor_name: str,
+    process_count: int = consts.PROCESS_COUNT,
+) -> None:
+    """Generate and write out the od_from and od_to matrices
+
+    Loops through all the segments in `segmentation`, converting the pa
+    matrices into od-to and od-from matrices. The od-from matrices are simply
+    `od_from_in_tp = pa_24 * fh_factors[tp]`
+
+    and the to-home matrices are:
+    `od_to_in_tp = (pa_24 * th_factors[tp]).T`
+
+    Parameters
+    ----------
+    pa_import_dir
+        The directory containing the pa matrices to import and convert to
+        OD. The matrix names in this folder will be generated from
+        `template_pa_name`.
+
+    od_export_dir:
+        The directory to write out the generated od matrices. The matrix names
+        for writing out will be generated from `template_od_from_name`
+        and `template_od_to_name`.
+
+    factor_dir:
+        The directory containing all of the from-home and to-home factors to
+        use to generate the od-to and od-from matrices. This directory should
+        contain and individual pickle file from each segmentation. Each file
+        should then contain a dictionary where the keys are the time periods
+        for each factor, and the values are matrices of the same shape as the
+        24hr PA matrix.
+
+    segmentation:
+        The segmentation to iterate over and to use to generate the
+        segment_params to use with the template names. This segmentation
+        defines which matrices in `pa_import_dir` will be used.
+
+    template_pa_name:
+        A template string to use as the filename for all of the PA matrices
+        in `pa_import_dir`. This string should contain `"{segment_params}"` so
+        it can be formatted with
+        `template_pa_name.format(segment_params=segment_params)`.
+
+    template_od_from_name:
+        A template string to use as the filename for all of the OD from
+        matrices that will be written out to `od_export_dir`. This string
+        should contain `"{segment_params}"` so it can be formatted with
+        `template_od_from_name.format(segment_params=segment_params)`.
+
+    template_od_to_name:
+        A template string to use as the filename for all of the OD to
+        matrices that will be written out to `od_export_dir`. This string
+        should contain `"{segment_params}"` so it can be formatted with
+        `template_od_to_name.format(segment_params=segment_params)`.
+
+    template_fh_factor_name:
+        A template string to use as the filename for all of the from-home
+        factor pickle files in `factor_dir`.This string should contain
+        `"{segment_params}"` so it can be formatted with
+        `template_fh_factor_name.format(segment_params=segment_params)`.
+
+    template_th_factor_name:
+        A template string to use as the filename for all of the to-home
+        factor pickle files in `factor_dir`.This string should contain
+        `"{segment_params}"` so it can be formatted with
+        `template_th_factor_name.format(segment_params=segment_params)`.
+
+    process_count:
+        The number of processes to use when converting the matrices.
+        Passed straight to the multiprocessing function.
+        See `normits_demand.concurrency.multiprocessing.multiprocess()`
+        to see how this parameter is used.
+
+    Returns
+    -------
+    None
+    """
+    # Build a dictionary of the constant arguments across processes
+    unchanging_kwargs = {
+        "segmentation": segmentation,
+        "od_export_dir": od_export_dir,
+        "template_od_from_name": template_od_from_name,
+        "template_od_to_name": template_od_to_name,
+    }
+
+    # Build the changing kwargs
+    kwarg_list = list()
+    for segment_params in segmentation:
+
+        # Build the needed file paths
+        partial_fn_call = functools.partial(
+            segmentation.generate_file_name_from_template,
+            segment_params=segment_params,
+        )
+
+        fname = partial_fn_call(template=template_pa_name)
+        pa_24_path = pa_import_dir / fname
+
+        fname = partial_fn_call(template=template_fh_factor_name)
+        fh_factor_path = factor_dir / fname
+
+        fname = partial_fn_call(template=template_th_factor_name)
+        th_factor_path = factor_dir / fname
+
+        kwargs = {
+            "segment_params": segment_params,
+            "pa_24_path": pa_24_path,
+            "fh_factor_path": fh_factor_path,
+            "th_factor_path": th_factor_path,
+        }
+        kwargs.update(unchanging_kwargs.copy())
+        kwarg_list.append(kwargs)
+
+    # Call the multiprocessing
+    multiprocessing.multiprocess(
+        fn=_build_od_from_fh_th_factors_internal,
+        kwargs=kwarg_list,
+        process_count=process_count,
+    )
+
+
+def build_od_from_fh_th_factors_old(
+    pa_import: str,
+    od_export: str,
+    fh_th_factors_dir: str,
+    seg_level: str,
+    seg_params: Dict[str, Any],
+    base_year: str = efs_consts.BASE_YEAR,
+    years_needed: List[int] = efs_consts.FUTURE_YEARS,
+    pa_matrix_desc: str = 'pa',
+    od_to_matrix_desc: str = 'od_to',
+    od_from_matrix_desc: str = 'od_from',
+    process_count: int = consts.PROCESS_COUNT,
+) -> None:
     """Builds OD Matrices from PA using the factors in fh_th_factors_dir
 
     Builds OD matrices based on the base year tour proportions
@@ -1299,6 +1564,11 @@ def build_od_from_fh_th_factors(pa_import: str,
     -------
     None
     """
+    LOG.info(
+        "pa_to_od.build_od_from_fh_th_factors_old() is deprecated and will be "
+        "removed in a future update. Please move all functionality over to "
+        "using pa_to_od.build_od_from_fh_th_factors() instead."
+    )
     # Init
     seg_level = du.validate_seg_level(seg_level)
 
