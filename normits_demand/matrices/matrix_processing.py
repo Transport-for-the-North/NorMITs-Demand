@@ -38,6 +38,7 @@ from tqdm import tqdm
 import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
+from normits_demand import logging as nd_log
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 from normits_demand.utils import compress
@@ -51,6 +52,9 @@ from normits_demand.concurrency import multiprocessing
 from normits_demand.validation import checks
 
 from normits_demand.matrices.tms_matrix_processing import *
+
+
+LOG = nd_log.get_logger(__name__)
 
 
 def _aggregate(import_dir: str,
@@ -1598,8 +1602,8 @@ def build_norms_compile_params(import_dir: str,
     return out_paths
 
 
-def build_compile_params(import_dir: str,
-                         export_dir: str,
+def build_compile_params(import_dir: nd.PathLike,
+                         export_dir: nd.PathLike,
                          matrix_format: str,
                          years_needed: Iterable[int],
                          m_needed: List[int] = efs_consts.MODES_NEEDED,
@@ -1708,8 +1712,8 @@ def build_compile_params(import_dir: str,
 
                 # Narrow down further if we're using ca
                 if ca is not None:
-                    ca_str = '_ca' + str(ca) + '_'
-                    compile_mats = [x for x in compile_mats if ca_str in x]
+                    ca_strs = [f'_ca{ca}{x}' for x in "_."]
+                    compile_mats = [x for x in compile_mats if du.is_in_string(ca_strs, x)]
 
                 # Narrow down again if we're using tp
                 if tp is not None:
@@ -2401,14 +2405,15 @@ def _compile_matrices_internal(mat_import,
     return decompile_factors
 
 
-def compile_matrices(mat_import: str,
-                     mat_export: str,
-                     compile_params_path: str,
+def compile_matrices(mat_import: nd.PathLike,
+                     mat_export: nd.PathLike,
+                     compile_params_path: nd.PathLike,
                      factor_pickle_path: str = None,
                      round_dp: int = consts.DEFAULT_ROUNDING,
                      factors_fname: str = 'od_compilation_factors.pickle',
                      avoid_zero_splits: bool = False,
                      process_count: int = consts.PROCESS_COUNT,
+                     overwrite: bool = True,
                      ) -> nd.PathLike:
     """
     Compiles the matrices in mat_import, writes to mat_export
@@ -2442,6 +2447,11 @@ def compile_matrices(mat_import: str,
         factors. Where there would have been zero splits, this will be
         replaced with even splits across inputs.
 
+    overwrite: bool, default True
+        If False, checks if any of the compiled matrices already exist and
+        doesn't recreate them. If all output matrices already exist then the
+        function will return early.
+
     Returns
     -------
     None
@@ -2465,6 +2475,28 @@ def compile_matrices(mat_import: str,
     # Init
     compile_params = pd.read_csv(compile_params_path)
     compiled_names = compile_params['compilation'].unique()
+
+    if not overwrite:
+        # Don't bother recreating any outputs that already exist
+        export_folder = pathlib.Path(mat_export)
+        exists = []
+        for nm in compiled_names:
+            if (export_folder / nm).is_file():
+                exists.append(nm)
+        del export_folder
+
+        compiled_names = [i for i in compiled_names if i not in exists]
+        if compiled_names == []:
+            LOG.info("All compiled matrices already exist and aren't being overwritten")
+            return
+
+        if exists != []:
+            LOG.info(
+                "%s compiled matrices already exist and aren't being overwritten: %s",
+                len(exists),
+                ", ".join(exists),
+            )
+        del exists
 
     # Need to get the size of the output matrices
     check_mat_name = compile_params.loc[0, 'distribution_name']

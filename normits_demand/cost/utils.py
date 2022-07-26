@@ -260,7 +260,7 @@ def cost_distribution(
                 "max_bounds needs to be set."
             )
 
-        bin_edges = [min_bounds[0]] + max_bounds
+        bin_edges = [min_bounds[0]] + list(max_bounds)
 
     # Sort into bins
     distribution, _ = np.histogram(
