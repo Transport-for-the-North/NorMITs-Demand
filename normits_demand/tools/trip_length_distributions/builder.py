@@ -873,7 +873,7 @@ class TripLengthDistributionBuilder:
                 # Store the generated data
                 sample_size_log.append(log_line)
                 name_to_distribution.update({tld_name: tld})
-                full_export.append(tld.to_df(additional_cols=segment_params))
+                full_export.append(tld.to_df(additional_cols=agg_segment_params))
 
         # Consolidate reports
         full_export = pd.concat(full_export, ignore_index=True)

@@ -133,9 +133,7 @@ class CostDistribution:
         """An array of band shares that corresponds to self.edges"""
         if self.sample_size > 0:
             return self.band_trips / self.sample_size
-        else:
-            return np.zeros_like(self.band_trips)
-
+        return np.zeros_like(self.band_trips)
 
     @staticmethod
     def _get_col_names(cost_units: nd_core.CostUnits) -> tuple[str, str, str, str, str, str]:
