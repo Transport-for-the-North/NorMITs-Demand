@@ -20,25 +20,23 @@ there.
 Below, a brief summary of patches made since the previous version can be found.
 
 ### V0.5.1
-- Core
-  - 
-- NoTEM
-  - 
-- Distribution Model
-  - 
-- NTEM Forecasting
-  - 
 - Tools
   - TLD Tool
     - Built a class to handle the `CostDistributions`. Will be used internally to integrate 
       TLDs more efficiently.
-    - Outputs graphs and a log of the run alongside the generated TLD csvs
+    - Output graphs and a log of the run alongside the generated TLD csv
     - Built a front end to generate all the TLDs needed for the Distribution Model
     - Integrated `SegmentationLevels` into TLD tool
   - Core
     - Updated how `SegmentationLevel` handles name generation. Segment types are now used
       to cast the outputs and NaN values are ignored to add support for 
       non-complete segmentations.
+  - Traveller Segment Tool
+    - Major updates carried out to bring this in line with NoTEM and DiMo
+      processes
+    - Can now read in NoTEM trip ends
+    - SOC, NS, Gender segment flexible - further work needed still
+    - Minor bug fixes worked out
 - Bug Fixes
   - Fixed a bug where segment parts were being added twice while generating segment names
   - 
