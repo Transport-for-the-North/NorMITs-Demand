@@ -36,4 +36,4 @@ Below, a brief summary of patches made since the previous version can be found.
     - Outputs graphs and a log of the run alongside the generated TLD csvs
     - Built a front end to generate all the TLDs needed for the Distribution Model
 - Bug Fixes
-  - Fixed a bug where segment parts were being added twice while generating segment names
+  - 
