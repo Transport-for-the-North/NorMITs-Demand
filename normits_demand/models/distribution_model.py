@@ -428,8 +428,9 @@ class DistributionModel(DistributionModelExportPaths):
         out_path = pathlib.Path(self.export_paths.full_pa_dir)
 
         # Only recombine if cache is older than original files
-        if file_ops.is_old_cache(original=in_paths, cache=out_path):
-            self._recombine_pa_matrices()
+        # TODO(BT): Get this to check for specific files
+        # if file_ops.is_old_cache(original=in_paths, cache=out_path):
+        self._recombine_pa_matrices()
 
     def _recombine_pa_matrices(self):
         # ## GET THE FULL PA MATRICES ## #
