@@ -178,6 +178,32 @@ def check_path_exists(path: nd.PathLike) -> None:
             "The following path does not exist: %s" % str(path)
         )
 
+def folder_exists(folder: nd.PathLike) -> pathlib.Path:
+    """Raise an error if `folder` doesn't exist or isn't a folder.
+
+    Parameters
+    ----------
+    folder : nd.PathLike
+        Path to check.
+
+    Returns
+    -------
+    pathlib.Path
+        `folder` after conversion to Path.
+
+    Raises
+    ------
+    NotADirectoryError
+        If `folder` isn't a path to a folder or it doesn't exist.
+    """
+    folder = pathlib.Path(folder)
+    if folder.is_dir():
+        return folder
+
+    if folder.exists():
+        raise NotADirectoryError(f"not a folder: '{folder}'")
+    raise NotADirectoryError(f"folder doesn't exist: '{folder}'")
+
 
 def is_csv(file_path: nd.PathLike) -> bool:
     """

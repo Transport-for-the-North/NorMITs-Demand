@@ -37,3 +37,6 @@ hb_p_m_tp_wday,hb_p_m,p;m,
 tms_nhb_p_m_tp_wday,nhb_p_m,p;m,
 ,,,
 hb_p_m_sic,hb_p_m,p;m,
+,,,
+notem_hb_output,notem_hb_output_uc,m;g;soc;ns;ca;tp,p:uc
+notem_nhb_output,notem_nhb_output_uc,m;g;soc;ns;ca;tp,p:uc

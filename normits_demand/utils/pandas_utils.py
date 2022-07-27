@@ -253,8 +253,9 @@ def filter_df(df: pd.DataFrame,
         The pandas.Dataframe to filter.
 
     df_filter:
-        Dictionary of {column: valid_value} pairs to define the filter to be
-        applied. Will return only where all column conditions are met.
+        Dictionary of `{column: valid_values}` pairs to define the filter to be
+        applied. `valid_values` can be a single value or a list of values.
+        Will return only where all column conditions are met.
 
     throw_error:
         Whether to throw an error if the filtered dataframe has no
@@ -275,8 +276,7 @@ def filter_df(df: pd.DataFrame,
             raise ValueError(
                 "An empty dataframe was returned after applying the filter. "
                 "Are you sure the correct data was passed in?\n"
-                "Given filter: %s"
-                % df_filter
+                f"Given filter: {df_filter}"
             )
 
     return return_df

@@ -1047,6 +1047,7 @@ class ExternalForecastSystem:
         print("Getting base year external distributions...")
         mat_p.split_internal_external(
             mat_import=post_me_dir,
+            matrix_format='pa',
             year=base_year,
             external_zones=external_zones,
             external_export=dist_out,
@@ -1312,7 +1313,7 @@ class ExternalForecastSystem:
         # Init
         _input_checks(m_needed=m_needed)
         base_zone_col = "%s_zone_id"
-        pa_import = 'pa_24_bespoke' if use_bespoke_pa else 'pa_24'
+        pa_import = 'pa_24_bespoke' if use_bespoke_pa else 'pa_24_wfh'
         pa_import = 'pa_24_elast' if use_elasticity_pa else pa_import
         hb_p_needed, nhb_p_needed = du.split_hb_nhb_purposes(p_needed)
 
@@ -1514,7 +1515,7 @@ class ExternalForecastSystem:
             # TODO: Create 24hr OD for HB
 
     def compile_matrices(self,
-                         year: int,
+                         years: List[int],
                          m_needed: List[int] = efs_consts.MODES_NEEDED,
                          tp_needed: List[int] = efs_consts.TIME_PERIODS,
                          round_dp: int = consts.DEFAULT_ROUNDING,
@@ -1567,18 +1568,19 @@ class ExternalForecastSystem:
                 import_dir=self.exports['od'],
                 export_dir=self.params['compile'],
                 matrix_format='od',
-                years_needed=[year],
+                years_needed=years,
                 m_needed=m_needed,
                 ca_needed=ca_needed,
                 tp_needed=tp_needed,
             )
 
-            mat_p.compile_matrices(
-                mat_import=self.exports['od'],
-                mat_export=self.exports['compiled_od'],
-                compile_params_path=compile_params_paths[0],
-                round_dp=round_dp,
-            )
+            for path in compile_params_paths:
+                mat_p.compile_matrices(
+                    mat_import=self.exports['od'],
+                    mat_export=self.exports['compiled_od'],
+                    compile_params_path=path,
+                    round_dp=round_dp,
+                )
             
             car_occupancies = pd.read_csv(os.path.join(
                 self.imports['home'],
@@ -1604,18 +1606,19 @@ class ExternalForecastSystem:
             path = os.path.join(self.imports['params'], fname)
             from_to_split_factors = pd.read_pickle(path)
 
-            # Compile
-            mat_p.compile_norms_to_vdm(
-                mat_import=self.exports[pa_import],
-                mat_export=self.exports['compiled_pa'],
-                params_export=self.params['compile'],
-                year=year,
-                m_needed=m_needed,
-                internal_zones=self.model_internal_zones,
-                external_zones=self.model_external_zones,
-                matrix_format='pa',
-                from_to_split_factors=from_to_split_factors,
-            )
+            for year in years:
+                # Compile
+                mat_p.compile_norms_to_vdm(
+                    mat_import=self.exports[pa_import],
+                    mat_export=self.exports['compiled_pa'],
+                    params_export=self.params['compile'],
+                    year=year,
+                    m_needed=m_needed,
+                    internal_zones=self.model_internal_zones,
+                    external_zones=self.model_external_zones,
+                    matrix_format='pa',
+                    from_to_split_factors=from_to_split_factors,
+                )
         else:
             raise ValueError(
                 "Not sure how to compile matrices for model %s"

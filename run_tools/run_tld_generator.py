@@ -50,7 +50,6 @@ def run_all_combinations():
         tlb_folder=TLB_FOLDER,
         tlb_version=TLB_VERSION,
         bands_definition_dir=BAND_DIR,
-        segment_definition_dir=SEGMENTATION_DIR,
         segment_copy_definition_dir=COPY_DEFINITIONS_DIR,
         output_folder=OUTPUT_FOLDER,
     )
@@ -63,8 +62,9 @@ def run_all_combinations():
             "cost_units": nd_core.CostUnits.KM,
             "bands_name": bands,
             "segmentation_name": seg,
-            "sample_threshold": 10,
-            "verbose": False,
+            "min_sample_size": 40,
+            "check_sample_size": 400,
+            "inter_smoothing": True,
         }
 
         extract.tld_generator(trip_filter_type=tlds.TripFilter.TRIP_OD, **kwargs)
@@ -87,7 +87,6 @@ def run_test():
         tlb_folder=TLB_FOLDER,
         tlb_version=TLB_VERSION,
         bands_definition_dir=BAND_DIR,
-        segment_definition_dir=SEGMENTATION_DIR,
         segment_copy_definition_dir=COPY_DEFINITIONS_DIR,
         output_folder=OUTPUT_FOLDER,
     )
@@ -98,8 +97,7 @@ def run_test():
         "cost_units": nd_core.CostUnits.KM,
         "bands_name": band_list[0],
         "segmentation_name": seg_list[0],
-        "sample_threshold": 10,
-        "verbose": False,
+        "min_sample_size": 10,
     }
 
     # North
@@ -119,7 +117,6 @@ def build_new_dimo_tlds():
         tlb_folder=TLB_FOLDER,
         tlb_version=tlb_version,
         bands_definition_dir=BAND_DIR,
-        segment_definition_dir=SEGMENTATION_DIR,
         segment_copy_definition_dir=COPY_DEFINITIONS_DIR,
         output_folder=OUTPUT_FOLDER,
     )
@@ -131,12 +128,11 @@ def build_new_dimo_tlds():
         "cost_units": nd_core.CostUnits.KM,
     }
     generate_kwargs = path_kwargs.copy()
-    generate_kwargs.update(
-        {
-            "sample_threshold": 10,
-            "verbose": False,
-        }
-    )
+    generate_kwargs.update({
+        "min_sample_size": 40,
+        "check_sample_size": 400,
+        "inter_smoothing": True,
+    })
 
     for geo_area in [tlds.GeoArea.GB, tlds.GeoArea.NORTH_AND_MIDS]:
         # ## GENERATE HIGHWAY ## #
@@ -145,17 +141,20 @@ def build_new_dimo_tlds():
         hway_kwargs.update({"geo_area": geo_area, "bands_name": hway_bands})
 
         # HB TLDs
-        extractor.tld_generator(segmentation_name="hb_p_m", **hway_kwargs)
+        segmentation = nd_core.get_segmentation_level("hb_p_m")
+        extractor.tld_generator(segmentation=segmentation, **hway_kwargs)
 
         # NHB TLDs - car has lots of data, can be done at time periods
-        extractor.tld_generator(segmentation_name="nhb_p_m_tp_car", **hway_kwargs)
+        segmentation = nd_core.get_segmentation_level("nhb_p_m_tp_car")
+        extractor.tld_generator(segmentation=segmentation, **hway_kwargs)
 
         # NHB TLDs - other modes need generating at 24hr and duplicating
-        extractor.tld_generator(segmentation_name="nhb_p_m", **hway_kwargs)
+        segmentation = nd_core.get_segmentation_level("nhb_p_m")
+        extractor.tld_generator(segmentation=segmentation, **hway_kwargs)
         extractor.copy_across_tps(
             geo_area=geo_area,
             bands_name=hway_bands,
-            segmentation_name="nhb_p_m",
+            segmentation=segmentation,
             **path_kwargs,
         )
 
@@ -168,14 +167,16 @@ def build_new_dimo_tlds():
         rail_kwargs.update({"geo_area": geo_area, "bands_name": rail_bands})
 
         # HB TLDs
-        extractor.tld_generator(segmentation_name="hb_p_m_ca_m6", **rail_kwargs)
+        segmentation = nd_core.get_segmentation_level("hb_p_m_ca_rail")
+        extractor.tld_generator(segmentation=segmentation, **rail_kwargs)
 
         # NHB TLDs - other modes need generating at 24hr and duplicating
-        extractor.tld_generator(segmentation_name="nhb_p_m_ca_m6", **rail_kwargs)
+        segmentation = nd_core.get_segmentation_level("nhb_p_m_ca_rail")
+        extractor.tld_generator(segmentation=segmentation, **rail_kwargs)
         extractor.copy_across_tps(
             geo_area=geo_area,
             bands_name=rail_bands,
-            segmentation_name="nhb_p_m_ca_m6",
+            segmentation=segmentation,
             **path_kwargs,
         )
 
@@ -190,7 +191,6 @@ def build_new_traveller_segment_tlds():
         tlb_folder=TLB_FOLDER,
         tlb_version=tlb_version,
         bands_definition_dir=BAND_DIR,
-        segment_definition_dir=SEGMENTATION_DIR,
         segment_copy_definition_dir=COPY_DEFINITIONS_DIR,
         output_folder=OUTPUT_FOLDER,
     )
@@ -202,30 +202,36 @@ def build_new_traveller_segment_tlds():
         "cost_units": nd_core.CostUnits.KM,
     }
     generate_kwargs = path_kwargs.copy()
-    generate_kwargs.update(
-        {
-            "sample_threshold": 10,
-            "verbose": False,
-        }
-    )
+    generate_kwargs.update({
+        "min_sample_size": 40,
+        "check_sample_size": 400,
+        "inter_smoothing": True,
+    })
 
     # ## GENERATE RAIL TLDS ## #
+    iterator = [
+        ("uc_m_g_m6", "traveller_segment_m6_g", "g"),
+        ("uc_m_soc_m6", "traveller_segment_m6_soc", "soc"),
+        ("uc_m_ns_m6", "traveller_segment_m6_ns", "ns"),
+    ]
 
-    # Generate with CA combined and then split out
-    # Generate with HB and NHB combined and then split out
-    extract.tld_generator(
-        bands_name="dia_gb_rail_bands",
-        segmentation_name="uc_m_seg_m6",
-        **generate_kwargs,
-    )
+    for segmentation_name, copy_def_name, exc_seg in iterator:
+        # Generate with CA combined and then split out
+        # Generate with HB and NHB combined and then split out
+        extract.tld_generator(
+            bands_name="dia_gb_rail_bands",
+            segmentation=nd_core.get_segmentation_level(segmentation_name),
+            aggregated_exclude_segments=exc_seg,
+            **generate_kwargs,
+        )
 
-    # Copy back out!
-    extract.copy_tlds(
-        copy_definition_name="traveller_segment_rail",
-        bands_name="dia_gb_rail_bands",
-        segmentation_name="uc_m_seg_m6",
-        **path_kwargs,
-    )
+        # Copy back out!
+        extract.copy_tlds(
+            copy_definition_name=copy_def_name,
+            bands_name="dia_gb_rail_bands",
+            segmentation=nd_core.get_segmentation_level(segmentation_name),
+            **path_kwargs,
+        )
 
     # A full traveller segment run needs:
     # ## run at GB, trip_OD ## #

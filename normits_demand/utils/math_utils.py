@@ -23,6 +23,8 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 
+from scipy import interpolate
+
 # Local Imports
 
 
@@ -163,10 +165,9 @@ def curve_convergence(
     """
     if target.shape != achieved.shape:
         raise ValueError(
-            "Shape of target and achieved do not match.\n"
-            "\tTarget: %s\n"
-            "\tAchieved: %s" % (target.shape, achieved.shape)
-        )
+            f"Shape of target and achieved do not match.\n"
+            f"\tTarget: {target.shape}\n"
+            f"\tAchieved: {achieved.shape}")
 
     # Always return 0 if we achieved NaN
     if np.isnan(achieved).sum() > 0:
@@ -320,7 +321,7 @@ def overflow_msg(
     inf_idxs = np.isinf(x3).nonzero()
 
     # Format error as a table
-    idx_cols = {"axis_%s" % i: x for i, x in enumerate(inf_idxs)}
+    idx_cols = {f"axis_{i}": x for i, x in enumerate(inf_idxs)}
     other_cols = {x1_name: x1[inf_idxs], x2_name: x2[inf_idxs]}
 
     all_cols = idx_cols.copy()
@@ -389,3 +390,30 @@ def get_pa_diff(new_p, p_target, new_a, a_target):
         (sum((new_p - p_target) ** 2) + sum((new_a - a_target) ** 2)) / len(p_target)
     ) ** 0.5
     return pa_diff
+
+
+def interpolate_array(a: np.ndarray) -> np.ndarray:
+    """Uses numpy to linearly interpolate 0 values in array
+
+    note that 0 values at the edges of the array will not be interpolated
+
+    Parameters
+    ----------
+    a:
+        The array to interpolate values for.
+
+    Returns
+    -------
+    interpolated_a:
+        A copy of a, with the 0 values linearly interpolated.
+    """
+    # Init
+    y_vals = a.copy()
+    x_vals = np.arange(len(y_vals))
+
+    # Build the interpolation function
+    non_zero_idx = np.nonzero(y_vals)
+    interp = interpolate.interp1d(x_vals[non_zero_idx], y_vals[non_zero_idx])
+
+    # Interpolate values in place
+    return interp(x_vals)
