@@ -55,14 +55,18 @@ def generate_splitting_factors():
 
     # Build the splitting factors
     mat_p.compile_norms_to_vdm(
-        mat_import=PA_24_MATRICES_DIR,
+        mat_pa_import=PA_24_MATRICES_DIR,
+        # TODO(BT): Actually pass in OD here
+        mat_od_import=PA_24_MATRICES_DIR,
         mat_export=PA_VDM_MATRICES_DIR,
         params_export=PARAMS_EXPORT,
         year=BASE_YEAR,
         m_needed=consts.MODEL_MODES['norms'],
         internal_zones=internal_zones,
         external_zones=external_zones,
-        matrix_format='pa',
+        pa_matrix_format='pa',
+        od_to_matrix_format='pa',
+        od_from_matrix_format='pa',
         avoid_zero_splits=AVOID_ZERO_SPLITS
     )
 

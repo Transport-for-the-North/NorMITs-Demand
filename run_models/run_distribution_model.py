@@ -67,17 +67,17 @@ def main():
     calibrate_params = True
 
     # Choose what to run
-    run_hb = False
-    run_nhb = True
+    run_hb = True
+    run_nhb = False
 
     run_all = False
     run_upper_model = False
     run_lower_model = False
     run_pa_matrix_reports = False
     run_pa_to_od = False
-    run_pa_split_by_tp = True
+    run_pa_split_by_tp = False
     run_od_matrix_reports = False
-    compile_to_assignment = False
+    compile_to_assignment = True
 
     if mode == nd.Mode.CAR:
         # Define zoning systems

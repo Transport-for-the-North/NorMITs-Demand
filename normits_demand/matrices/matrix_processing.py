@@ -3391,12 +3391,15 @@ def split_internal_external(mat_import: nd.PathLike,
     )
 
 
-def compile_norms_to_vdm(mat_import: nd.PathLike,
+def compile_norms_to_vdm(mat_pa_import: nd.PathLike,
+                         mat_od_import: nd.PathLike,
                          mat_export: nd.PathLike,
                          params_export: nd.PathLike,
                          year: str,
                          m_needed: List[int],
-                         matrix_format: str,
+                         pa_matrix_format: str,
+                         od_to_matrix_format: str,
+                         od_from_matrix_format: str,
                          internal_zones: List[int],
                          external_zones: List[int],
                          tp_filter: Iterable[int] = None,
@@ -3420,17 +3423,35 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
         compiled_dir = os.path.join(mat_export, 'compiled_non_split')
         file_ops.create_folder(compiled_dir)
 
+    # Grab internal PA, external OD
     # Split internal and external
     print("Splitting into internal and external matrices...")
     split_internal_external(
-        mat_import=mat_import,
-        matrix_format=matrix_format,
+        mat_import=mat_pa_import,
+        matrix_format=pa_matrix_format,
         internal_export=int_dir,
-        external_export=ext_dir,
         year=year,
         internal_zones=internal_zones,
+    )
+
+    split_internal_external(
+        mat_import=mat_od_import,
+        matrix_format=od_to_matrix_format,
+        external_export=ext_dir,
+        year=year,
         external_zones=external_zones,
     )
+
+    split_internal_external(
+        mat_import=mat_od_import,
+        matrix_format=od_from_matrix_format,
+        external_export=ext_dir,
+        year=year,
+        external_zones=external_zones,
+    )
+
+    print("internal external done")
+    exit()
 
     # Compile and get the splitting factors for internal mats
     print("Generating internal splitting factors...")
@@ -3440,7 +3461,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
         params_export=params_export,
         years_needed=[year],
         m_needed=m_needed,
-        matrix_format=matrix_format,
+        matrix_format=pa_matrix_format,
         tp_filter=tp_filter,
         avoid_zero_splits=avoid_zero_splits,
     )
@@ -3452,7 +3473,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
         params_export=params_export,
         years_needed=[year],
         m_needed=m_needed,
-        matrix_format=matrix_format,
+        matrix_format=od_matrix_format,
         tp_filter=tp_filter,
         avoid_zero_splits=avoid_zero_splits,
     )

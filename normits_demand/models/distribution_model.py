@@ -609,6 +609,12 @@ class DistributionModel(DistributionModelExportPaths):
         # ## GET THE FULL PA MATRICES ## #
         self._maybe_recombine_pa_matrices()
 
+        # Translate matrices if needed
+        compile_in_path = self._maybe_translate_matrices_for_compile(
+            matrices_path=pathlib.Path(self.export_paths.full_pa_dir),
+            matrices_desc=self._pa_matrix_desc,
+        )
+
         # ## CONVERT HB PA TO OD ## #
         if self.trip_origin == 'hb':
             self._logger.info("Converting HB PA matrices to OD")
@@ -632,7 +638,7 @@ class DistributionModel(DistributionModelExportPaths):
 
             # Convert the matrices
             pa_to_od.build_od_from_fh_th_factors(
-                pa_import_dir=pathlib.Path(self.export_paths.full_pa_dir),
+                pa_import_dir=pathlib.Path(compile_in_path),
                 od_export_dir=pathlib.Path(self.export_paths.full_od_dir),
                 segmentation=self.running_segmentation,
                 template_pa_name=template_pa_name,
@@ -647,7 +653,7 @@ class DistributionModel(DistributionModelExportPaths):
             # they're already OD anyway, just need a little name change
             self._logger.info("Copying NHB PA matrices to OD")
             matrix_processing.copy_nhb_matrices(
-                import_dir=self.export_paths.full_pa_dir,
+                import_dir=compile_in_path,
                 export_dir=self.export_paths.full_od_dir,
                 replace_pa_with_od=True,
                 pa_matrix_desc=self._pa_matrix_desc,
@@ -672,9 +678,6 @@ class DistributionModel(DistributionModelExportPaths):
             matrices_path=pathlib.Path(self.export_paths.full_pa_dir),
             matrices_desc=self._pa_matrix_desc,
         )
-
-        print("translation done")
-        exit()
 
         # Generate file names
         template_pa_name = self.running_segmentation.generate_template_file_name(
@@ -806,23 +809,24 @@ class DistributionModel(DistributionModelExportPaths):
 
         elif self.running_mode == nd.Mode.TRAIN:
             # Need TP split PA, and OD matrices for this to work
-            self.run_pa_split_by_tp()
-            self.run_pa_to_od()
-
-            exit()
+            # self.run_pa_split_by_tp()
+            # self.run_pa_to_od()
 
             self._logger.info("Compiling NoRMS VDM Format")
             # TODO(BT): Really need to add a step to convert the external demand
             #  to OD format
             matrix_processing.compile_norms_to_vdm(
-                mat_import=self.export_paths.full_tp_pa_dir,
-                mat_export=self.export_paths.compiled_pa_dir,
+                mat_pa_import=self.export_paths.full_tp_pa_dir,
+                mat_od_import=self.export_paths.full_od_dir,
+                mat_export=self.export_paths.compiled_pa_dir,  # TODO(BT): Rename to NoRMS
                 params_export=self.export_paths.compiled_pa_dir,
                 year=self.year,
                 m_needed=m_needed,
                 internal_zones=self.output_zoning.internal_zones.tolist(),
                 external_zones=self.output_zoning.external_zones.tolist(),
-                matrix_format=self._pa_matrix_desc,
+                pa_matrix_format=self._pa_matrix_desc,
+                od_to_matrix_format=self._od_to_matrix_desc,
+                od_from_matrix_format=self._od_from_matrix_desc,
                 tp_filter=[1, 2, 3, 4],         # TODO(BT): Parameterise this somehow
             )
 
