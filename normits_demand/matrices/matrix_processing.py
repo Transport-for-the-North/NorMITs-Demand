@@ -1394,6 +1394,7 @@ def build_norms_vdm_compile_params(import_dir: str,
                                    years_needed: Iterable[int],
                                    m_needed: List[int],
                                    tp_needed: Iterable[int] = None,
+                                   tp_filter: Iterable[int] = None,
                                    output_headers: List[str] = None,
                                    output_format: str = 'wide',
                                    params_suffix: str = None,
@@ -1433,9 +1434,9 @@ def build_norms_vdm_compile_params(import_dir: str,
 
             # ## FILTER DOWN TO USER CLASS ## #
             # include _ before and after to avoid clashes
-            ps = ['_p' + str(x) + '_' for x in purposes]
-            mode_str = '_m' + str(mode) + '_'
-            year_str = '_yr' + str(year) + '_'
+            ps = [f"_p{x}_" for x in purposes]
+            mode_str = f"_m{mode}_"
+            year_str = f"_yr{year}_"
 
             # Narrow down to matrices for this compilation
             compile_mats = [x for x in compile_mats if year_str in x]
@@ -1444,8 +1445,13 @@ def build_norms_vdm_compile_params(import_dir: str,
 
             # Filter by time period if needed
             if tp is not None:
-                tp_str = '_tp' + str(tp)
+                tp_str = f"_tp{tp}"
                 compile_mats = [x for x in compile_mats if tp_str in x]
+
+            elif tp_filter is not None:
+                # Only keep the wanted tps
+                tps = [f"_tp{tp}" for tp in tp_filter]
+                compile_mats = [x for x in compile_mats if du.is_in_string(tps, x)]
 
             # ## FILTER DOWN TO SUB USER CLASS ## #
             # We're keeping the mats which contain any item in the list
@@ -3085,6 +3091,7 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
                                   years_needed: List[str],
                                   m_needed: List[int],
                                   matrix_format: str,
+                                  tp_filter: Iterable[int] = None,
                                   avoid_zero_splits: bool = False,
                                   ) -> List[str]:
     """
@@ -3114,6 +3121,11 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
         The format of of the matrices to compile. Needs to be one of
         efs_consts.MATRIX_FORMATS
 
+    tp_filter:
+        A filter to apply to the time periods being compiled. When there are
+        more time periods in `mat_import` than those needing to be compiled,
+        the argument can be used to limit those being selected.
+
     avoid_zero_splits:
         If set to True, then no zero splits will appear in the splitting
         factors. Where there would have been zero splits, this will be
@@ -3135,6 +3147,7 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
         segmentation_aggregation=consts.NORMS_VDM_SEG_INTERNAL,
         years_needed=years_needed,
         m_needed=m_needed,
+        tp_filter=tp_filter,
         params_suffix=fname_suffix,
     )
 
@@ -3168,6 +3181,7 @@ def compile_norms_to_vdm_external(mat_import: nd.PathLike,
                                   years_needed: List[str],
                                   m_needed: List[int],
                                   matrix_format: str,
+                                  tp_filter: Iterable[int] = None,
                                   avoid_zero_splits: bool = False,
                                   ) -> List[str]:
     """
@@ -3197,6 +3211,11 @@ def compile_norms_to_vdm_external(mat_import: nd.PathLike,
         The format of of the matrices to compile. Needs to be one of
         efs_consts.MATRIX_FORMATS
 
+    tp_filter:
+        A filter to apply to the time periods being compiled. When there are
+        more time periods in `mat_import` than those needing to be compiled,
+        the argument can be used to limit those being selected.
+
     avoid_zero_splits:
         If set to True, then no zero splits will appear in the splitting
         factors. Where there would have been zero splits, this will be
@@ -3218,6 +3237,7 @@ def compile_norms_to_vdm_external(mat_import: nd.PathLike,
         segmentation_aggregation=consts.NORMS_VDM_SEG_EXTERNAL,
         years_needed=years_needed,
         m_needed=m_needed,
+        tp_filter=tp_filter,
         params_suffix=fname_suffix,
     )
 
@@ -3379,6 +3399,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
                          matrix_format: str,
                          internal_zones: List[int],
                          external_zones: List[int],
+                         tp_filter: Iterable[int] = None,
                          from_to_split_factors: nd.FactorsDict = None,
                          avoid_zero_splits: bool = False,
                          ) -> str:
@@ -3420,6 +3441,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
         years_needed=[year],
         m_needed=m_needed,
         matrix_format=matrix_format,
+        tp_filter=tp_filter,
         avoid_zero_splits=avoid_zero_splits,
     )
 
@@ -3431,6 +3453,7 @@ def compile_norms_to_vdm(mat_import: nd.PathLike,
         years_needed=[year],
         m_needed=m_needed,
         matrix_format=matrix_format,
+        tp_filter=tp_filter,
         avoid_zero_splits=avoid_zero_splits,
     )
 

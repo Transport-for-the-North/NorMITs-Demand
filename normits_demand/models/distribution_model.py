@@ -605,14 +605,16 @@ class DistributionModel(DistributionModelExportPaths):
         """Splits the 24hr PA matrices by time periods"""
         # TODO(BT): Make sure the upper and lower matrices exist!
 
-        # ## GET THE FULL PA MATRICES ## #
-        self._maybe_recombine_pa_matrices()
-
+        # # ## GET THE FULL PA MATRICES ## #
+        # self._maybe_recombine_pa_matrices()
+        #
         # Translate matrices if needed
-        compile_in_path = self._maybe_translate_matrices_for_compile(
-            matrices_path=self.export_paths.full_pa_dir,
-            matrices_desc=self._pa_matrix_desc,
-        )
+        # compile_in_path = self._maybe_translate_matrices_for_compile(
+        #     matrices_path=self.export_paths.full_pa_dir,
+        #     matrices_desc=self._pa_matrix_desc,
+        # )
+
+        compile_in_path = os.path.join(self.export_paths.full_pa_dir, self._translated_dir_name)
 
         # Generate file names
         template_pa_name = self.running_segmentation.generate_template_file_name(
@@ -743,17 +745,12 @@ class DistributionModel(DistributionModelExportPaths):
             )
 
         elif self.running_mode == nd.Mode.TRAIN:
-            self._maybe_recombine_pa_matrices()
-
-            # Translate matrices if needed
-            compile_in_path = self._maybe_translate_matrices_for_compile(
-                matrices_path=self.export_paths.full_pa_dir,
-                matrices_desc=self._pa_matrix_desc,
-            )
+            # Need TP split matrices first
+            self.run_pa_split_by_tp()
 
             self._logger.info("Compiling NoRMS VDM Format")
             matrix_processing.compile_norms_to_vdm(
-                mat_import=compile_in_path,
+                mat_import=self.export_paths.full_tp_pa_dir,
                 mat_export=self.export_paths.compiled_pa_dir,
                 params_export=self.export_paths.compiled_pa_dir,
                 year=self.year,
@@ -761,6 +758,7 @@ class DistributionModel(DistributionModelExportPaths):
                 internal_zones=self.output_zoning.internal_zones.tolist(),
                 external_zones=self.output_zoning.external_zones.tolist(),
                 matrix_format=self._pa_matrix_desc,
+                tp_filter=[1, 2, 3, 4],         # TODO(BT): Parameterise this somehow
             )
 
         else:
