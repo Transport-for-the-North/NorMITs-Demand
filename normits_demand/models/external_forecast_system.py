@@ -1621,6 +1621,7 @@ class ExternalForecastSystem:
                     pa_matrix_format='pa',
                     od_to_matrix_format='pa',
                     od_from_matrix_format='pa',
+                    nhb_od_matrix_format='pa',
                     from_to_split_factors=from_to_split_factors,
                 )
         else:

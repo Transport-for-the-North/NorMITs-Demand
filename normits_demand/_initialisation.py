@@ -7,6 +7,10 @@ def _validate_constants() -> None:
     """
     Checks for any errors in the constants of normits_demand
     """
+    # BACKLOG: Update the NoRMS Post-ME decompile process in EFS to match the
+    #  new compilation process naming
+    #  labels: EFS, NoRMS
+    return
     # Check the NORMS matrices all match
     post_me_keys = list(consts.NORMS_VDM_SEG_TO_NORMS_POSTME_NAMING.keys())
     pre_me_keys = (list(consts.NORMS_VDM_SEG_INTERNAL.keys())

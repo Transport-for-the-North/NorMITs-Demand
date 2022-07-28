@@ -813,8 +813,6 @@ class DistributionModel(DistributionModelExportPaths):
             # self.run_pa_to_od()
 
             self._logger.info("Compiling NoRMS VDM Format")
-            # TODO(BT): Really need to add a step to convert the external demand
-            #  to OD format
             matrix_processing.compile_norms_to_vdm(
                 mat_pa_import=self.export_paths.full_tp_pa_dir,
                 mat_od_import=self.export_paths.full_od_dir,
@@ -827,6 +825,7 @@ class DistributionModel(DistributionModelExportPaths):
                 pa_matrix_format=self._pa_matrix_desc,
                 od_to_matrix_format=self._od_to_matrix_desc,
                 od_from_matrix_format=self._od_from_matrix_desc,
+                nhb_od_matrix_format=self._od_matrix_desc,
                 tp_filter=[1, 2, 3, 4],         # TODO(BT): Parameterise this somehow
             )
 

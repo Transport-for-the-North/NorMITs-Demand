@@ -1297,7 +1297,13 @@ def fname_to_calib_params(fname: str,
                              str(fname))
 
     if get_matrix_format:
-        if re.search('od_from_', fname) is not None:
+        if re.search('synthetic_od_from_', fname) is not None:
+            calib_params['matrix_format'] = 'synthetic_od_from'
+        elif re.search('synthetic_od_to_', fname) is not None:
+            calib_params['matrix_format'] = 'synthetic_od_to'
+        elif re.search('synthetic_od_', fname) is not None:
+            calib_params['matrix_format'] = 'synthetic_od'
+        elif re.search('od_from_', fname) is not None:
             calib_params['matrix_format'] = 'od_from'
         elif re.search('od_to_', fname) is not None:
             calib_params['matrix_format'] = 'od_to'

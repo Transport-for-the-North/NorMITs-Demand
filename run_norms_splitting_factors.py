@@ -67,6 +67,7 @@ def generate_splitting_factors():
         pa_matrix_format='pa',
         od_to_matrix_format='pa',
         od_from_matrix_format='pa',
+        nhb_od_matrix_format='pa',
         avoid_zero_splits=AVOID_ZERO_SPLITS
     )
 

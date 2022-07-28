@@ -42,7 +42,7 @@ SCENARIO = nd.Scenario.SC01_JAM
 TARGET_TLD_VERSION = 'v2.1'
 DM_ITERATION_NAME = '9.10.3'
 DM_IMPORT_HOME = r"I:\NorMITs Demand\import"
-DM_EXPORT_HOME = r"F:\NorMITs Demand\Distribution Model"
+DM_EXPORT_HOME = r"E:\NorMITs Demand\Distribution Model"
 
 # General constants
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
@@ -68,7 +68,7 @@ def main():
 
     # Choose what to run
     run_hb = True
-    run_nhb = False
+    run_nhb = True
 
     run_all = False
     run_upper_model = False
