@@ -5,8 +5,8 @@ import tqdm
 import normits_demand as nd
 import csv
 
-pa = pathlib.Path(r'T:\MidMITs Demand\Distribution Model\iter9.6b.1\car_and_passenger\Final Outputs\Full PA Matrices')
-od = pathlib.Path(r'T:\MidMITs Demand\Distribution Model\iter9.6b.1\car_and_passenger\Final Outputs\Full OD Matrices')
+pa = pathlib.Path(r'T:\MidMITs Demand\Distribution Model\iter9.7-COVID.2\car_and_passenger\Final Outputs\Full PA Matrices')
+od = pathlib.Path(r'T:\MidMITs Demand\Distribution Model\iter9.7-COVID.2\car_and_passenger\Final Outputs\Full OD Matrices')
 
 for i in [pa,od]:
     checks = {}

@@ -8,7 +8,7 @@ future_years:
 export_folder: T:\MidMITs Demand\Forecasting
 export_path_fmt: '{export_folder}/{model_name}/iter{iteration}'
 tripend_path: T:\MidMITs Demand\MiTEM\iter9.7-COVID\NTEM
-matrix_import_path: T:\MidMITs Demand\Distribution Model\iter9.7-COVID.1\car_and_passenger\Final
+matrix_import_path: T:\MidMITs Demand\Distribution Model\iter9.7-COVID.2\car_and_passenger\Final
   Outputs\Full PA Matrices
 hb_purposes_needed:
 - 1

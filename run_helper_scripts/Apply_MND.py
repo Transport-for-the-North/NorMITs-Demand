@@ -41,6 +41,7 @@ OUTPUT_FOLDER = pathlib.Path(r"T:\MidMITs Demand\MiTEM\iter9.7-COVID\NTEM")
 YEARS = [2021, 2030, 2040]
 CONVERGENCE = 10
 MAX_ITER = 20
+DFT_DATE = (11,2021)
 
 
 def mnd_factors(org_dest: str, hb_nhb: str) -> nd.DVector:
@@ -169,7 +170,7 @@ def dvec_path(
 def main(orig_dest: str, hb_nhb: str, year: int) -> nd.DVector:
     logging.info("Beginning initial factoring.")
     trips_19 = nd.DVector.load(dvec_path(TRIP_ENDS_FOLDER, orig_dest, hb_nhb, year))
-    dft_factors = pd.read_csv(os.path.join(FACTORS_FOLDER, r"dft_factors.csv"))
+    dft_factors = pd.read_csv(os.path.join(FACTORS_FOLDER, f"dft_factors{DFT_DATE[0]}/{DFT_DATE[1]}.csv"))
     dft_dvec = nd.DVector(
         segmentation=M_TP_WEEK,
         import_data=dft_factors,
