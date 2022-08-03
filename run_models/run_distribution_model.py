@@ -46,7 +46,8 @@ dm_export_home = r"E:\NorMITs Demand\Distribution Model"
 # General constants
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
 REDUCE_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
-SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_wday'
+HB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_wday'
+NHB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced_wday'
 
 
 def main():
@@ -485,7 +486,7 @@ def main():
         trip_origin = 'hb'
 
         # Build the trip end kwargs
-        subset_name = SUBSET_SEG_BASE_NAME.format(
+        subset_name = HB_SUBSET_SEG_BASE_NAME.format(
             trip_origin=trip_origin,
             te_model_name=te_model_name,
         )
@@ -529,7 +530,7 @@ def main():
 
         # Build the trip end kwargs
         kwargs = {'trip_origin': trip_origin, 'te_model_name': te_model_name}
-        subset_name = SUBSET_SEG_BASE_NAME.format(**kwargs)
+        subset_name = NHB_SUBSET_SEG_BASE_NAME.format(**kwargs)
         reduce_name = REDUCE_SEG_BASE_NAME.format(**kwargs)
         trip_end_kwargs = {
             'reduce_segmentation': nd.get_segmentation_level(reduce_name),

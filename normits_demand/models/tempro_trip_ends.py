@@ -308,7 +308,7 @@ class TEMProTripEnds:
         LOG.info("Writing TEMProForecasts to %s", folder)
         for name, years in dataclasses.asdict(self).items():
             for yr, dvec in years.items():
-                dvec.compress_out(folder / f"{name}-{yr}")
+                dvec.save(folder / f"{name}-{yr}.pkl")
 
     def translate_zoning(
         self,

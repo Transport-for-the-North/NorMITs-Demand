@@ -13,7 +13,7 @@ hb_p_m,hb_p_m_bus,m:1;m:2;m:3;m:6
 hb_p_m,hb_p_m_walk,m:2;m:3;m:5;m:6
 hb_p_m,hb_p_m_cycle,m:1;m:3;m:5;m:6
 hb_p_m_ca,hb_p_m_ca_rail,m:1;m:2;m:3;m:5
-,,
+hb_p_ca_tp_week,hb_p_ca_tp_wday,tp:5;tp:6
 tms_nhb_p_m_tp_wday,tms_nhb_p_m_tp_wday_car,m:1;m:2;m:5;m:6
 tms_nhb_p_m_tp_wday,tms_nhb_p_m_tp_wday_bus,m:1;m:2;m:3;m:6
 tms_nhb_p_m_tp_wday,tms_nhb_p_m_tp_wday_walk,m:2;m:3;m:5;m:6
