@@ -35,7 +35,7 @@ def main() -> None:
     """Run MidMITs distribution model."""
     # Distribution running args
     mitem_iteration_name = "9.7-COVID"
-    dm_iteration_name = f"{mitem_iteration_name}.1"
+    dm_iteration_name = f"{mitem_iteration_name}.2"
     base_year = 2021
     mode = nd.Mode.CAR
     use_tram = False

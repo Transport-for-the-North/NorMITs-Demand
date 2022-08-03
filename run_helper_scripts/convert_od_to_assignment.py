@@ -128,15 +128,14 @@ def main(params: ODToAssignmentParameters, init_logger: bool = True) -> None:
 
 ##### MAIN #####
 if __name__ == "__main__":
-    distribution_model_iteration = "9.7-COVID.1"
-    year = 2021
+    distribution_model_iteration = "9.7-COVID.2"
+    year = 2018
     mat_folder = Path(
         fr"T:\MidMITs Demand\Distribution Model\iter{distribution_model_iteration}"
         r"\car_and_passenger\Final Outputs\Compiled OD Matrices\PCU"
     )
     prior_folder = Path(
-        r"C:\WSP_Projects\MidMITs\00 From Client\MiHAM From Motts"
-        r"\2. Assignment Matrices\Prior Matrices"
+        r"C:\Projects\MidMITS\Assignment\MiHAM_Assignments_Motts-20220217\2. Assignment Matrices\Prior Matrices"
     )
     matrix_paths = {}
     for t in (1, 2, 3):

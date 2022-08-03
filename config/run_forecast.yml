@@ -1,0 +1,42 @@
+iteration: 9.7-COVID
+import_path: I:\NorMITs Demand\import
+model_name: miham
+base_year: 2021
+future_years:
+- 2030
+- 2040
+export_folder: T:\MidMITs Demand\Forecasting
+export_path_fmt: '{export_folder}/{model_name}/iter{iteration}'
+tripend_path: T:\MidMITs Demand\MiTEM\iter9.7-COVID\NTEM
+matrix_import_path: T:\MidMITs Demand\Distribution Model\iter9.7-COVID.2\car_and_passenger\Final
+  Outputs\Full PA Matrices
+hb_purposes_needed:
+- 1
+- 2
+- 3
+- 4
+- 5
+- 6
+- 7
+- 8
+nhb_purposes_needed:
+- 12
+- 13
+- 14
+- 15
+- 16
+- 18
+comparison_zone_systems:
+  trip end: lad_2020
+  matrix 1: gor
+mode:
+  car: 3
+time_periods:
+- 1
+- 2
+- 3
+- 4
+user_classes:
+- commute
+- business
+- other

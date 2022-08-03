@@ -1130,7 +1130,7 @@ class SegmentationLevel:
             target_len = len(other.segment_names)
             ach_len = len(set(agg_dict.keys()))
             raise SegmentationError(
-                "Some segment names seem to have gone missing during "
+                "Some segment names seem to have gone missing "
                 "while aggregating %s into %s.\n"
                 "Expected %s segments.\n"
                 "Found %s segments."

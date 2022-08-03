@@ -14,6 +14,8 @@ from typing import Dict, Set, Tuple
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import sys
+sys.path.append('..')
 
 # Local imports
 # pylint: disable=import-error
@@ -415,12 +417,12 @@ if __name__ == "__main__":
     try:
         main(
             ComparisonInputs(
-                base_folder=Path(r"T:\MidMITs Demand\MiTEM"),
-                compare_iters=("iter9.6d", "iter9.6c-COVID"),
+                base_folder=Path(r"C:\Projects\MidMITS\Python\outputs\ApplyMND"),
+                compare_iters=("iter9.6e", "iter9.6c-COVID"),
                 scenarios=(nd.Scenario.NTEM, nd.Scenario.NTEM),
                 output_folder=Path(
-                    r"C:\WSP_Projects\MidMITs\02 MidMITs\Outputs"
-                    r"\MiTEM\Localised Adjustment Comparison"
+                    r"C:\Projects\MidMITS\Python\outputs\ApplyMND"
+                    r"\Iteration Comparison"
                 ),
             )
         )
