@@ -1,3 +1,4 @@
+"""Functionality for converting OD matrices to PA format."""
 import os
 import pathlib
 from typing import List

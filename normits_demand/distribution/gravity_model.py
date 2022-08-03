@@ -1,15 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Created on: 05/11/2021
-Updated on:
-
-Original author: Ben Taylor
-Last update made by: Ben Taylor
-Other updates made by:
-
-File purpose:
-
-"""
+"""Module containing functionality for running a self-calibrating gravity model."""
 from __future__ import annotations
 
 # Built-Ins
