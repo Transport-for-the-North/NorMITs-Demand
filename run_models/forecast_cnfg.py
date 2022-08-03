@@ -1,3 +1,6 @@
+"""
+Config file for run_forecast.  Generates a yaml file which the process runs from.
+"""
 from normits_demand.utils import config_base
 from pathlib import Path
 from typing import Dict

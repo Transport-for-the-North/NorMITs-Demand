@@ -1,9 +1,10 @@
-from openpyxl import load_workbook
-from counts import Constants
-import pandas as pd
 """
 Process to apply counts factors to counts
 """
+
+from openpyxl import load_workbook
+from counts import Constants
+import pandas as pd
 
 
 #df = pd.DataFrame(index=constants.growth_cols)

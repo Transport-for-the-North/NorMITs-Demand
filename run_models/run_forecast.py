@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-    Module for running the NTEM forecast.
+Module for running forecasting.  This is built from run_ntem_processing, but currently runs
+using forecast trip ends for growth rather than directly from NTEM.
 """
 ##### IMPORTS #####
 from __future__ import annotations

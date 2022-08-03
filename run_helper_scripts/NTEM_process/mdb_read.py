@@ -1,3 +1,6 @@
+"""
+Reads NTEM mdb files and outputs the required data to csv files
+"""
 import NTEM_process as nt
 import pandas as pd
 import pyodbc

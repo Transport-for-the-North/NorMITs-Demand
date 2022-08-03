@@ -1503,7 +1503,7 @@ if __name__ == "__main__":
 
     # main(pa_parameters)
 
-    for i in ['nhb']:
+    for i in ['hb']:
         for j in ['productions','attractions']:
             plot_tripend_iters(scenario='9.7-COVID',
-            pa=j,hb_nhb=i,zone_name='lad_2020',segmentation='m_tp_week',years=[2018,2021,2030,2040],pct=True)
+            pa=j,hb_nhb=i,zone_name='lad_2020',segmentation='hb_p_tp_week',years=[2021,2030,2040],pct=True)

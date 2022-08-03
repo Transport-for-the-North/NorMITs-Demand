@@ -769,7 +769,7 @@ def compile_highway_for_rail(pa_folder: Path, years: List[int], mode: dict) -> P
         export_dir=vdm_folder,
         matrix_format="pa",
         years_needed=years,
-        m_needed=[mode.keys()],
+        m_needed=list(mode.keys()),
         split_hb_nhb=True,
     )
     for path in paths:

@@ -1,3 +1,6 @@
+"""
+Processes MND into a format growth factors can be derived from
+"""
 ###Imports####
 from dataclasses import dataclass
 from datetime import datetime
@@ -48,13 +51,13 @@ class constants:
 
 def duck(df: pd.DataFrame, day: str) -> pd.DataFrame:
     """
-    Don't remember, adding docstring to get rid of error.  Will update later
+    Used for separating Satruday and Sunday from data to process
     Args:
         df (pd.DataFrame): Dataframe
         day (str): Day name
 
     Returns:
-        pd.DataFrame: Dataframe
+        pd.DataFrame: A daatframe with data for the day specified at 24 hour level
     """
     sub = (
         df.loc[f"{day}", "AM"] * 3
@@ -123,7 +126,7 @@ def main():
             columns=[
                 "date",
                 "msoa",
-                "hour_part",
+                "hour_part",8
                 "journey_purpose",
                 "origin",
                 "destination",
@@ -193,7 +196,7 @@ def main():
     output.rename(columns={'hour_part':'tp','index':'p','LAD20CD':'LAD'},inplace=True)
     output.set_index(['msoa','County','tp','p','LAD'],inplace=True)
     output.to_csv(os.path.join(c.output_path, "complete.csv"))
-    dft_factors(11,2021)
+    dft_factors((11,2021))
 
 
 if __name__ == "__main__":

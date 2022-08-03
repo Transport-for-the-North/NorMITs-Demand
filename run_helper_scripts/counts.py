@@ -1,13 +1,12 @@
-from dataclasses import dataclass
-import pandas as pd
-import geopandas as gpd
-import os
-
 """
 Process to take in WebTRIS counts and output data to factor counts up over years.
 It is currently set up specifically for 2018 to 2021, but will work exactly the same provided data for any two
 years.
 """
+from dataclasses import dataclass
+import pandas as pd
+import geopandas as gpd
+import os
 
 
 @dataclass

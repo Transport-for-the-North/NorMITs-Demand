@@ -873,8 +873,6 @@ def get_zoning_system(name: str) -> ZoningSystem:
 class ZoningSystemMetaData(BaseConfig):
     """
     Class to store metadata relating to zoning systems in normits_demand
-    Args:
-        BaseConfig (_type_): _description_
     """
     shapefile_id_col: str
     shapefile_path: Path
