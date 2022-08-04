@@ -45,6 +45,7 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
     scenario: nd.Scenario
     matrix_folder: pathlib.Path
     model: nd.AssignmentModel
+    matrix_zoning: str
     year: int
     disaggregation_output_segment: segment_disaggregator.DisaggregationOutputSegment
     trip_length_distribution_folder: pathlib.Path
@@ -82,6 +83,16 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         cost_folder = cls._build_cost_folder(values.get("import_folder"), values.get("model"))  # type: ignore
         cls._folder_exists(cost_folder)
         return values
+
+    @pydantic.validator("matrix_zoning")
+    def _check_zone_system(cls, value: str) -> str:  # pylint: disable=no-self-argument
+        value = value.lower()
+        try:
+            _ = nd.get_zoning_system(value)
+        except nd.NormitsDemandError as err:
+            raise ValueError(err) from err
+
+        return value
 
     @property
     def cost_folder(self) -> pathlib.Path:
@@ -210,7 +221,7 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
     LOG.debug("Input parameters:\n%s", params.to_yaml())
 
     trip_end_converter = traveller_segmentation_trip_ends.NoTEMToTravellerSegmentation(
-        output_zoning=nd.get_zoning_system(params.model.get_name().lower()),
+        output_zoning=nd.get_zoning_system(params.matrix_zoning),
         base_year=params.year,
         scenario=params.scenario,
         notem_iteration_name=params.notem_iteration,

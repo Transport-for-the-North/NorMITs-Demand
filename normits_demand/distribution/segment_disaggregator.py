@@ -441,6 +441,11 @@ def _segment_build_worker(
     )
     if not base_matrix.index.equals(base_matrix.columns):
         raise ValueError("base matrix columns and index aren't equal")
+    if len(unique_zones) != len(base_matrix.index):
+        raise ValueError(
+            "base matrix has a different number of zones to expected zones, "
+            f"{len(base_matrix.index)} and {len(unique_zones)} respectively"
+        )
     if not np.equal(np.sort(unique_zones), np.sort(base_matrix.index.values)).all():
         raise ValueError("base matrix zones not equal to expected zones")
 

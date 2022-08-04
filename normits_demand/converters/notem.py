@@ -591,7 +591,9 @@ class ToDistributionModel:
             dvec = dvec.aggregate(aggregation_segmentation)
         if modal_segmentation is not None:
             dvec = dvec.subset(modal_segmentation)
-        dvec = dvec.translate_zoning(self.output_zoning, translation_weighting)
+
+        if dvec.zoning_system is None or self.output_zoning != dvec.zoning_system:
+            dvec = dvec.translate_zoning(self.output_zoning, translation_weighting)
 
         return dvec
 
