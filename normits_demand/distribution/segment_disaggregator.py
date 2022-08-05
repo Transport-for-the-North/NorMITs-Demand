@@ -285,7 +285,7 @@ def disaggregate_segments(
     # Find all matrices and extract segmentation info
     LOG.info("Finding base matrices in %s", import_folder)
     base_mat_seg = pd.DataFrame(
-        nup.parse_matrix_folder(
+        file_ops.parse_folder_files(
             import_folder,
             extension_filter=constants.VALID_MAT_FTYPES,
             required_data=required_columns,
@@ -308,7 +308,7 @@ def disaggregate_segments(
     # Find all TLDs and extract segmentation info
     LOG.info("Finding TLDs in %s", target_tld_folder)
     tld_seg = pd.DataFrame(
-        nup.parse_matrix_folder(
+        file_ops.parse_folder_files(
             target_tld_folder,
             extension_filter=constants.VALID_MAT_FTYPES,
             required_data=segment_columns + [disaggregation_segment.value],
@@ -953,7 +953,7 @@ def get_costs(
 
     seg_columns = ["trip_origin", "m", "p", "ca"]
     cost_files = pd.DataFrame(
-        nup.parse_matrix_folder(
+        file_ops.parse_folder_files(
             cost_folder,
             extension_filter=constants.VALID_MAT_FTYPES,
             required_data=seg_columns,

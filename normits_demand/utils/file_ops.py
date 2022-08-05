@@ -18,11 +18,12 @@ import itertools
 import os
 import pathlib
 import pickle
+import re
 import shutil
 import time
 import warnings
 from os import PathLike
-from typing import Any, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Collection, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 
 # Third Party
 import numpy as np
@@ -1285,3 +1286,84 @@ def iterate_files(
                 continue
 
         yield current
+
+
+def parse_filename(filename: str) -> dict[str, Union[str, int]]:
+    """Extract segmentation parameters from filename.
+
+    Parameters
+    ----------
+    filename : str
+        Name of file following the segmentation naming conventions.
+
+    Returns
+    -------
+    dict[str, Union[str, int]]
+        Dictionary of segment name and value.
+    """
+    sep = r"(?:\b|[_.])"
+    int_values = {"yr", "m", "p", "ca", "soc", "ns", "g"}
+    naming_formats = {
+        "trip_origin": r"(n?hb)",
+        "matrix_type": r"(pa|od_from|od_to)",
+        "uc": r"(business|commute|other)",
+        "yr": r"yr(\d{4})",
+        "m": r"m(\d)",
+        "p": r"p(\d{1,2})",
+        "ca": r"ca(\d)",
+        "soc": r"soc(\d)",
+        "ns": r"ns(\d)",
+        "g": r"g(\d)",
+        "tp": r"tp(\d)",
+    }
+
+    data: dict[str, Union[str, int]] = {}
+    for nm, pat in naming_formats.items():
+        match = re.search(f"{sep}{pat}{sep}", filename, re.I)
+        if match is not None:
+            if nm in int_values:
+                data[nm] = int(match.group(1))
+            else:
+                data[nm] = match.group(1).lower()
+
+    return data
+
+
+def parse_folder_files(
+    folder: pathlib.Path,
+    extension_filter: Collection[str] = None,
+    required_data: Collection[str] = None,
+) -> Iterator[dict[str, Union[str, int, pathlib.Path]]]:
+    """Iterate through files in a folder and return their segmentation parameters.
+
+    Parameters
+    ----------
+    folder : pathlib.Path
+        Folder to iterate through files within.
+    extension_filter : Collection[str], optional
+        Suffixes to filter files by.
+    required_data : Collection[str], optional
+        Segments the filenames should contain, files with some missing
+        segments will be excluded.
+
+    Yields
+    ------
+    Iterator[dict[str, Union[str, int, pathlib.Path]]]
+        Dictionary containing the file path, with the key 'path' and
+        all the segment names and values.
+    """
+    for file in folder.iterdir():
+        if not file.is_file():
+            continue
+
+        if extension_filter is not None:
+            suffix = "".join(file.suffixes)
+            if not suffix in {s.lower() for s in extension_filter}:
+                continue
+        data = parse_filename(file.name)
+
+        if required_data is not None:
+            if any(i not in data for i in required_data):
+                continue
+
+        yield {"path": file, **data}
