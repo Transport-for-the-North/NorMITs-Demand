@@ -16,7 +16,7 @@ sys.path.append("..")
 sys.path.append(".")
 # pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
-from normits_demand import logging as nd_log
+from normits_demand import logging as nd_log, constants
 from normits_demand.converters import traveller_segmentation_trip_ends
 from normits_demand.distribution import segment_disaggregator
 from normits_demand.matrices import matrix_processing
@@ -175,6 +175,17 @@ def aggregate_purposes(
     output_folder = matrix_folder / "userclass"
     output_folder.mkdir(exist_ok=True)
 
+    # Check whether matrices contain time period and car availability segmentation
+    ca_needed = set()
+    tp_needed = set()
+    for params in file_ops.parse_folder_files(matrix_folder, constants.VALID_MAT_FTYPES):
+        if "tp" in params:
+            tp_needed.add(int(params["tp"]))
+        if "ca" in params:
+            ca_needed.add(int(params["ca"]))
+    ca_needed = list(ca_needed) if len(ca_needed) > 0 else None
+    tp_needed = list(tp_needed) if len(tp_needed) > 0 else None
+
     compile_params_path = pathlib.Path(
         matrix_processing.build_compile_params(
             import_dir=matrix_folder,
@@ -182,7 +193,8 @@ def aggregate_purposes(
             matrix_format="pa",
             years_needed=[year],
             m_needed=model.get_mode().get_mode_values(),
-            ca_needed=[1, 2],
+            ca_needed=ca_needed,
+            tp_needed=tp_needed,
             split_hb_nhb=True,
         )[0]
     )

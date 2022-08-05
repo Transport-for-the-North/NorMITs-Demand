@@ -4,7 +4,7 @@ base_output_folder: I:\NorMITs Demand\Traveller Segmentation Tool
 notem_iteration: 9.10
 notem_export_home: I:\NorMITs Demand\NoTEM
 scenario: SC01_JAM
-matrix_folder: I:\NorMITs Demand\Distribution Model\iter9.10.3\train\Final Outputs\Full PA Matrices\translated
+matrix_folder: I:\NorMITs Demand\Distribution Model\iter9.10.3\train\Final Outputs\Full TP PA Matrices
 model: NoRMS
 matrix_zoning: NoRMS
 year: 2018
