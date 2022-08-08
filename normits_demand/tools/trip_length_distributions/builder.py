@@ -346,7 +346,6 @@ class TripLengthDistributionBuilder:
             band_trips=np_all_band_trips,
             cost_units=output_cost_units,
             band_mean_cost=np_all_band_mean_cost,
-            sample_size=sample_size,
         )
 
     def _filter_nts_data(
@@ -874,7 +873,7 @@ class TripLengthDistributionBuilder:
                 # Store the generated data
                 sample_size_log.append(log_line)
                 name_to_distribution.update({tld_name: tld})
-                full_export.append(tld.to_df(additional_cols=segment_params))
+                full_export.append(tld.to_df(additional_cols=agg_segment_params))
 
         # Consolidate reports
         full_export = pd.concat(full_export, ignore_index=True)
@@ -1002,6 +1001,7 @@ class TripLengthDistributionBuilder:
             segment_types=segment_types,
         )
         tld_name = tld_name_template.format(segment_params=segment_str)
+        log_line["name"] = tld_name
 
         return tld, tld_name, log_line
 
@@ -1294,7 +1294,7 @@ class TripLengthDistributionBuilder:
         )
         graph_out_path = tld_out_path / "graphs"
         file_ops.create_folder(graph_out_path, verbose_create=False)
-        print(f"Generating TLD at: {tld_out_path}...")
+        LOG.info(f"Generating TLD at: {tld_out_path}...")
 
         # Try read in the bands and segmentation
         fname, bands_name = self._get_name_and_fname(bands_name)
@@ -1349,7 +1349,12 @@ class TripLengthDistributionBuilder:
                     "%s did not pass further checks. Reverting to "
                     "aggregated TLD." % name
                 )
+                # Adjust the aggregated dist to sample size of this segment
+                mask = sample_size_log['name'] == name
+                sample_size = sample_size_log[mask]["records"].squeeze()
+
                 agg_dist = agg_name_to_dist[name_to_agg_name[name]]
+                agg_dist.sample_size = sample_size
                 name_to_distribution[name] = agg_dist
             else:
                 LOG.info("%s looks OK. Leaving as is." % name)
