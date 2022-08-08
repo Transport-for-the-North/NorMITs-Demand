@@ -894,11 +894,26 @@ def copy_segment_files(src_dir: nd.PathLike,
 
     Parameters
     ----------
-    src_dir
-    dst_dir
-    segmentation
-    process_count
-    filename_kwargs
+    src_dir:
+        The directory to copy files from.
+
+    dst_dir:
+        The directory to copy files to.
+
+    segmentation:
+        The segmentation to use to generate the filenames to copy from `src`
+        to `dst`
+
+    process_count:
+        The number of processes to use when copying files. By default, uses
+        the module default process count.
+
+    filename_kwargs:
+        Any further kwargs to pass into `segmentation.generate_file_name()`
+
+    Returns
+    -------
+    None
     """
     # Generate all the filenames
     filenames = list()
@@ -912,6 +927,77 @@ def copy_segment_files(src_dir: nd.PathLike,
         src_dir=src_dir,
         dst_dir=dst_dir,
         filenames=filenames,
+        process_count=process_count,
+    )
+
+
+def copy_template_segment_files(
+    src_dir: nd.PathLike,
+    dst_dir: nd.PathLike,
+    segmentation: nd.SegmentationLevel,
+    input_template_filename: str,
+    output_template_filename: str = None,
+    process_count: int = consts.PROCESS_COUNT,
+) -> None:
+    """Copy template segment files from src_dir to dst_dir
+
+    Parameters
+    ----------
+    src_dir:
+        The directory to copy files from.
+
+    dst_dir:
+        The directory to copy files to.
+
+    segmentation:
+        The segmentation to use to generate the filenames to copy from `src`
+        to `dst`. Will be used with `template_segment_filename` to generate
+        the filenames.
+
+    input_template_filename:
+        The template filename to use for the input filenames.
+        Will be used as:
+        `segmentation.generate_file_name_from_template(
+            input_template_filename, segment_params,
+        )`
+
+    output_template_filename:
+        The template filename to use for the output filenames. If left as None,
+        the same output filename is used as the input.
+        Will be used as:
+        `segmentation.generate_file_name_from_template(
+            output_template_filename, segment_params,
+        )`
+
+    process_count:
+        The number of processes to use when copying files. By default, uses
+        the module default process count.
+    """
+    # Generate all the filenames
+    kwarg_list = list()
+    for segment_params in segmentation:
+        in_filename = segmentation.generate_file_name_from_template(
+            template=input_template_filename,
+            segment_params=segment_params,
+        )
+
+        if output_template_filename is not None:
+            out_filename = segmentation.generate_file_name_from_template(
+                template=output_template_filename,
+                segment_params=segment_params,
+            )
+        else:
+            out_filename = in_filename
+
+        kwarg_list.append({
+            "src": src_dir / in_filename,
+            "dst": dst_dir / out_filename,
+        })
+
+    # Multiprocess the copy
+    multiprocessing.multiprocess(
+        fn=_copy_files_internal,
+        kwargs=kwarg_list,
         process_count=process_count,
     )
 
@@ -1121,10 +1207,13 @@ def get_latest_modified_time(paths: Iterable[PathLike]) -> float:
     -------
     latest_modified_time:
         The latest modified time of all paths.
-        If paths is an empty iterable, -1.0 is returned.
+        If paths is an empty iterable, np.inf is returned.
     """
+    if paths == list():
+        return np.inf
+
     # init
-    latest_time = -1.0
+    latest_time = -1
 
     # Check the latest time of all paths
     for path in paths:
@@ -1148,8 +1237,11 @@ def get_oldest_modified_time(paths: Iterable[PathLike]) -> float:
     -------
     oldest_modified_time:
         The oldest modified time of all paths.
-        If paths is an empty iterable, np.inf is returned.
+        If paths is an empty iterable, -1 is returned.
     """
+    if paths == list():
+        return -1
+
     # init
     oldest_time = np.inf
 

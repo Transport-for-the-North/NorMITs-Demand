@@ -813,7 +813,6 @@ class GravityDistributor(AbstractDistributor):
             calibrate_params=kwargs.get('calibrate_params', True),
             ftol=kwargs.get('ftol', 1e-5),
             failure_tol=kwargs.get("failure_tol", 0),
-            default_init_params=kwargs.get("default_init_params", None),
             verbose=kwargs.get('verbose', 2),
         )
 
@@ -1004,6 +1003,10 @@ class GravityDistributor(AbstractDistributor):
                 "the following places:\n"
                 f"{nan_report}"
             )
+
+        # Convert the init_params to default if not given
+        if kwargs.get("init_params") is None:
+            kwargs["init_params"] = kwargs.get("cost_function").default_params
 
         # TODO(BT): Fix this problem at the cost source,
         #  only do for upper model. cars, bus, active

@@ -1609,14 +1609,19 @@ class ExternalForecastSystem:
             for year in years:
                 # Compile
                 mat_p.compile_norms_to_vdm(
-                    mat_import=self.exports[pa_import],
+                    mat_pa_import=self.exports[pa_import],
+                    # TODO(BT): Actually pass in OD here
+                    mat_od_import=self.exports[pa_import],
                     mat_export=self.exports['compiled_pa'],
                     params_export=self.params['compile'],
                     year=year,
                     m_needed=m_needed,
                     internal_zones=self.model_internal_zones,
                     external_zones=self.model_external_zones,
-                    matrix_format='pa',
+                    pa_matrix_format='pa',
+                    od_to_matrix_format='pa',
+                    od_from_matrix_format='pa',
+                    nhb_od_matrix_format='pa',
                     from_to_split_factors=from_to_split_factors,
                 )
         else:

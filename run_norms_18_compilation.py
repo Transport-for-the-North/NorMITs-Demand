@@ -54,11 +54,16 @@ new_compile_params = os.path.join(opa, 'new_compile_params.csv')
 
 
 compile = mp.compile_norms_to_vdm(
-    mat_import = opa,
+    mat_pa_import = opa,
+    # TODO(BT): Actually pass in OD here
+    mat_od_import = opa,
     mat_export = opa2,
     params_export = params,
     year = '2018',
-    matrix_format= 'pa',
+    pa_matrix_format='pa',
+    od_to_matrix_format='pa',
+    od_from_matrix_format='pa',
+    nhb_od_matrix_format='pa',
     internal_zones=list(range(1,1157)),
     external_zones=list(range(1157,1301))
     )
