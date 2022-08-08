@@ -1294,7 +1294,7 @@ class TripLengthDistributionBuilder:
         )
         graph_out_path = tld_out_path / "graphs"
         file_ops.create_folder(graph_out_path, verbose_create=False)
-        print(f"Generating TLD at: {tld_out_path}...")
+        LOG.info(f"Generating TLD at: {tld_out_path}...")
 
         # Try read in the bands and segmentation
         fname, bands_name = self._get_name_and_fname(bands_name)

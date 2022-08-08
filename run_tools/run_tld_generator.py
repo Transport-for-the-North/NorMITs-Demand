@@ -22,6 +22,7 @@ import itertools
 sys.path.append("..")
 # pylint: disable=import-error,wrong-import-position
 from normits_demand import core as nd_core
+from normits_demand import logging as nd_log
 from normits_demand.tools import trip_length_distributions as tlds
 
 # pylint: enable=import-error,wrong-import-position
@@ -35,6 +36,8 @@ TLD_HOME = r"I:\NorMITs Demand\import\trip_length_distributions\config"
 BAND_DIR = os.path.join(TLD_HOME, "bands")
 SEGMENTATION_DIR = os.path.join(TLD_HOME, "segmentations")
 COPY_DEFINITIONS_DIR = os.path.join(SEGMENTATION_DIR, "copy_defs")
+
+LOG_FILE = "TLD_Builder.log"
 
 
 def run_all_combinations():
@@ -246,6 +249,14 @@ def build_new_traveller_segment_tlds():
 
 
 if __name__ == "__main__":
+    # LOGGING
+    nd_log.get_logger(
+        logger_name=nd_log.get_package_logger_name(),
+        log_file_path=os.path.join(OUTPUT_FOLDER, LOG_FILE),
+        instantiate_msg="Running TLD Builder",
+        log_version=True,
+    )
+
     # run_test()
 
     # run_all_combinations()
