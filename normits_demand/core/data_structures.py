@@ -42,6 +42,7 @@ from tqdm import tqdm
 import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand import core
+from normits_demand import logging as nd_log
 
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
@@ -50,6 +51,10 @@ from normits_demand.utils import file_ops
 from normits_demand.utils import compress
 
 from normits_demand.concurrency import multiprocessing
+
+
+# ## CONSTANTS ## #
+LOG = nd_log.get_logger(__name__)
 
 
 # ## CLASSES ## #
@@ -380,13 +385,9 @@ class DVector:
 
         # Set defaults if args not set
         val_col = self._val_col if val_col is None else val_col
-        if zone_col is None:
-            if zoning_system is not None:
-                self.zone_col = zoning_system.col_name
-            else:
-                self.zone_col = None
-        else:
-            self.zone_col = zone_col
+        if zone_col is None and zoning_system is not None:
+            zone_col = zoning_system.col_name
+        self.zone_col = zone_col
 
         # Try to convert the given data into DVector format
         if isinstance(import_data, pd.DataFrame):
@@ -606,6 +607,68 @@ class DVector:
 
         return DVector(
             zoning_system=return_zoning_system,
+            segmentation=self.segmentation,
+            time_format=self.time_format,
+            import_data=dvec_data,
+            process_count=self.process_count,
+        )
+    def __sub__(self,other: DVector) -> DVector:
+        """
+        Builds a new Dvec by subtracting other from self.
+
+        DVectors must have the same zone system, segmentation
+        and time format.
+
+        Retains process_count, df_chunk_size, and verbose params from a.
+
+        Args:
+        -----
+        self:
+            Your target DVector.
+        other : 
+            The DVector you want to subtract from your DVector.
+        Returns:
+        -----
+            DVector: The difference between the two DVectors
+        """
+        # ## CHECK WE CAN ADD a AND b ## #
+        return_zoning_system = self._check_other(other, "multiply")
+        # TODO(MB) Add functionality for handling addition of DVectors
+        #   with different segmentation
+        if self.segmentation != other.segmentation:
+            raise DVectorError(
+                "Cannot subtract 2 DVectors with different segmentation"
+            )
+        if self.time_format != other.time_format:
+            raise DVectorError(
+                "Cannot subtract 2 DVectors with different time_format"
+            )
+
+        # Perform addition
+        dvec_data = {}
+        for segment in self.segmentation.segment_names:
+            dvec_data[segment] = self._data[segment] - other._data[segment]
+
+        return DVector(
+            zoning_system=return_zoning_system,
+            segmentation=self.segmentation,
+            time_format=self.time_format,
+            import_data=dvec_data,
+            process_count=self.process_count,
+        )
+    def __abs__(self) -> DVector:
+        """
+        Builds an identical DVector but with all values positive
+
+        Returns:
+            DVector: All positive DVector
+        """
+        dvec_data = {}
+        for segment in self.segmentation.segment_names:
+            dvec_data[segment] = np.absolute(self._data[segment])
+        
+        return DVector(
+            zoning_system=self.zoning_system,
             segmentation=self.segmentation,
             time_format=self.time_format,
             import_data=dvec_data,
@@ -1902,6 +1965,12 @@ class DVector:
             if zonal_average:
                 other_segs = [np.mean(other._data[s]) for s in out_seg_names]
                 split_factors = other_segs / np.sum(other_segs)
+
+                # If 0 total split evenly
+                if np.sum(other_segs) == 0:
+                    split_factors = np.ones_like(other_segs) / len(other_segs)
+                else:
+                    split_factors = other_segs / np.sum(other_segs)
             else:
                 other_segs = np.array([other._data[s] for s in out_seg_names])
                 zonal_sums = np.sum(other_segs, axis=0)
@@ -2297,7 +2366,7 @@ class DVector:
                              ca_sector_path: nd.PathLike,
                              ie_sector_path: nd.PathLike,
                              lad_report_path: nd.PathLike = None,
-                             lad_report_seg: nd.core.zoning.ZoningSystem = None,
+                             lad_report_seg: nd.core.segments.SegmentationLevel = None,
                              ) -> None:
         """
         Writes segment, CA sector, and IE sector reports to disk
@@ -2335,23 +2404,32 @@ class DVector:
         df.to_csv(segment_totals_path, index=False)
 
         # Segment by CA Sector total reports - 1 to 1, No weighting
-        tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
-        dvec = self.translate_zoning(tfn_ca_sectors)
-        dvec.to_df().to_csv(ca_sector_path, index=False)
+        try:
+            tfn_ca_sectors = nd.get_zoning_system('ca_sector_2020')
+            dvec = self.translate_zoning(tfn_ca_sectors)
+            dvec.to_df().to_csv(ca_sector_path, index=False)
+        except nd.ZoningError as err:
+            LOG.error("Error creating CA sector report: %s", err)
 
         # Segment by IE Sector total reports - 1 to 1, No weighting
-        ie_sectors = nd.get_zoning_system('ie_sector')
-        dvec = self.translate_zoning(ie_sectors)
-        dvec.to_df().to_csv(ie_sector_path, index=False)
+        try:
+            ie_sectors = nd.get_zoning_system('ie_sector')
+            dvec = self.translate_zoning(ie_sectors)
+            dvec.to_df().to_csv(ie_sector_path, index=False)
+        except nd.ZoningError as err:
+            LOG.error("Error creating IE sector report: %s", err)
 
         if lad_report_seg is None:
             return
 
         # Segment by LAD segment total reports - 1 to 1, No weighting
-        lad = nd.get_zoning_system('lad_2020')
-        dvec = self.aggregate(lad_report_seg)
-        dvec = dvec.translate_zoning(lad)
-        dvec.to_df().to_csv(lad_report_path, index=False)
+        try:
+            lad = nd.get_zoning_system('lad_2020')
+            dvec = self.aggregate(lad_report_seg)
+            dvec = dvec.translate_zoning(lad)
+            dvec.to_df().to_csv(lad_report_path, index=False)
+        except nd.ZoningError as err:
+            LOG.error("Error creating LAD report: %s", err)
 
     def segment_apply(self,
                       func: Callable[[np.ndarray], np.ndarray],

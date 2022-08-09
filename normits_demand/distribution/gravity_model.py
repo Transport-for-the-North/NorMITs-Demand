@@ -1,15 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Created on: 05/11/2021
-Updated on:
-
-Original author: Ben Taylor
-Last update made by: Ben Taylor
-Other updates made by:
-
-File purpose:
-
-"""
+"""Module containing functionality for running a self-calibrating gravity model."""
 from __future__ import annotations
 
 # Built-Ins
@@ -599,7 +589,9 @@ class GravityModelBase(abc.ABC):
         for cost_param in self.cost_function.kw_order:
             # Estimate what the furness would have done
             furness_mat = self._jacobian_mats[cost_param] * furness_factor
-            adj_weights = furness_mat / furness_mat.sum() if furness_mat.sum() != 0 else 0
+            if furness_mat.sum() == 0:
+                raise ValueError("estimated furness matrix total is 0")
+            adj_weights = furness_mat / furness_mat.sum()
             adj_final = self._jacobian_mats['final'].sum() * adj_weights
 
             # Place in dictionary to send to Jacobian

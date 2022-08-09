@@ -1365,7 +1365,7 @@ class ExternalForecastSystem:
             export_matrix_format='od',
             tour_proportions_dir=self.imports['post_me_tours'],
             model_name=self.model_name,
-            years_needed=years_needed,
+            future_years_needed=years_needed,
             **nhb_seg_params,
         )
 

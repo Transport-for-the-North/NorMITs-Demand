@@ -335,8 +335,8 @@ def main(params: NTEMForecastParameters, init_logger: bool = True):
     )
 
     # Compile to output formats
-    ntem_forecast.compile_noham_for_norms(pa_folder, efs_consts.FUTURE_YEARS)
-    compiled_od_path = ntem_forecast.compile_noham(
+    ntem_forecast.compile_highway_for_rail(pa_folder, efs_consts.FUTURE_YEARS)
+    compiled_od_path = ntem_forecast.compile_highway(
         od_folder,
         efs_consts.FUTURE_YEARS,
         params.car_occupancies_path,

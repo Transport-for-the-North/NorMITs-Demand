@@ -14,6 +14,8 @@ from typing import Dict, Set, Tuple
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import sys
+sys.path.append('..')
 
 # Local imports
 # pylint: disable=import-error
@@ -24,9 +26,7 @@ from normits_demand import logging as nd_log
 
 
 ###### CONSTANTS #####
-LOG = nd_log.get_logger(
-    nd_log.get_package_logger_name() + ".run_checker_scripts.notem_iter_comparison"
-)
+LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".notem_iter_comparison")
 LOG_FILE = "NoTEM_iter_comparison.log"
 
 
@@ -35,17 +35,17 @@ LOG_FILE = "NoTEM_iter_comparison.log"
 class ComparisonInputs:
     """Input parameters for running NoTEM iter comparison script."""
 
-    base_folder: Path = Path(r"I:\NorMITs Demand\NoTEM")
-    compare_iters: tuple[str, str] = ("iter9.6", "iter9.5")
-    scenario: str = "SC01_JAM"
-    output_folder: Path = Path(
-        r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Outputs\Attraction Balancing Checks"
-    )
+    base_folder: Path
+    compare_iters: tuple[str, str]
+    scenarios: tuple[nd.Scenario, nd.Scenario]
+    output_folder: Path
 
 
 ###### FUNCTIONS #####
 def find_notem_reports(
-    base_folder: Path, iters: Tuple[str, str], scenario: str
+    base_folder: Path,
+    iters: Tuple[str, str],
+    scenarios: tuple[nd.Scenario, nd.Scenario],
 ) -> pd.DataFrame:
     """Search for NoTEM iteration HB/NHB productions and attractions reports.
 
@@ -60,8 +60,8 @@ def find_notem_reports(
         outputs.
     iters : Tuple[str, str]
         Names of the two iterations being compared.
-    scenario : str
-        Name of the scenario to compare.
+    scenarios : Tuple[nd.Scenario, nd.Scenario]
+        Name of the scenarios to compare.
 
     Returns
     -------
@@ -89,7 +89,10 @@ def find_notem_reports(
         r"(?P<sector>\w+)$",
         re.I,
     )
-    folders = {"new": base_folder / iters[0], "old": base_folder / iters[1]}
+    folders = {
+        "new": base_folder / iters[0] / scenarios[0].get_name(),
+        "old": base_folder / iters[1] / scenarios[1].get_name(),
+    }
     for nm, path in folders.items():
         if not path.is_dir():
             raise NotADirectoryError(f"{nm} iteration folder doesn't exist: {path}")
@@ -101,7 +104,7 @@ def find_notem_reports(
     )
     for trip_origin in ("hb", "nhb"):
         for pa in ("productions", "attractions"):
-            report_dir = folders["new"] / scenario / f"{trip_origin}_{pa}" / "reports"
+            report_dir = folders["new"] / f"{trip_origin}_{pa}" / "reports"
             for path in report_dir.iterdir():
                 test_path = folders["old"] / path.relative_to(folders["new"])
 
@@ -202,6 +205,9 @@ def compare_reports(files: pd.DataFrame, value_cols: Set) -> pd.DataFrame:
         if len(data) != 2:
             continue
         comparisons.append({"index": paths.Index, **_compare_dataframes(**data)})
+
+    if comparisons == []:
+        return files
 
     comparisons = pd.DataFrame(comparisons).set_index("index")
     comparisons = pd.concat([files, comparisons], axis=1)
@@ -350,13 +356,23 @@ def main(params: ComparisonInputs, init_logger: bool = True) -> None:
     NotADirectorError
         If `params.base_folder` doesn't exist.
     """
+    name = "{}-{} to {}-{} comparison".format(
+        params.compare_iters[0],
+        params.scenarios[0].get_name(),
+        params.compare_iters[1],
+        params.scenarios[1].get_name(),
+    )
+    output_folder = params.output_folder / name
+    output_folder.mkdir(parents=True)
+
     if init_logger:
         nd_log.get_logger(
             nd_log.get_package_logger_name(),
-            params.output_folder / LOG_FILE,
-            "Adding Segmentation",
+            output_folder / LOG_FILE,
+            "Running NoTEM Iteration Comparison",
         )
 
+    LOG.info("Input parameters:\n%s", params)
     if not params.base_folder.is_dir():
         raise NotADirectoryError(f"base folder doesn't exist: {params.base_folder}")
     LOG.info("Base folder: %s", params.base_folder)
@@ -365,20 +381,20 @@ def main(params: ComparisonInputs, init_logger: bool = True) -> None:
     files = find_notem_reports(
         params.base_folder,
         params.compare_iters,
-        params.scenario,
+        params.scenarios,
     )
-    name = "{}_to_{}_comparison".format(*params.compare_iters)
+
     file_comparisons = compare_reports(files, {"val"})
-    out = params.output_folder / (name + "-reports.xlsx")
+    out = output_folder / (name + "-reports.xlsx")
     file_comparisons.to_excel(out, index=False)
     LOG.info("Written: %s", out)
 
     # Find and compare all DVectors
     dvectors = find_dvectors(
-        params.base_folder / params.compare_iters[0],
-        params.base_folder / params.compare_iters[1],
+        params.base_folder / params.compare_iters[0] / params.scenarios[0].get_name(),
+        params.base_folder / params.compare_iters[1] / params.scenarios[1].get_name(),
     )
-    out = params.output_folder / (name + "-DVector_summary.csv")
+    out = output_folder / (name + "-DVector_summary.csv")
     dvectors.to_csv(out, index=False)
     LOG.info("Written: %s", out)
 
@@ -390,12 +406,26 @@ def main(params: ComparisonInputs, init_logger: bool = True) -> None:
     )
     for row in pbar:
         if row.old_exists:
-            out = compare_dvectors(row.new, row.old, params.output_folder)
+            out = compare_dvectors(row.new, row.old, output_folder)
             tqdm.write(f"Outputs saved to: {out}")
 
-    LOG.info("Comparisons saved to: %s", params.output_folder)
+    LOG.info("Comparisons saved to: %s", output_folder)
 
 
 ##### MAIN #####
 if __name__ == "__main__":
-    main(ComparisonInputs())
+    try:
+        main(
+            ComparisonInputs(
+                base_folder=Path(r"C:\Projects\MidMITS\Python\outputs\ApplyMND"),
+                compare_iters=("iter9.6e", "iter9.6c-COVID"),
+                scenarios=(nd.Scenario.NTEM, nd.Scenario.NTEM),
+                output_folder=Path(
+                    r"C:\Projects\MidMITS\Python\outputs\ApplyMND"
+                    r"\Iteration Comparison"
+                ),
+            )
+        )
+    except Exception:
+        LOG.critical("Iteration comparison failed with error:", exc_info=True)
+        raise

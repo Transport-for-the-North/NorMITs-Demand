@@ -94,11 +94,11 @@ def starts_with(s, x):
     return re.search(search_string, s) is not None
 
 
-def compare_mats_fn(mat_fname):
+def compare_mats_fn(mat_fname, original_dir, compare_dir):
     report = dict()
 
-    orig = pd.read_csv(os.path.join(ORIGINAL_DIR, mat_fname), index_col=0)
-    comp = pd.read_csv(os.path.join(COMPARE_DIR, mat_fname), index_col=0)
+    orig = pd.read_csv(os.path.join(original_dir, mat_fname), index_col=0)
+    comp = pd.read_csv(os.path.join(compare_dir, mat_fname), index_col=0)
 
     # Check the dimensions
     # noinspection PyTypeChecker
@@ -165,17 +165,17 @@ def compare_mats_fn(mat_fname):
     return report
 
 
-def main():
+def main(original_dir, compare_dir, output_dir, report_fname):
     # Check the given directories exist
-    if not os.path.isdir(ORIGINAL_DIR):
-        raise ValueError("Cannot find directory %s" % ORIGINAL_DIR)
+    if not os.path.isdir(original_dir):
+        raise ValueError("Cannot find directory %s" % original_dir)
 
-    if not os.path.isdir(COMPARE_DIR):
-        raise ValueError("Cannot find directory %s" % COMPARE_DIR)
+    if not os.path.isdir(compare_dir):
+        raise ValueError("Cannot find directory %s" % compare_dir)
 
     # Get the files to compare
-    original_mats = [x for x in list_files(ORIGINAL_DIR) if '.csv' in x]
-    compare_mats = [x for x in list_files(COMPARE_DIR) if '.csv' in x]
+    original_mats = [x for x in list_files(original_dir) if '.csv' in x]
+    compare_mats = [x for x in list_files(compare_dir) if '.csv' in x]
 
     # Filter if needed
     if TRIP_ORIGIN is not None:
@@ -211,7 +211,8 @@ def main():
 
     # ## MULTIPROCESS MATRIX COMPARISON ## #
     print("Checks complete. Comparing matrices...")
-    kwarg_list = [{'mat_fname': x} for x in original_mats]
+    kwarg_dict =  {'original_dir': original_dir, 'compare_dir': compare_dir}
+    kwarg_list = [{'mat_fname': x, **kwarg_dict} for x in original_mats]
     pbar_kwargs = {'desc': 'Comparing Matrices'}
 
     reports = multiprocessing.multiprocess(
@@ -224,8 +225,8 @@ def main():
 
     # Write the report to disk
     df = pd.DataFrame(reports)
-    df.to_csv(os.path.join(OUTPUT_DIR, REPORT_FNAME), index=False)
+    df.to_csv(os.path.join(output_dir, report_fname), index=False)
 
 
 if __name__ == '__main__':
-    main()
+    main(ORIGINAL_DIR, COMPARE_DIR, OUTPUT_DIR, REPORT_FNAME)

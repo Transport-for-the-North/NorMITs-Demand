@@ -44,6 +44,7 @@ from normits_demand.utils import read_df
 from normits_demand.utils import write_df
 from normits_demand.utils import read_pickle
 from normits_demand.utils import write_pickle
+from normits_demand.utils import plots
 
 # Audit classes
 from normits_demand.reports.efs_reporting import EfsReporter

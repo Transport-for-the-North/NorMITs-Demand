@@ -14,10 +14,12 @@ Production Models for NoTEM
 from __future__ import annotations
 
 # Builtins
+import dataclasses
 import os
+import pathlib
 import warnings
 
-from typing import Dict
+from typing import Dict, List, Optional
 
 # Third party imports
 import pandas as pd
@@ -109,7 +111,8 @@ class HBProductionModel(HBProductionModelPaths):
                  mode_time_splits_path: str,
                  export_home: str,
                  constraint_paths: Dict[int, nd.PathLike] = None,
-                 process_count: int = consts.PROCESS_COUNT
+                 process_count: int = consts.PROCESS_COUNT,
+                 trip_end_adjustments: Optional[List[TripEndAdjustmentFactors]] = None,
                  ) -> None:
         """
         Sets up and validates arguments for the Production model.
@@ -144,6 +147,11 @@ class HBProductionModel(HBProductionModelPaths):
             The number of processes to create in the Pool. Typically this
             should not exceed the number of cores available.
             Defaults to consts.PROCESS_COUNT.
+
+        trip_end_adjustments: List[TripEndAdjustmentFactors], optional
+            List of all adjustment factors to apply to the trip ends. Adjustments
+            are applied one after another at to the productions in the output
+            segmentation.
         """
         # Check that the paths we need exist!
         [file_ops.check_file_exists(x, find_similar=True) for x in population_paths.values()]
@@ -169,6 +177,7 @@ class HBProductionModel(HBProductionModelPaths):
         self.constraint_paths = constraint_paths
         self.process_count = process_count
         self.years = list(self.population_paths.keys())
+        self.adjustment_factors = trip_end_adjustments
 
         # Make sure the reports paths exists
         report_home = os.path.join(export_home, "Reports")
@@ -299,6 +308,15 @@ class HBProductionModel(HBProductionModelPaths):
                 out_segmentation=return_seg,
                 split_tfntt_segmentation=True
             )
+
+            if self.adjustment_factors is not None:
+                self._logger.info("Exporting pre-adjustment notem segmented demand to disk")
+                path = pathlib.Path(self.export_paths.notem_segmented[year])
+                productions.save(
+                    path.with_name(path.stem + f"_pre-adjustment{''.join(path.suffixes)}")
+                )
+
+                productions = self._trip_end_adjustment(productions)
 
             if export_notem_segmentation:
                 self._logger.info("Exporting notem segmented demand to disk")
@@ -457,6 +475,35 @@ class HBProductionModel(HBProductionModelPaths):
             other=mode_time_splits_dvec,
             out_segmentation=full_seg,
         )
+
+    def _trip_end_adjustment(self, trip_ends: nd.DVector) -> nd.DVector:
+        """Multiply `trip_ends` by `adjustment_factors`.
+
+        Trip ends are multiplied by all adjustment factors in
+        the list one after another.
+
+        Parameters
+        ----------
+        trip_ends : nd.DVector
+            Productions trip ends for adjustment.
+
+        Returns
+        -------
+        nd.DVector
+            Productions trip ends after applying all adjustments.
+        """
+        for adjustment in self.adjustment_factors:
+            self._logger.info("adjusting trip ends with %s", adjustment.file)
+
+            adjust_dvec = adjustment.dvector
+            if adjustment.zoning != trip_ends.zoning_system:
+                adjust_dvec = adjustment.dvector.translate_zoning(
+                    trip_ends.zoning_system, weighting="no_weight"
+                )
+
+            trip_ends = trip_ends * adjust_dvec
+
+        return trip_ends
 
 
 class NHBProductionModel(NHBProductionModelPaths):
@@ -964,3 +1011,57 @@ class NHBProductionModel(NHBProductionModelPaths):
         """
         nhb_prod_seg = nd.get_segmentation_level(self._return_segmentation_name)
         return full_segmentation.aggregate(nhb_prod_seg)
+
+
+@dataclasses.dataclass
+class TripEndAdjustmentFactors:
+    """Stores (and reads) the trip end adjustment factors data.
+
+    Attributes
+    ----------
+    file : pathlib.Path
+        CSV file containing the adjustment factors, with
+        columns containing the zone IDs, segment data and
+        finally the factors.
+    segmentation : nd.SegmentationLevel
+        Segmentation level that the data in `file` is in.
+    zoning : nd.ZoningSystem
+        Zone system that the data in `file` is in.
+    time_format : nd.TimeFormat
+        Time format that the data in `file` is in.
+    dvector : nd.DVector
+    """
+    file: pathlib.Path
+    segmentation: nd.SegmentationLevel
+    zoning: nd.ZoningSystem
+    time_format: nd.TimeFormat
+
+    def __post_init__(self) -> None:
+        """Check given `file` exists.
+
+        Raises
+        ------
+        FileNotFoundError
+            If `self.file` isn't a path to an existing file.
+        """
+        self._dvector: Optional[nd.DVector] = None
+
+        self.file = pathlib.Path(self.file)
+        if not self.file.is_file():
+            raise FileNotFoundError(
+                f"adjustment factors file doesn't exist: {self.file}"
+            )
+
+    @property
+    def dvector(self) -> nd.DVector:
+        """Read data from file and return as a DVector."""
+        if self._dvector is None:
+            data = file_ops.read_df(self.file)
+            self._dvector = nd.DVector(
+                segmentation=self.segmentation,
+                import_data=data,
+                zoning_system=self.zoning,
+                time_format=self.time_format,
+                infill=1,
+            )
+        return self._dvector

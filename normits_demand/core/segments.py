@@ -19,6 +19,7 @@ import os
 import math
 import itertools
 import collections
+import pathlib
 
 from os import PathLike
 
@@ -431,38 +432,41 @@ class SegmentationLevel:
         Returns the return_seg_name and join cols for multiplying
         self and other
         """
-        # Init
-        mult_def = self._read_multiply_definitions()
+        if self == other:
+            return (self.name, self.naming_order)
+        else:
+            # Init
+            mult_def = self._read_multiply_definitions()
 
-        # Try find a definition
-        df_filter = {
-            'a': self.name,
-            'b': other.name,
-        }
-        definition = pd_utils.filter_df(mult_def, df_filter)
+            # Try find a definition
+            df_filter = {
+                'a': self.name,
+                'b': other.name,
+            }
+            definition = pd_utils.filter_df(mult_def, df_filter)
 
-        # If none found, try flipping a and b
-        if definition.empty:
-            if check_flipped:
-                df_filter = {
-                    'b': self.name,
-                    'a': other.name,
-                }
-                definition = pd_utils.filter_df(mult_def, df_filter)
-
-            # If empty again, we don't know what to do
+            # If none found, try flipping a and b
             if definition.empty:
-                raise SegmentationError(
-                    "Got no definition for multiplying '%s' by '%s'.\n"
-                    "If there should be a definition, please add one in "
-                    "at: %s"
-                    % (self.name, other.name, self._multiply_definitions_path)
-                )
+                if check_flipped:
+                    df_filter = {
+                        'b': self.name,
+                        'a': other.name,
+                    }
+                    definition = pd_utils.filter_df(mult_def, df_filter)
 
-        return (
-            definition['out'].squeeze(),
-            self._parse_join_cols(definition['join'].squeeze())
-        )
+                # If empty again, we don't know what to do
+                if definition.empty:
+                    raise SegmentationError(
+                        "Got no definition for multiplying '%s' by '%s'.\n"
+                        "If there should be a definition, please add one in "
+                        "at: %s"
+                        % (self.name, other.name, self._multiply_definitions_path)
+                    )
+
+            return (
+                definition['out'].squeeze(),
+                self._parse_join_cols(definition['join'].squeeze())
+            )
 
     def _get_divide_definition(self,
                                other: SegmentationLevel,
@@ -611,6 +615,7 @@ class SegmentationLevel:
         Returns the common cols and any translations that are needed
         for aggregating self into other
         """
+
         # Init
         mult_def = self._read_aggregation_definitions()
 
@@ -642,7 +647,7 @@ class SegmentationLevel:
         return (
             self._parse_join_cols(definition['common'].squeeze()),
             self._parse_translate_cols(definition['translate'].squeeze())
-        )
+            )
 
     def _get_segment_translation(self, col1: str, col2: str) -> pd.DataFrame:
         """
@@ -1125,7 +1130,7 @@ class SegmentationLevel:
             target_len = len(other.segment_names)
             ach_len = len(set(agg_dict.keys()))
             raise SegmentationError(
-                "Some segment names seem to have gone missing during "
+                "Some segment names seem to have gone missing "
                 "while aggregating %s into %s.\n"
                 "Expected %s segments.\n"
                 "Found %s segments."
@@ -2214,3 +2219,21 @@ def get_segmentation_level(name: str) -> SegmentationLevel:
         segment_types=segment_types,
         valid_segments=valid_segments,
     )
+
+def list_segmentations() -> List[str]:
+    """List names of all available segmentations.
+
+    Returns
+    -------
+    List[str]
+        Names of all segmentations found in NorMITs demand
+        segmentation folder.
+    """
+    seg_folder = pathlib.Path(SegmentationLevel._segment_definitions_path)
+
+    segmentations = []
+    for path in seg_folder.iterdir():
+        if path.is_dir() and not path.name.startswith("_"):
+            segmentations.append(path.name)
+
+    return segmentations
