@@ -1,7 +1,4 @@
-# Versioning
-from . import _version
-__version__ = _version.get_versions()['version']
-
+from .version import __version__
 from normits_demand.constants import PACKAGE_NAME
 
 # Custom types

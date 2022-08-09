@@ -2,27 +2,8 @@
 
 import re
 import subprocess
-
-__version__ = "0.5.2"
-
-# fmt: off
-# Regex taken from semver.org
-SEMVER_REGEX = (
-    r"^(?P<major>0|[1-9]\d*)"
-    r"\.(?P<minor>0|[1-9]\d*)"
-    r"\.(?P<patch>0|[1-9]\d*)"
-    r"(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)"
-        r"(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))"
-    r"?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
-)
-# fmt: on
-
-version_match = re.search(SEMVER_REGEX, __version__)
-MAJOR = version_match.group("major")
-MINOR = version_match.group("minor")
-PATCH = version_match.group("patch")
-PRE_RELEASE = version_match.group("prerelease")
-BUILD_META_DATA = version_match.group("buildmetadata")
+from . import _version
+__version__ = _version.get_versions()['version']
 
 
 def git_repository_description() -> str:
