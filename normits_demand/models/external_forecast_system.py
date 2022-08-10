@@ -24,7 +24,6 @@ import pandas as pd
 
 # self imports
 import normits_demand as nd
-from normits_demand import version
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
 from normits_demand.models import efs_production_model as pm
