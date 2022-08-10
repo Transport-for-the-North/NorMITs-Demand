@@ -29,6 +29,7 @@ from typing import Any
 from typing import List
 from typing import Tuple
 from typing import Union
+from typing import Optional
 from typing import Iterable
 from typing import Sequence
 
@@ -1114,7 +1115,7 @@ def compare_versions(
     ver1_name: str,
     ver2_name: str,
     match_str: bool = False
-) -> str:
+) -> Optional[str]:
     """
     Compares the versions and generates a message
 
@@ -1222,18 +1223,18 @@ def read_pickle(path: nd.PathLike) -> Any:
         warnings.warn(warn_msg, UserWarning, stacklevel=2)
 
     # Throw warning if versions don't match
-    warn_msg = compare_versions(
-        ver1=version.parse(obj.__version__),
-        ver2=version.parse(obj.__class__.__version__),
+    msg = compare_versions(
+        ver1=version.Version(obj.__version__),
+        ver2=version.Version(obj.__class__.__version__),
         ver1_name="Object",
         ver2_name="Class",
         match_str=False,
     )
-    if warn_msg is not None:
+    if msg is not None:
         warn_msg = (
             f"The object loaded from '{path}' is not the same version as the "
             "class definition in the code. This might cause some unexpected "
-            f"problems.\n{warn_msg}"
+            f"problems.\n{msg}"
         )
         warnings.warn(warn_msg, UserWarning, stacklevel=2)
 
