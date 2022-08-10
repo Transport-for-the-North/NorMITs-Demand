@@ -52,3 +52,6 @@ from normits_demand.reports.efs_reporting import EfsReporter
 # Initialise the module
 from normits_demand import _initialisation
 _initialisation._initialise()
+
+from . import _version
+__version__ = _version.get_versions()['version']

@@ -42,8 +42,8 @@ def get_config():
     # _version.py
     cfg = VersioneerConfig()
     cfg.VCS = "git"
-    cfg.style = "pep440"
-    cfg.tag_prefix = ""
+    cfg.style = "pep440-post-branch"
+    cfg.tag_prefix = "v"
     cfg.parentdir_prefix = "None"
     cfg.versionfile_source = "normits_demand/_version.py"
     cfg.verbose = False
