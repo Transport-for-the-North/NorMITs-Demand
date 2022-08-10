@@ -45,7 +45,6 @@ if __name__ == '__main__':
     
     # Get trip ends
     if get_trip_ends:
-        # TODO: Add 'wait if open' code
         te_out = parser.get_trip_ends(trip_type=None,
                                       all_commute_hb=True,
                                       aggregate_car=False,
