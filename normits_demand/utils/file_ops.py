@@ -23,6 +23,7 @@ import warnings
 import itertools
 
 from os import PathLike
+from packaging import version
 
 from typing import Any
 from typing import List
@@ -1107,6 +1108,81 @@ def write_pickle(obj: object,
         pickle.dump(obj, file, protocol=protocol, **kwargs)
 
 
+def compare_versions(
+    ver1: version.Version,
+    ver2: version.Version,
+    ver1_name: str,
+    ver2_name: str,
+    match_str: bool = False
+) -> str:
+    """
+    Compares the versions and generates a message
+
+    Parameters
+    ----------
+    ver1:
+        The first Version object to compare
+
+    ver2:
+        The second Version object to compare
+
+    ver1_name:
+        The name to give to `ver1` when generating the message string to return
+
+    ver2_name:
+        The name to give to `ver2` when generating the message string to return
+
+    match_str:
+        Whether to return a message when `ver1` and `ver2` match. If False,
+        then `None` is returned when the versions match.
+
+    Returns
+    -------
+    message:
+        A string of a message that changes slightly based on the level of
+        difference between `ver1` and `ver2`.
+
+    Raises
+    ------
+    NotImplementedError:
+        When `ver1` and `ver2` have the same base release (major, minor, patch
+        numbers), but differ on something other than the post-release.
+        Extra code needs adding to solve this error.
+    """
+    # Compare versions
+    if ver1 == ver2:
+        if match_str:
+            return (
+                "Versions match exactly!\n"
+                f"{ver1_name} Version: {str(ver1)}\n"
+                f"{ver2_name} Version: {str(ver2)}"
+            )
+        return None
+
+    # Compare base versions
+    if version.parse(ver1.base_version) != version.parse(ver2.base_version):
+        return (
+            "Versions are significantly different\n"
+            f"{ver1_name} Version: {str(ver1)}\n"
+            f"{ver2_name} Version: {str(ver2)}"
+        )
+
+    # Compare post-release
+    v1_post = 0 if ver1.post is None else ver1.post
+    v2_post = 0 if ver2.post is None else ver2.post
+    if v1_post != v2_post:
+        return (
+            "Versions are similar, but differ on the post-release number\n"
+            f"{ver1_name} Version: {str(ver1)}\n"
+            f"{ver2_name} Version: {str(ver2)}"
+        )
+
+    raise NotImplementedError(
+        "Versions are not the same, but differ on something other than the "
+        "post-release number. Please implement the code to perform this check."
+    )
+
+
 def read_pickle(path: nd.PathLike) -> Any:
     """Load any pickled object from disk at path.
 
@@ -1146,13 +1222,18 @@ def read_pickle(path: nd.PathLike) -> Any:
         warnings.warn(warn_msg, UserWarning, stacklevel=2)
 
     # Throw warning if versions don't match
-    if obj.__version__ != obj.__class__.__version__:
+    warn_msg = compare_versions(
+        ver1=version.parse(obj.__version__),
+        ver2=version.parse(obj.__class__.__version__),
+        ver1_name="Object",
+        ver2_name="Class",
+        match_str=False,
+    )
+    if warn_msg is not None:
         warn_msg = (
             f"The object loaded from '{path}' is not the same version as the "
             "class definition in the code. This might cause some unexpected "
-            "problems.\n"
-            f"Object Version: {obj.__version__}\n"
-            f"Class Version: {obj.__class__.__version__}"
+            f"problems.\n{warn_msg}"
         )
         warnings.warn(warn_msg, UserWarning, stacklevel=2)
 
