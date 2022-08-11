@@ -6,7 +6,7 @@ import logging
 import pathlib
 import re
 import sys
-from typing import Any
+from typing import Any, Optional
 
 import pydantic
 
@@ -50,6 +50,7 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
     disaggregation_output_segment: segment_disaggregator.DisaggregationOutputSegment
     trip_length_distribution_folder: pathlib.Path
     trip_length_distribution_units: nd.CostUnits = nd.CostUnits.KILOMETERS
+    aggregate_time_periods: Optional[list[int]] = None
     disaggregation_settings: segment_disaggregator.DisaggregationSettings = (
         segment_disaggregator.DisaggregationSettings()
     )
@@ -94,6 +95,17 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
 
         return value
 
+    @pydantic.validator("aggregate_time_periods", pre=True)
+    def _check_time_periods(cls, value: str) -> Optional[str]:
+        """Convert empty or none / null strings to None."""
+        none_str = {"", "none", "null", "no"}
+        if isinstance(value, str) and value.strip().lower() in none_str:
+            return None
+        if isinstance(value, list) and value == []:
+            return None
+
+        return value
+
     @property
     def cost_folder(self) -> pathlib.Path:
         return self._build_cost_folder(self.import_folder, self.model)
@@ -114,7 +126,9 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
 
 
 ##### FUNCTIONS #####
-def _compile_params_format(compile_params_path: pathlib.Path) -> None:
+def _compile_params_format(
+    compile_params_path: pathlib.Path, aggregate_time_periods: bool
+) -> None:
     """Replace ca/nca in compiled matrix names with ca2/ca1, respectively.
 
     Overwrites existing compilation parameters file with adjusted names.
@@ -124,6 +138,9 @@ def _compile_params_format(compile_params_path: pathlib.Path) -> None:
     compile_params_path : pathlib.Path
         Path to compilation parameters file created by
         `matrix_processing.build_compile_params`.
+    aggregate_time_periods : bool
+        Whether to remote time period for compiled file name and
+        combine all time periods together.
     """
 
     def replace(match: re.Match) -> str:
@@ -138,12 +155,21 @@ def _compile_params_format(compile_params_path: pathlib.Path) -> None:
     compile_params.loc[:, "compilation"] = compile_params["compilation"].str.replace(
         r"_(ca|nca)([_.])", replace, flags=re.I, regex=True
     )
+
+    if aggregate_time_periods:
+        compile_params.loc[:, "compilation"] = compile_params["compilation"].str.replace(
+            r"_tp\d+", "", regex=True
+        )
+
     file_ops.write_df(compile_params, compile_params_path, index=False)
 
 
 def aggregate_purposes(
-    matrix_folder: pathlib.Path, model: nd.AssignmentModel, year: int
-) -> pathlib.Path:
+    matrix_folder: pathlib.Path,
+    model: nd.AssignmentModel,
+    year: int,
+    aggregate_time_periods: Optional[list[int]] = None,
+) -> pathlib.Path:  # TODO Update docstring with tp parameter
     """Aggregate matrices in NTEM purposes to model user classes.
 
     Parameters
@@ -175,16 +201,25 @@ def aggregate_purposes(
     output_folder = matrix_folder / "userclass"
     output_folder.mkdir(exist_ok=True)
 
+    required = None
+    if aggregate_time_periods is not None:
+        required = ["tp"]
+
     # Check whether matrices contain time period and car availability segmentation
     ca_needed = set()
     tp_needed = set()
-    for params in file_ops.parse_folder_files(matrix_folder, constants.VALID_MAT_FTYPES):
+    for params in file_ops.parse_folder_files(
+        matrix_folder, constants.VALID_MAT_FTYPES, required
+    ):
         if "tp" in params:
             tp_needed.add(int(params["tp"]))
         if "ca" in params:
             ca_needed.add(int(params["ca"]))
     ca_needed = list(ca_needed) if len(ca_needed) > 0 else None
     tp_needed = list(tp_needed) if len(tp_needed) > 0 else None
+
+    if aggregate_time_periods is not None:
+        tp_needed = aggregate_time_periods
 
     compile_params_path = pathlib.Path(
         matrix_processing.build_compile_params(
@@ -198,8 +233,8 @@ def aggregate_purposes(
             split_hb_nhb=True,
         )[0]
     )
-    # Update compile parameters to use ca1/2 instead of nca/ca in the output names
-    _compile_params_format(compile_params_path)
+
+    _compile_params_format(compile_params_path, aggregate_time_periods is not None)
 
     matrix_processing.compile_matrices(
         mat_import=matrix_folder,
@@ -259,7 +294,9 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
         params.trip_length_distribution_folder,
     )
 
-    matrix_folder = aggregate_purposes(params.matrix_folder, params.model, params.year)
+    matrix_folder = aggregate_purposes(
+        params.matrix_folder, params.model, params.year, params.aggregate_time_periods
+    )
 
     for to in nd.TripOrigin:
         LOG.info(

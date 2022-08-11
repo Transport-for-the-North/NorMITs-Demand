@@ -10,6 +10,11 @@ matrix_zoning: NoRMS
 year: 2018
 disaggregation_output_segment: soc
 trip_length_distribution_folder: I:\NorMITs Demand\import\traveller_segment_tool\trip_length_distributions\v1.1\uc_m_soc_m6
+aggregate_time_periods:
+  - 1
+  - 2
+  - 3
+  - 4
 disaggregation_settings:
   aggregate_surplus_segments: yes
   export_original: yes
