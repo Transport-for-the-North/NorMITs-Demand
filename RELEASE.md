@@ -21,11 +21,6 @@ Below, a brief summary of patches made since the previous version can be found.
 
 ### V0.5.2
 - Tools
-  - TLD Tool
-    -
-  - Core
-    -
-  - Traveller Segment Tool
-    -
+  - None
 - Bug Fixes
-  - Fixed a bug where segment parts were being added twice while generating segment names
+  - None

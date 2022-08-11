@@ -37,10 +37,12 @@ class BuiltInCostFunction(enum.Enum):
 
         if self == BuiltInCostFunction.TANNER:
             params = {"alpha": [-5, 5], "beta": [-5, 5]}
+            default = {"alpha": 1, "beta": 1}
             function = tanner
 
         elif self == BuiltInCostFunction.LOG_NORMAL:
             params = {"sigma": [0, 5], "mu": [0, 10]}
+            default = {"sigma": 1, "mu": 2}
             function = log_normal
 
         else:
@@ -48,7 +50,9 @@ class BuiltInCostFunction(enum.Enum):
                 "No definition exists for %s built in cost function" % self
             )
 
-        return CostFunction(name=self.name, params=params, function=function,)
+        return CostFunction(
+            name=self.name, params=params, function=function, default_params=default,
+        )
 
 
 class CostFunction:
@@ -58,8 +62,14 @@ class CostFunction:
     which inherits this abstract class.
     """
 
+    _default_param_val = 1
+
     def __init__(
-        self, name: str, params: Dict[str, Tuple[float, float]], function: Callable,
+        self,
+        name: str,
+        params: Dict[str, Tuple[float, float]],
+        function: Callable,
+        default_params: Dict[str, float] = None,
     ):
         self.name = name
         self.function = function
@@ -68,6 +78,11 @@ class CostFunction:
         self.param_names = list(params.keys())
         self.param_min = {k: min(v) for k, v in params.items()}
         self.param_max = {k: max(v) for k, v in params.items()}
+
+        # Populate the default parameters
+        default_params = dict() if default_params is None else default_params
+        def_val = self._default_param_val
+        self.default_params = {k: default_params.get(k, def_val) for k in self.param_names}
 
         self.kw_order = list(inspect.signature(self.function).parameters.keys())[1:]
         self.kw_order.remove("min_return_val")

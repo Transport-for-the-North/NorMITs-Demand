@@ -23,11 +23,13 @@ import warnings
 import itertools
 
 from os import PathLike
+from packaging import version
 
 from typing import Any
 from typing import List
 from typing import Tuple
 from typing import Union
+from typing import Optional
 from typing import Iterable
 from typing import Sequence
 
@@ -894,11 +896,26 @@ def copy_segment_files(src_dir: nd.PathLike,
 
     Parameters
     ----------
-    src_dir
-    dst_dir
-    segmentation
-    process_count
-    filename_kwargs
+    src_dir:
+        The directory to copy files from.
+
+    dst_dir:
+        The directory to copy files to.
+
+    segmentation:
+        The segmentation to use to generate the filenames to copy from `src`
+        to `dst`
+
+    process_count:
+        The number of processes to use when copying files. By default, uses
+        the module default process count.
+
+    filename_kwargs:
+        Any further kwargs to pass into `segmentation.generate_file_name()`
+
+    Returns
+    -------
+    None
     """
     # Generate all the filenames
     filenames = list()
@@ -912,6 +929,77 @@ def copy_segment_files(src_dir: nd.PathLike,
         src_dir=src_dir,
         dst_dir=dst_dir,
         filenames=filenames,
+        process_count=process_count,
+    )
+
+
+def copy_template_segment_files(
+    src_dir: nd.PathLike,
+    dst_dir: nd.PathLike,
+    segmentation: nd.SegmentationLevel,
+    input_template_filename: str,
+    output_template_filename: str = None,
+    process_count: int = consts.PROCESS_COUNT,
+) -> None:
+    """Copy template segment files from src_dir to dst_dir
+
+    Parameters
+    ----------
+    src_dir:
+        The directory to copy files from.
+
+    dst_dir:
+        The directory to copy files to.
+
+    segmentation:
+        The segmentation to use to generate the filenames to copy from `src`
+        to `dst`. Will be used with `template_segment_filename` to generate
+        the filenames.
+
+    input_template_filename:
+        The template filename to use for the input filenames.
+        Will be used as:
+        `segmentation.generate_file_name_from_template(
+            input_template_filename, segment_params,
+        )`
+
+    output_template_filename:
+        The template filename to use for the output filenames. If left as None,
+        the same output filename is used as the input.
+        Will be used as:
+        `segmentation.generate_file_name_from_template(
+            output_template_filename, segment_params,
+        )`
+
+    process_count:
+        The number of processes to use when copying files. By default, uses
+        the module default process count.
+    """
+    # Generate all the filenames
+    kwarg_list = list()
+    for segment_params in segmentation:
+        in_filename = segmentation.generate_file_name_from_template(
+            template=input_template_filename,
+            segment_params=segment_params,
+        )
+
+        if output_template_filename is not None:
+            out_filename = segmentation.generate_file_name_from_template(
+                template=output_template_filename,
+                segment_params=segment_params,
+            )
+        else:
+            out_filename = in_filename
+
+        kwarg_list.append({
+            "src": src_dir / in_filename,
+            "dst": dst_dir / out_filename,
+        })
+
+    # Multiprocess the copy
+    multiprocessing.multiprocess(
+        fn=_copy_files_internal,
+        kwargs=kwarg_list,
         process_count=process_count,
     )
 
@@ -1021,6 +1109,81 @@ def write_pickle(obj: object,
         pickle.dump(obj, file, protocol=protocol, **kwargs)
 
 
+def compare_versions(
+    ver1: version.Version,
+    ver2: version.Version,
+    ver1_name: str,
+    ver2_name: str,
+    match_str: bool = False
+) -> Optional[str]:
+    """
+    Compares the versions and generates a message
+
+    Parameters
+    ----------
+    ver1:
+        The first Version object to compare
+
+    ver2:
+        The second Version object to compare
+
+    ver1_name:
+        The name to give to `ver1` when generating the message string to return
+
+    ver2_name:
+        The name to give to `ver2` when generating the message string to return
+
+    match_str:
+        Whether to return a message when `ver1` and `ver2` match. If False,
+        then `None` is returned when the versions match.
+
+    Returns
+    -------
+    message:
+        A string of a message that changes slightly based on the level of
+        difference between `ver1` and `ver2`.
+
+    Raises
+    ------
+    NotImplementedError:
+        When `ver1` and `ver2` have the same base release (major, minor, patch
+        numbers), but differ on something other than the post-release.
+        Extra code needs adding to solve this error.
+    """
+    # Compare versions
+    if ver1 == ver2:
+        if match_str:
+            return (
+                "Versions match exactly!\n"
+                f"{ver1_name} Version: {str(ver1)}\n"
+                f"{ver2_name} Version: {str(ver2)}"
+            )
+        return None
+
+    # Compare base versions
+    if version.parse(ver1.base_version) != version.parse(ver2.base_version):
+        return (
+            "Versions are significantly different\n"
+            f"{ver1_name} Version: {str(ver1)}\n"
+            f"{ver2_name} Version: {str(ver2)}"
+        )
+
+    # Compare post-release
+    v1_post = 0 if ver1.post is None else ver1.post
+    v2_post = 0 if ver2.post is None else ver2.post
+    if v1_post != v2_post:
+        return (
+            "Versions are similar, but differ on the post-release number\n"
+            f"{ver1_name} Version: {str(ver1)}\n"
+            f"{ver2_name} Version: {str(ver2)}"
+        )
+
+    raise NotImplementedError(
+        "Versions are not the same, but differ on something other than the "
+        "post-release number. Please implement the code to perform this check."
+    )
+
+
 def read_pickle(path: nd.PathLike) -> Any:
     """Load any pickled object from disk at path.
 
@@ -1060,13 +1223,18 @@ def read_pickle(path: nd.PathLike) -> Any:
         warnings.warn(warn_msg, UserWarning, stacklevel=2)
 
     # Throw warning if versions don't match
-    if obj.__version__ != obj.__class__.__version__:
+    msg = compare_versions(
+        ver1=version.Version(obj.__version__),
+        ver2=version.Version(obj.__class__.__version__),
+        ver1_name="Object",
+        ver2_name="Class",
+        match_str=False,
+    )
+    if msg is not None:
         warn_msg = (
             f"The object loaded from '{path}' is not the same version as the "
             "class definition in the code. This might cause some unexpected "
-            "problems.\n"
-            f"Object Version: {obj.__version__}\n"
-            f"Class Version: {obj.__class__.__version__}"
+            f"problems.\n{msg}"
         )
         warnings.warn(warn_msg, UserWarning, stacklevel=2)
 
@@ -1121,10 +1289,13 @@ def get_latest_modified_time(paths: Iterable[PathLike]) -> float:
     -------
     latest_modified_time:
         The latest modified time of all paths.
-        If paths is an empty iterable, -1.0 is returned.
+        If paths is an empty iterable, np.inf is returned.
     """
+    if paths == list():
+        return np.inf
+
     # init
-    latest_time = -1.0
+    latest_time = -1
 
     # Check the latest time of all paths
     for path in paths:
@@ -1148,8 +1319,11 @@ def get_oldest_modified_time(paths: Iterable[PathLike]) -> float:
     -------
     oldest_modified_time:
         The oldest modified time of all paths.
-        If paths is an empty iterable, np.inf is returned.
+        If paths is an empty iterable, -1 is returned.
     """
+    if paths == list():
+        return -1
+
     # init
     oldest_time = np.inf
 

@@ -825,6 +825,96 @@ def maybe_get_aggregated_tour_proportions(orig: int,
     return od_tour_props
 
 
+def matrix_factors_split_by_tp(
+    matrix: pd.DataFrame,
+    tp_factor_dict: dict[int, np.ndarray],
+    tp_needed: list[int] = None,
+    validate_total: bool = True,
+) -> Dict[int, pd.DataFrame]:
+    """Convert a matrix into time-period split matrices
+
+    Uses the factors in `tp_factor_dict` to split `matrix` into time period
+    split matrices.
+
+    Parameters
+    ----------
+    matrix:
+        A pandas DataFrame containing the matrix Demand. The index and the
+        columns will be retained and copied into the produced time period
+        split matrices. This means they should likely be the model zoning.
+
+    tp_factor_dict:
+        A Dictionary of `{tp: tp_factor}` values. Where `tp` is an integer time
+        period that should be one of `tp_needed`, and `tp_factor` is a
+        numpy array of shape `matrix.shape` factors to generate the time
+        period split od_from matrices.
+        NOTE that `tp_factor` can be any value, provided `matrix * tp_factor`
+        results in a return value that is the same shape as `matrix`
+
+    tp_needed:
+        The time periods to be expected in the output. If left as None, the
+        `tp_factor_dict` provided are the source of truth
+        for which tps should be output.
+
+    validate_total:
+        Whether to validate the total of the generated time period split
+        matrices. That is, when all the resultant matrices are summed, their
+        total is equal to the starting matrix `matrix`.
+
+    Returns
+    -------
+    tp_split_matrices:
+        A dictionary in the same format as fh_factor_dict, but the values
+        will be pandas DataFrames of a matrix at each time period.
+
+    Raises
+    ------
+    NormitsDemandError:
+        If any of the following checks fail:
+        - If `validate_total` is `True` and the check described above does
+          not pass.
+    """
+    # Make sure we have a square matrix
+    if len(matrix.index) != len(matrix.columns):
+        raise ValueError(
+            "Expected matrix to be a square matrix where the index and columns "
+            "are the zone numbers. Instead, got a matrix of shape "
+            f"'{matrix.shape}'"
+        )
+
+    # Make sure the given factors are the correct shape
+    mat_utils.check_fh_th_factors(
+        factor_dict=tp_factor_dict,
+        tp_needed=tp_needed,
+        n_row_col=len(matrix.index),
+    )
+    
+    # Create the split matrices
+    tp_mats = dict.fromkeys(tp_factor_dict.keys())
+    for tp, factor_mat in tp_factor_dict.items():
+        tp_mats[tp] = matrix * factor_mat
+
+    # Validate return matrix totals
+    input_total = matrix.values.sum()
+    tp_total = np.sum([x.values.sum() for x in tp_mats.values()])
+
+    # OD total should be double the input PA
+    if not math_utils.is_almost_equal(input_total, tp_total):
+        msg = (
+            "Time period split matrices total is not the same as the input "
+            "matrix total. Are the given splitting factors correct?"
+            f"tp split matrix total: {tp_total:.2f}\n"
+            f"Input matrix total: {input_total:.2f}\n"
+        )
+
+        if not validate_total:
+            LOG.warning(msg)
+        else:
+            raise nd.NormitsDemandError(msg)
+
+    return tp_mats
+
+
 def to_od_via_fh_th_factors(
     pa_24: pd.DataFrame,
     fh_factor_dict: Dict[int, np.ndarray],
@@ -1487,6 +1577,145 @@ def build_od_from_fh_th_factors(
         kwargs=kwarg_list,
         process_count=process_count,
     )
+
+
+def _factors_split_by_tp_internal(
+    segmentation: nd_core.SegmentationLevel,
+    segment_params: dict[str, Any],
+    import_path: pathlib.Path,
+    factor_path: pathlib.Path,
+    export_dir: pathlib.Path,
+    export_template_fname: str,
+) -> None:
+    """Internal multiprocessed function of factors_split_by_tp"""
+    tp_split_mats = matrix_factors_split_by_tp(
+        matrix=file_ops.read_df(import_path, index_col=0),
+        tp_factor_dict=file_ops.read_pickle(factor_path),
+    )
+
+    # Write out to disk
+    writing_threads = list()
+    for tp, mat in tp_split_mats.items():
+        mat = mat.round(8)
+        segment_params.update({'tp': tp})
+        segment_str = segmentation.generate_template_segment_str(
+            naming_order=segmentation.naming_order + ['tp'],
+            segment_params=segment_params,
+        )
+        fname = export_template_fname.format(segment_params=segment_str)
+        thread = file_ops.write_df_threaded(mat, export_dir / fname)
+        writing_threads.append(thread)
+
+    # Wait for all the threads to finish
+    multithreading.wait_for_thread_return_or_error(writing_threads)
+
+
+def factors_split_by_tp(
+    import_dir: pathlib.Path,
+    export_dir: pathlib.Path,
+    factor_dir: pathlib.Path,
+    segmentation: nd_core.SegmentationLevel,
+    template_in_name: str,
+    template_out_name: str,
+    template_factor_name: str,
+    process_count: int = consts.PROCESS_COUNT,
+) -> None:
+    """Generate and write out the time period split matrices
+
+    Loops through all the segments in `segmentation`, converting the import
+    matrices into time period split matrices. Calculated as:
+    `tp_matrix = input_matrix * tp_factors[tp]`
+
+    Parameters
+    ----------
+    import_dir:
+        The directory containing the matrices to import and convert.
+        The matrix names in this folder will be generated from `template_in_name`.
+
+    export_dir:
+        The directory to write out the generated matrices. The matrix names for
+         writing out will be generated from `template_out_name`.
+
+    factor_dir:
+        The directory containing all of the time period split factors to
+        use to generate the time period split matrices. This directory should
+        contain an individual pickle file for each segmentation. Each file
+        should then contain a dictionary where the keys are the time periods
+        for each factor. Ideally the values should be the same shape as the
+        matrices in `import_dir`, however these can be scalar values.
+        The names to read in will be generated from `template_factor_name`.
+
+    segmentation:
+        The segmentation to iterate over and to use to generate the
+        `segment_params` to use with the template names. This segmentation
+        defines which matrices in `import_dir` will be used.
+
+    template_in_name:
+        A template string to use as the filename for all of the import matrices
+        in `import_dir`. This string should contain `"{segment_params}"` so
+        it can be formatted with
+        `template_in_name.format(segment_params=segment_params)`.
+
+    template_out_name:
+        A template string to use as the filename for all of the export matrices
+        in `export_dir`. This string should contain `"{segment_params}"` so
+        it can be formatted with
+        `template_out_name.format(segment_params=segment_params)`.
+
+    template_factor_name:
+        A template string to use as the filename for all of the time period
+        splitting matrices factors in `factor_dir`. This string should contain
+        `"{segment_params}"` so it can be formatted with
+        `template_factor_name.format(segment_params=segment_params)`.
+
+    process_count:
+        The number of processes to use when converting the matrices.
+        Passed straight to the multiprocessing function.
+        See `normits_demand.concurrency.multiprocessing.multiprocess()`
+        to see how this parameter is used.
+
+    Returns
+    -------
+    None
+    """
+    # Build a dictionary of the constant arguments across processes
+    unchanging_kwargs = {
+        "segmentation": segmentation,
+        "export_dir": export_dir,
+        "export_template_fname": template_out_name,
+    }
+
+    # Build the changing kwargs
+    kwarg_list = list()
+    for segment_params in segmentation:
+
+        # Build the needed file paths
+        partial_fn_call = functools.partial(
+            segmentation.generate_file_name_from_template,
+            segment_params=segment_params,
+        )
+
+        fname = partial_fn_call(template=template_in_name)
+        import_path = import_dir / fname
+
+        fname = partial_fn_call(template=template_factor_name)
+        factor_path = factor_dir / fname
+
+        kwargs = unchanging_kwargs.copy()
+        kwargs.update({
+            "segment_params": segment_params,
+            "import_path": import_path,
+            "factor_path": factor_path,
+        })
+        kwarg_list.append(kwargs)
+
+    # Call the multiprocessing
+    multiprocessing.multiprocess(
+        fn=_factors_split_by_tp_internal,
+        kwargs=kwarg_list,
+        process_count=process_count,
+    )
+
 
 
 def build_od_from_fh_th_factors_old(
