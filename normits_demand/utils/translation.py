@@ -16,6 +16,7 @@ import warnings
 from typing import Any
 from typing import List
 from typing import Tuple
+from typing import Union
 
 # Third Party
 import numpy as np
@@ -23,6 +24,8 @@ import pandas as pd
 
 # Local Imports
 import normits_demand as nd
+
+from normits_demand import core as nd_core
 from normits_demand.utils import math_utils
 from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand.concurrency import multiprocessing
@@ -829,20 +832,278 @@ def pandas_vector_zone_translation(vector: pd.DataFrame,
     )
 
 
-def get_long_pop_emp_translations(in_zoning_system: nd.ZoningSystem,
-                                  out_zoning_system: nd.ZoningSystem,
-                                  in_zoning_col_name: str = None,
-                                  out_zoning_col_name: str = None,
-                                  weight_col_name: str = 'weight',
-                                  ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def translate_vector_zoning(
+    vector: Union[pd.DataFrame, np.ndarray],
+    from_zoning_system: nd_core.ZoningSystem,
+    to_zoning_system: nd_core.ZoningSystem,
+    weighting: str = None,
+    translation_dtype: np.dtype = None,
+    check_totals: bool = True,
+    vector_infill: float = 0.0,
+    translate_infill: float = 0.0,
+) -> Union[pd.DataFrame, np.ndarray]:
+    """Translates matrix from from_zoning_system to to_zoning_system
+
+    Can take either a numpy array or a pandas DataFrame. This function will
+    grab the correct translation and translate matrix depending on whether
+    matrix is a np.ndarray or pd.DataFrame
+
+    Parameters
+    ----------
+    vector:
+        The vector to translate. If a pd.DataFrame is given,
+        `pandas_vector_zone_translation()` is used for the translation. If a
+        np.ndarray is given `numpy_vector_zone_translation()` is used for
+        the translation.
+
+    from_zoning_system:
+        The zoning system that vector is currently in.
+
+    to_zoning_system:
+        The zoning system to translate vector to.
+
+    weighting:
+        The weighting to use when translating vector.
+
+    translation_dtype:
+        The numpy datatype to use to do the translation. If None, then the
+        dtype of the vector is used. As this is a 2d translation, it can
+        use a lot of memory if float64 is used. Where such high precision
+        isn't needed, a more memory efficient dtype can be passed in instead
+        and the translation will be carried out in it.
+
+    check_totals:
+        Whether to check that the input and output vector sum to the same
+        total.
+
+    vector_infill:
+        The value to use to infill any missing matrix values. Only used when
+        vector is a pd.DataFrame.
+
+    translate_infill:
+        The value to use to infill any missing translation factors.  Only used
+        when vector is a pd.DataFrame.
+
+    Returns
+    -------
+    translated_matrix:
+        Matrix, translated into to_zoning_system. The return type is the same
+        as the type of the given matrix.
+
+    See Also
+    --------
+    `pandas_vector_zone_translation()`
+    `numpy_vector_zone_translation()`
+    """
+    # Init
+    weight_col = "weight"
+
+    # Do the pandas translation
+    if isinstance(vector, pd.DataFrame):
+        # Get the translation
+        translation = get_long_translation(
+            from_zoning_system=from_zoning_system,
+            to_zoning_system=to_zoning_system,
+            weighting=weighting,
+            weight_col_name=weight_col,
+        )
+
+        return pandas_vector_zone_translation(
+            vector=vector,
+            translation=translation,
+            from_zone_col=from_zoning_system.col_name,
+            to_zone_col=to_zoning_system.col_name,
+            factors_col=weight_col,
+            from_unique_zones=from_zoning_system.unique_zones,
+            to_unique_zones=to_zoning_system.unique_zones,
+            translation_dtype=translation_dtype,
+            check_totals=check_totals,
+            translate_infill=translate_infill,
+            vector_infill=vector_infill,
+        )
+
+    elif isinstance(vector, np.ndarray):
+        raise NotImplementedError(
+            "Functionality not implemented to translate a np.ndarray in "
+            "utils.translation.translate_vector_zoning()"
+        )
+    else:
+        raise ValueError(
+            "Expected matrix to be of type np.ndarray or pd.DataFrame, not %s"
+            % type(vector)
+        )
+
+
+def translate_matrix_zoning(
+    matrix: Union[pd.DataFrame, np.ndarray],
+    from_zoning_system: nd_core.ZoningSystem,
+    to_zoning_system: nd_core.ZoningSystem,
+    row_weighting: str = None,
+    col_weighting: str = None,
+) -> Union[pd.DataFrame, np.ndarray]:
+    """Translates matrix from from_zoning_system to to_zoning_system
+
+    Can take either a numpy array or a pandas DataFrame. This function will
+    grab the correct translation and translate matrix depending on whether
+    matrix is a np.ndarray or pd.DataFrame
+
+    Parameters
+    ----------
+    matrix:
+        The matrix to translate. If a pd.DataFrame is given,
+        `pandas_matrix_zone_translation()` is used for the translation. If a
+        np.ndarray is given `numpy_matrix_zone_translation()` is used for
+        the translation.
+
+    from_zoning_system:
+        The zoning system that matrix is currently in.
+
+    to_zoning_system:
+        The zoning system to translate matrix to.
+
+    row_weighting:
+        The weighting to use when translating the rows of matrix.
+
+    col_weighting:
+        The weighting to use when translating the columns of matrix.
+
+    Returns
+    -------
+    translated_matrix:
+        Matrix, translated into to_zoning_system. The return type is the same
+        as the type of the given matrix.
+
+    See Also
+    --------
+    `pandas_matrix_zone_translation()`
+    `numpy_matrix_zone_translation()`
+    """
+    # Init
+    weight_col = 'weight'
+
+    # Do the pandas translation
+    if isinstance(matrix, pd.DataFrame):
+        # Try convert cols to correct type
+        matrix.columns = matrix.columns.astype(from_zoning_system.unique_zones.dtype)
+
+        kwargs = {
+            'from_zoning_system': from_zoning_system,
+            'to_zoning_system': to_zoning_system,
+            'weight_col_name': weight_col,
+        }
+
+        # Get the long translations
+        row_translation = get_long_translation(weighting=row_weighting, **kwargs)
+        col_translation = get_long_translation(weighting=col_weighting, **kwargs)
+
+        # Do the translation
+        translated_matrix = pandas_matrix_zone_translation(
+            matrix=matrix,
+            row_translation=row_translation,
+            col_translation=col_translation,
+            from_zone_col=from_zoning_system.col_name,
+            to_zone_col=to_zoning_system.col_name,
+            factors_col=weight_col,
+            from_unique_zones=from_zoning_system.unique_zones,
+            to_unique_zones=to_zoning_system.unique_zones
+        )
+
+    elif isinstance(matrix, np.ndarray):
+        raise NotImplementedError(
+            "Functionality not implemented to translate a np.ndarray in "
+            "utils.translation.translate_matrix_zoning()"
+        )
+    else:
+        raise ValueError(
+            "Expected matrix to be of type np.ndarray or pd.DataFrame, not %s"
+            % type(matrix)
+        )
+
+    return translated_matrix
+
+
+def get_long_translation(
+    from_zoning_system: nd.ZoningSystem,
+    to_zoning_system: nd.ZoningSystem,
+    in_zoning_col_name: str = None,
+    out_zoning_col_name: str = None,
+    weight_col_name: str = 'weight',
+    weighting: str = None,
+) -> pd.DataFrame:
     """Get the translations needed for pandas_matrix_zone_translation
 
     Parameters
     ----------
-    in_zoning_system:
+    from_zoning_system:
         The zoning system to translate from.
 
-    out_zoning_system:
+    to_zoning_system:
+        The zoning system to translate to.
+
+    in_zoning_col_name:
+        The name to give to the column of in_zoning_system zone names.
+        If None, in_zoning_system.col_name will be used.
+
+    out_zoning_col_name:
+        The name to give to the column of out_zoning_system zone names.
+        If None, out_zoning_system.col_name will be used.
+
+    weight_col_name:
+        The name to give to the column of weights in each return DataFrame
+
+    weighting:
+        The weighting to use for the translation from in_zoning_system to
+        out_zoning_system. This is passed into `in_zoning_system.translate()`
+
+    Returns
+    -------
+    long_translation:
+        The translation from in_zoning_system to
+        out_zoning_system in a long pandas dataframe with 3 columns. One for
+        each zoning system, and another named weight_col_name.
+    """
+    # Init
+    if in_zoning_col_name is None:
+        in_zoning_col_name = from_zoning_system.col_name
+
+    if out_zoning_col_name is None:
+        out_zoning_col_name = to_zoning_system.col_name
+
+    full_translation = from_zoning_system.translate(
+        other=to_zoning_system,
+        weighting=weighting,
+    )
+    full_translation = pd.DataFrame(
+        data=full_translation,
+        index=from_zoning_system.unique_zones,
+        columns=to_zoning_system.unique_zones,
+    )
+
+    # Melt and name columns
+    full_translation = pd_utils.wide_to_long_infill(
+        df=full_translation,
+        index_col_1_name=in_zoning_col_name,
+        index_col_2_name=out_zoning_col_name,
+        value_col_name=weight_col_name,
+    )
+    return full_translation
+
+
+def get_long_pop_emp_translations(
+    from_zoning_system: nd.ZoningSystem,
+    to_zoning_system: nd.ZoningSystem,
+    in_zoning_col_name: str = None,
+    out_zoning_col_name: str = None,
+    weight_col_name: str = 'weight',
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Get the translations needed for pandas_matrix_zone_translation
+
+    Parameters
+    ----------
+    from_zoning_system:
+        The zoning system to translate from.
+
+    to_zoning_system:
         The zoning system to translate to.
 
     in_zoning_col_name:
@@ -868,32 +1129,14 @@ def get_long_pop_emp_translations(in_zoning_system: nd.ZoningSystem,
         out_zoning_system in a long pandas dataframe with 3 columns. One for
         each zoning system, and another named weight_col_name.
     """
-    # Init
-    if in_zoning_col_name is None:
-        in_zoning_col_name = in_zoning_system.col_name
-
-    if out_zoning_col_name is None:
-        out_zoning_col_name = out_zoning_system.col_name
-
-    # Get translation into long df
-    def get_translation(weighting):
-        full_translation = in_zoning_system.translate(
-            other=out_zoning_system,
-            weighting=weighting,
-        )
-        full_translation = pd.DataFrame(
-            data=full_translation,
-            index=in_zoning_system.unique_zones,
-            columns=out_zoning_system.unique_zones,
-        )
-
-        # Melt and name columns
-        full_translation = pd_utils.wide_to_long_infill(
-            df=full_translation,
-            index_col_1_name=in_zoning_col_name,
-            index_col_2_name=out_zoning_col_name,
-            value_col_name=weight_col_name,
-        )
-        return full_translation
-
-    return get_translation('population'), get_translation('employment')
+    kwargs = {
+        'from_zoning_system': from_zoning_system,
+        'to_zoning_system': to_zoning_system,
+        'in_zoning_col_name': in_zoning_col_name,
+        'out_zoning_col_name': out_zoning_col_name,
+        'weight_col_name': weight_col_name,
+    }
+    return (
+        get_long_translation(weighting='population', **kwargs),
+        get_long_translation(weighting='employment', **kwargs),
+    )

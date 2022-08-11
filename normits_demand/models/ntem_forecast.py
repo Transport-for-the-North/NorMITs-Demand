@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-    Module for producing forecast demand constrained to NTEM.
-"""
+"""Module for producing forecast demand constrained to NTEM."""
 
 ##### IMPORTS #####
 # Standard imports
@@ -63,13 +61,13 @@ class NTEMImportMatrices:
             raise NotImplementedError("this class currently only works for 'noham' model")
         self.matrix_folder = import_folder / self.MATRIX_FOLDER.format(name=self.model_name)
         file_ops.check_path_exists(self.matrix_folder)
-        self.mode = efs_consts.MODEL_MODES[self.model_name]
-        if len(self.mode) == 1:
-            self.mode = self.mode[0]
+        mode = efs_consts.MODEL_MODES[self.model_name]
+        if len(mode) == 1:
+            self.mode: int = mode[0]
         else:
             raise NotImplementedError(
                 "cannot handle models with more than one mode, "
-                f"this model ({self.model_name}) has {len(self.mode)} modes"
+                f"this model ({self.model_name}) has {len(mode)} modes"
             )
         self.segmentation = {
             k: nd_core.get_segmentation_level(s) for k, s in self.SEGMENTATION.items()
@@ -103,7 +101,10 @@ class NTEMImportMatrices:
             Path to segment matrix file.
         """
         name = self.segmentation[hb].generate_file_name(
-            segment_params, file_desc="synthetic_pa", trip_origin=hb, year=self.year,
+            segment_params,
+            file_desc="synthetic_pa",
+            trip_origin=hb,
+            year=str(self.year),
         )
         path = self.matrix_folder / name
         file_ops.check_file_exists(path, find_similar=True)
@@ -202,7 +203,7 @@ class NTEMImportMatrices:
             {"p": purpose, "m": self.mode},
             file_desc="pa",
             trip_origin=trip_origin,
-            year=year,
+            year=str(year),
             compressed=compressed,
             **kwargs,
         )
@@ -234,6 +235,8 @@ def trip_end_growth(
     zone_weighting : str
         Name of the weighting to use when translating
         to `model_zone_system`.
+    base_year : int
+        Base model year.
 
     Returns
     -------
@@ -295,7 +298,9 @@ def trip_end_growth(
 
 
 def tempro_growth(
-    tempro_data: TEMProTripEnds, model_zone_system: str, base_year: int
+    tempro_data: TEMProTripEnds,
+    model_zone_system: str,
+    base_year: int,
 ) -> TEMProTripEnds:
     """Calculate LAD growth factors and return at original zone system.
 
@@ -309,6 +314,8 @@ def tempro_growth(
     model_zone_system : str
         Name of the zone system to convert the
         TEMPro growth factors to.
+    base_year : int
+        Model base year.
 
     Returns
     -------
@@ -512,7 +519,9 @@ def grow_matrix(
         {"base": matrix, "forecast": combined_future},
         {"attractions": growth["col_targets"], "productions": growth["row_targets"]},
         internals,
-        output_path.with_name(output_path.stem + "-growth_comparison.xlsx"),
+        output_path.with_name(
+            file_ops.remove_suffixes(output_path).stem + "-growth_comparison.xlsx"
+        ),
     )
     return combined_future
 
@@ -717,7 +726,7 @@ def convert_to_od(
     """
     LOG.info("Converting PA to OD")
     od_folder.mkdir(exist_ok=True, parents=True)
-    pa_to_od.build_od_from_fh_th_factors(
+    pa_to_od.build_od_from_fh_th_factors_old(
         pa_import=pa_folder,
         od_export=od_folder,
         fh_th_factors_dir=pa_to_od_factors["post_me_fh_th_factors"],

@@ -212,7 +212,7 @@ class Furness3D:
                 area_cost = self.cost_matrix * area_mask
 
                 # Calculate the convergence of this area
-                achieved_band_shares = cost_utils.calculate_cost_distribution(
+                _, achieved_band_shares = cost_utils.normalised_cost_distribution(
                     matrix=area_matrix_values,
                     cost_matrix=area_cost,
                     min_bounds=area_tcd['min'].tolist(),
@@ -254,13 +254,13 @@ class Furness3D:
                 break
 
 
-def doubly_constrained_furness(seed_vals: np.array,
-                               row_targets: np.array,
-                               col_targets: np.array,
+def doubly_constrained_furness(seed_vals: np.ndarray,
+                               row_targets: np.ndarray,
+                               col_targets: np.ndarray,
                                tol: float = 1e-9,
                                max_iters: int = 5000,
                                warning: bool = True,
-                               ) -> Tuple[np.array, int, float]:
+                               ) -> Tuple[np.ndarray, int, float]:
     """
     Performs a doubly constrained furness for max_iters or until tol is met
 

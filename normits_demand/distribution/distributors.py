@@ -35,6 +35,7 @@ from normits_demand.cost import utils as cost_utils
 
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
+from normits_demand.utils import math_utils
 from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
@@ -65,6 +66,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
                  process_count: Optional[int] = constants.PROCESS_COUNT,
                  zone_col: str = None,
                  name: str = None,
+                 cost_name: str = None,
                  cost_units: str = None,
                  ):
         # Validate inputs
@@ -89,9 +91,17 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         self.zoning_system = zoning_system
         self.running_zones = running_zones
         self.zone_col = zone_col
+        self.cost_name = cost_name if cost_name is not None else 'Cost'
         self.cost_units = cost_units
         self.export_home = export_home
         self.process_count = process_count
+
+        # Generate the graph label names
+        self.y_label = "Band Share (%)"
+        if cost_units is not None:
+            self.x_label = f"{self.cost_name} ({self.cost_units})"
+        else:
+            self.x_label = self.cost_name
 
         # Build the output paths
         DistributorExportPaths.__init__(
@@ -216,7 +226,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
                    calibration_matrix: pd.DataFrame,
                    target_cost_distributions: Dict[Any, Dict[str, pd.DataFrame]],
                    calibration_naming: Dict[Any, Any],
-                   pa_val_col: Optional[str] = 'val',
+                   pa_val_col: str = 'val',
                    by_segment_kwargs: Dict[str, Dict[str, Any]] = None,
                    **kwargs,
                    ):
@@ -281,7 +291,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
             )
 
             # Get the cost distributions for this segment
-            segment_target_costs = dict().fromkeys(calib_keys)
+            segment_target_costs = dict.fromkeys(calib_keys)
             for key in calib_keys:
                 segment_target_costs[key] = target_cost_distributions[key][segment_name]
 
@@ -412,6 +422,8 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         achieved_cost_params: Dict[str, float],
         plot_title: str,
         graph_path: nd.PathLike,
+        x_label: str = 'Cost',
+        y_label: str = 'Band Share (%)',
         **graph_kwargs,
     ) -> None:
         """Generates and writes out a graph of cost distributions
@@ -445,6 +457,12 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         plot_title:
             The title to give to the generated plot
 
+        x_label:
+            The name to label the generated plot x axis with
+
+        y_label:
+            The name to label the generated plot y axis with
+
         graph_path:
             The path to write the generated plot out to. This will be passed
             to matplotlib.pyplot.savefig
@@ -466,16 +484,33 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
             max_bounds=max_bounds,
         )
 
+        # Target data to plot
+        target_data = cost_utils.PlotData(
+            x_values=mid_points,
+            y_values=target_band_share,
+            label=f"Target | [R2={achieved_convergence:.4f}]",
+        )
+
+        # Achieved data to plot
+        label = "Achieved |"
+        for name, value in achieved_cost_params.items():
+            label += f" {name}={value:.2f}"
+
+        achieved_data = cost_utils.PlotData(
+            x_values=mid_points,
+            y_values=achieved_band_share,
+            label=label,
+        )
+
         # Plot the graph and write out
-        cost_utils.plot_cost_distribution(
-            target_x=mid_points,
-            target_y=target_band_share,
-            achieved_x=mid_points,
-            achieved_y=achieved_band_share,
-            convergence=achieved_convergence,
-            cost_params=achieved_cost_params,
+        cost_utils.plot_cost_distributions(
+            plot_data=[target_data, achieved_data],
             plot_title=plot_title,
             path=graph_path,
+            x_axis_label=x_label,
+            y_axis_label=y_label,
+            band_share_cutoff=0.005,
+            percent_data=True,
             **graph_kwargs,
         )
 
@@ -493,8 +528,7 @@ class DistributionMethod(enum.Enum):
             function = Furness3dDistributor
         else:
             raise nd.NormitsDemandError(
-                "No definition exists for %s distribution method"
-                % self
+                f"No definition exists for {self} distribution method"
             )
 
         return function(**kwargs)
@@ -517,6 +551,7 @@ class GravityDistributor(AbstractDistributor):
                  export_home: nd.PathLike,
                  zone_col: str = None,
                  cost_units: str = None,
+                 cost_name: str = None,
                  process_count: Optional[int] = constants.PROCESS_COUNT,
                  ):
         # Validate inputs
@@ -538,6 +573,7 @@ class GravityDistributor(AbstractDistributor):
             export_home=export_home,
             process_count=process_count,
             cost_units=cost_units,
+            cost_name=cost_name,
         )
 
         # Create a logger
@@ -564,6 +600,7 @@ class GravityDistributor(AbstractDistributor):
         achieved_band_share: np.ndarray,
         achieved_distribution: np.ndarray,
         cost_matrix: np.ndarray,
+        overall_log_path: os.PathLike,
         subdir_name: str = None,
     ) -> None:
         """Generates and writes out standard gravity model reports
@@ -645,14 +682,9 @@ class GravityDistributor(AbstractDistributor):
             # Create the paths if they don't already exist
             file_ops.create_folder(report_dir)
             file_ops.create_folder(matrix_dir)
-
-            # Add subdir into final filename
-            stem, ext = os.path.splitext(self.report_paths.overall_log)
-            overall_path = "{stem}_{id}{ext}".format(stem=stem, id=subdir_name, ext=ext)
         else:
             report_dir = self.report_paths.tld_report_dir
             matrix_dir = self.export_paths.matrix_dir
-            overall_path = self.report_paths.overall_log
 
         # ## DISTRIBUTION REPORTS ## #
         # Generate the base filename
@@ -691,6 +723,8 @@ class GravityDistributor(AbstractDistributor):
             achieved_cost_params=optimal_cost_params,
             plot_title=fname,
             graph_path=graph_path,
+            x_label=self.x_label,
+            y_label=self.y_label,
         )
 
         # ## WRITE DISTRIBUTED DEMAND ## #
@@ -729,9 +763,9 @@ class GravityDistributor(AbstractDistributor):
         # Append this iteration to log file
         file_ops.safe_dataframe_to_csv(
             pd.DataFrame(log_dict, index=[0]),
-            overall_path,
+            overall_log_path,
             mode='a',
-            header=(not os.path.exists(overall_path)),
+            header=(not os.path.exists(overall_log_path)),
             index=False,
         )
 
@@ -778,6 +812,7 @@ class GravityDistributor(AbstractDistributor):
             grav_max_iters=kwargs.get('grav_max_iters'),
             calibrate_params=kwargs.get('calibrate_params', True),
             ftol=kwargs.get('ftol', 1e-5),
+            failure_tol=kwargs.get("failure_tol", 0),
             verbose=kwargs.get('verbose', 2),
         )
 
@@ -795,20 +830,21 @@ class GravityDistributor(AbstractDistributor):
             achieved_convergence=calib.achieved_convergence,
             achieved_band_share=calib.achieved_band_share,
             achieved_distribution=calib.achieved_distribution,
+            overall_log_path=self.report_paths.overall_log,
             cost_matrix=np_cost,
         )
 
     def _multi_area_distribution(
-            self,
-            segment_params: Dict[str, Any],
-            np_productions: np.ndarray,
-            np_attractions: np.ndarray,
-            np_cost: np.ndarray,
-            np_calibration_matrix: np.ndarray,
-            calibration_naming: Dict[Any, str],
-            target_cost_distributions: Dict[Any, pd.DataFrame],
-            running_segmentation: nd.SegmentationLevel,
-            **kwargs,
+        self,
+        segment_params: Dict[str, Any],
+        np_productions: np.ndarray,
+        np_attractions: np.ndarray,
+        np_cost: np.ndarray,
+        np_calibration_matrix: np.ndarray,
+        calibration_naming: Dict[Any, str],
+        target_cost_distributions: Dict[Any, pd.DataFrame],
+        running_segmentation: nd.SegmentationLevel,
+        **kwargs,
     ):
         # ## SET UP SEGMENT LOG ## #
         # Logging set up
@@ -838,6 +874,7 @@ class GravityDistributor(AbstractDistributor):
             furness_max_iters=kwargs.get('furness_max_iters'),
             furness_tol=kwargs.get('furness_tol'),
             use_perceived_factors=kwargs.get('use_perceived_factors'),
+            memory_optimised=kwargs.get('memory_optimised'),
         )
 
         optimal_cost_params = calib.calibrate(
@@ -861,6 +898,15 @@ class GravityDistributor(AbstractDistributor):
         kwarg_list = list()
         for calib_id, calib_name in calibration_naming.items():
             calib_kwargs = unchanging_kwargs.copy()
+
+            # Create the overall log path
+            stem, ext = os.path.splitext(self.report_paths.overall_log)
+            overall_log_path = "{stem}_{id}{ext}".format(stem=stem, id=calib_name, ext=ext)
+
+            # Replace the log if it already exists
+            if os.path.isfile(overall_log_path):
+                os.remove(overall_log_path)
+
             calib_kwargs.update({
                 'optimal_cost_params': optimal_cost_params[calib_id],
                 'min_bounds': target_cost_distributions[calib_id]['min'].values,
@@ -871,13 +917,14 @@ class GravityDistributor(AbstractDistributor):
                 'achieved_convergence': calib.achieved_convergence[calib_id],
                 'achieved_band_share': calib.achieved_band_share[calib_id],
                 'achieved_distribution': calib.achieved_distribution[calib_id],
+                'overall_log_path': overall_log_path,
                 'subdir_name': calib_name,
             })
             kwarg_list.append(calib_kwargs)
 
         # Generate the reports
         # Multiprocess here only if we aren't already
-        process_count = -2 if self.process_count == 0 else self.process_count
+        process_count = -2 if self.process_count == 0 else 0
         multiprocessing.multiprocess(
             fn=self._write_out_reports,
             kwargs=kwarg_list,
@@ -923,7 +970,7 @@ class GravityDistributor(AbstractDistributor):
     ):
         # Init
         seg_name = running_segmentation.generate_file_name(segment_params)
-        self._logger.info("Running for %s" % seg_name)
+        self._logger.info("Running for %s", seg_name)
         use_multi_area = len(target_cost_distributions) > 1
 
         # ## MAKE SURE COST AND P/A ARE IN SAME ORDER ## #
@@ -935,7 +982,34 @@ class GravityDistributor(AbstractDistributor):
             fill_value=0,
         )
 
-        # # TODO(BT): Fix this problem at the cost source
+        # Check the cost is something sensible
+        if cost_matrix.values.sum() == 0:
+            raise ValueError(
+                f"In segment {segment_params}.\n"
+                "The generated cost matrix sums to zero. The gravity model "
+                "cannot calibrate if all costs are 0."
+            )
+
+        if np.isnan(cost_matrix.values).any():
+            nan_report = math_utils.pandas_nan_report(
+                df=cost_matrix,
+                row_name='production',
+                col_name='attraction',
+            )
+            raise ValueError(
+                f"In segment {segment_params}.\n"
+                "Found np.nan values in generated cost matrix. The gravity "
+                "model cannot calibrate with NaN costs. NaN values found in "
+                "the following places:\n"
+                f"{nan_report}"
+            )
+
+        # Convert the init_params to default if not given
+        if kwargs.get("init_params") is None:
+            kwargs["init_params"] = kwargs.get("cost_function").default_params
+
+        # TODO(BT): Fix this problem at the cost source,
+        #  only do for upper model. cars, bus, active
         # # Fill any zero costs with 0.2
         # cost_matrix = cost_matrix.mask(cost_matrix == 0, 0.2)
 
@@ -1001,6 +1075,7 @@ class Furness3dDistributor(AbstractDistributor):
                  export_home: nd.PathLike,
                  zone_col: str = None,
                  cost_units: str = None,
+                 cost_name: str = None,
                  process_count: Optional[int] = constants.PROCESS_COUNT,
                  ):
         # Validate inputs
@@ -1022,6 +1097,7 @@ class Furness3dDistributor(AbstractDistributor):
             export_home=export_home,
             process_count=process_count,
             cost_units=cost_units,
+            cost_name=cost_name,
         )
 
         # Create a logger

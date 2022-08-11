@@ -38,7 +38,7 @@ MILES_TO_KM = 1.61
 INTERNAL_AREA = "%s_internal_area.csv"
 EXTERNAL_AREA = "%s_external_area.csv"
 
-BASE_YEAR_POP_FNAME = 'land_use_output_msoa.csv'
+BASE_YEAR_POP_FNAME = 'land_use_output_safe_msoa.csv'
 BASE_YEAR_EMP_FNAME = 'land_use_2018_emp.csv'
 
 POSTME_TP_SPLIT_FACTORS_FNAME = "post_me_nhb_tp_splitting_factors.pkl"
@@ -91,7 +91,7 @@ NORMS_VDM_SEG_INTERNAL = {
 
 # Note that NoRMS needs CA splitting into to and from for the VDM
 # See NORMS_VDM_SEG_TO_NORMS_POSTME_NAMING
-NORMS_VDM_SEG_EXTERNAL = {
+NORMS_VDM_SEG_EXTERNAL_PA = {
     'W_CA_ext': {'to': ['hb', 'nhb'], 'ca': [2], 'uc': 'commute'},
     'W_NCA_ext': {'to': ['hb', 'nhb'], 'ca': [1], 'uc': 'commute'},
 
@@ -100,6 +100,20 @@ NORMS_VDM_SEG_EXTERNAL = {
 
     'O_CA_ext': {'to': ['hb', 'nhb'], 'ca': [2], 'uc': 'other'},
     'O_NCA_ext': {'to': ['hb', 'nhb'], 'ca': [1], 'uc': 'other'},
+}
+
+NORMS_VDM_SEG_EXTERNAL_OD = {
+    'W_CA_FM_ext': {'ca': [2], 'uc': 'commute', 'no_fmt': ["od_to"]},
+    'W_CA_TO_ext': {'ca': [2], 'uc': 'commute', 'fmt': ["od_to"]},
+    'W_NCA_ext': {'ca': [1], 'uc': 'commute', 'fmt': ["od", "od_from", "od_to"]},
+
+    'EB_CA_FM_ext': {'ca': [2], 'uc': 'business', 'no_fmt': ["od_to"]},
+    'EB_CA_TO_ext': {'ca': [2], 'uc': 'business', 'fmt': ["od_to"]},
+    'EB_NCA_ext': {'ca': [1], 'uc': 'business',  'fmt': ["od", "od_from", "od_to"]},
+
+    'O_CA_FM_ext': {'ca': [2], 'uc': 'other', 'no_fmt': ["od_to"]},
+    'O_CA_TO_ext': {'ca': [2], 'uc': 'other', 'fmt': ["od_to"]},
+    'O_NCA_ext': {'ca': [1], 'uc': 'other', 'fmt': ["od", "od_from", "od_to"]},
 }
 
 NORMS_VDM_MATRIX_NAMES = list(NORMS_VDM_SEG_TO_NORMS_POSTME_NAMING.keys())

@@ -14,63 +14,70 @@ File purpose:
 import os
 import sys
 
-from typing import Tuple
-
 # Third Party
 
 # Local Imports
 sys.path.append("..")
+# pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
 
+from normits_demand import constants
 from normits_demand import converters
 from normits_demand.models import DistributionModel
 from normits_demand.pathing.distribution_model import DistributionModelArgumentBuilder
+# pylint: enable=import-error,wrong-import-position
 
 
 # ## CONSTANTS ## #
 # Trip end import args
-notem_iteration_name = '9.6'
-tour_props_version = 'v%s' % notem_iteration_name
+NOTEM_ITERATION_NAME = '9.10'
+TOUR_PROPS_VERSION = f"v{NOTEM_ITERATION_NAME}"
 
-notem_export_home = r"I:\NorMITs Demand\NoTEM"
-tram_export_home = r"I:\NorMITs Demand\Tram"
-# cache_path = "E:/dm_cache"
+NOTEM_EXPORT_HOME = r"I:\NorMITs Demand\NoTEM"
+TRAM_EXPORT_HOME = r"I:\NorMITs Demand\Tram"
 
 # Distribution running args
-base_year = 2018
-scenario = nd.Scenario.SC01_JAM
-dm_iteration_name = '9.3.4'
-dm_import_home = r"I:\NorMITs Demand\import"
-dm_export_home = r"E:\NorMITs Demand\Distribution Model"
+BASE_YEAR = 2018
+SCENARIO = nd.Scenario.SC01_JAM
+TARGET_TLD_VERSION = 'v2.1'
+DM_ITERATION_NAME = '9.10.3'
+DM_IMPORT_HOME = r"I:\NorMITs Demand\import"
+DM_EXPORT_HOME = r"E:\NorMITs Demand\Distribution Model"
 
 # General constants
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
 REDUCE_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
-HB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_wday'
-NHB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced_wday'
+HB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output'
+NHB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
+
+# TODO(BT): If NHB segmentation isn't with tp, allow providing of NHB tp
+#  splits so tp split OD can be output still
 
 
 def main():
-    mode = nd.Mode.CAR
+    # mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
-    # mode = nd.Mode.TRAIN
+    mode = nd.Mode.TRAIN
     # mode = nd.Mode.TRAM
 
-    # Running params
-    use_tram = True
+    # Running options
+    use_tram = False
+    memory_optimised_multi_area_grav = True
 
-    calibrate_params = False
+    calibrate_params = True
 
+    # Choose what to run
     run_hb = True
-    run_nhb = False
+    run_nhb = True
 
     run_all = False
-    run_upper_model = True
+    run_upper_model = False
     run_lower_model = False
     run_pa_matrix_reports = False
     run_pa_to_od = False
+    run_pa_split_by_tp = False
     run_od_matrix_reports = False
-    compile_to_assignment = False
+    compile_to_assignment = True
 
     if mode == nd.Mode.CAR:
         # Define zoning systems
@@ -84,19 +91,18 @@ def main():
         # Define segmentations for trip ends and running
         if use_tram:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m7_tp')
         else:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_car')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_car')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_car')
 
         # Define segments
         hb_seg_name = 'p_m'
         nhb_seg_name = 'p_m_tp'
 
         # Define target tld dirs
-        target_tld_version = 'v1'
         geo_constraint_type = 'trip_OD'
 
         upper_calibration_area = 'gb'
@@ -133,6 +139,7 @@ def main():
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
             'calibrate_params': calibrate_params,
+            'memory_optimised': memory_optimised_multi_area_grav,
             'estimate_init_params': False,
             'use_perceived_factors': True,
         }
@@ -166,19 +173,18 @@ def main():
         # Define segmentations for trip ends and running
         if use_tram:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m7_tp')
         else:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_bus')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_bus')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_bus')
 
         # Define segments
         hb_seg_name = 'p_m'
         nhb_seg_name = 'p_m_tp'
 
         # Define target tld dirs
-        target_tld_version = 'v1'
         geo_constraint_type = 'trip_OD'
 
         # Define kwargs for the distribution tiers
@@ -211,6 +217,7 @@ def main():
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
             'calibrate_params': calibrate_params,
+            'memory_optimised': memory_optimised_multi_area_grav,
             'estimate_init_params': False,
             'use_perceived_factors': True,
         }
@@ -244,27 +251,26 @@ def main():
         # Define segmentations for trip ends and running
         if use_tram:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m7_ca')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_ca_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m7_ca_tp')
         else:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m_ca')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_ca_tp')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_ca_rail')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_ca_tp_wday_rail')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_ca_tp_rail')
 
         # Define segments
-        hb_seg_name = 'p_m_ca'
-        nhb_seg_name = 'p_m_ca_tp'
+        hb_seg_name = "p_m_ca"
+        nhb_seg_name = "p_m_ca_tp"
 
         # Define target tld dirs
-        target_tld_version = 'v1'
         geo_constraint_type = 'trip_OD'
 
         # Define kwargs for the distribution tiers
         upper_calibration_area = 'gb'
         upper_calibration_bands = 'dm_gb_rail_bands'
         upper_target_tld_dir = os.path.join(geo_constraint_type, upper_calibration_bands)
-        upper_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m_ca')
-        upper_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_ca_tp')
+        upper_hb_target_tld_dir = os.path.join(upper_target_tld_dir, hb_running_seg.name)
+        upper_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, nhb_running_seg.name)
         upper_model_method = nd.DistributionMethod.GRAVITY
         upper_calibration_zones_fname = None
         upper_calibration_areas = upper_calibration_area
@@ -273,8 +279,8 @@ def main():
         lower_calibration_area = 'north_and_mids'
         lower_calibration_bands = 'dm_north_rail_bands'
         lower_target_tld_dir = os.path.join(geo_constraint_type, lower_calibration_bands)
-        lower_hb_target_tld_dir = os.path.join(lower_target_tld_dir, 'hb_p_m_ca')
-        lower_nhb_target_tld_dir = os.path.join(lower_target_tld_dir, 'nhb_p_m_ca_tp')
+        lower_hb_target_tld_dir = os.path.join(lower_target_tld_dir, hb_running_seg.name)
+        lower_nhb_target_tld_dir = os.path.join(lower_target_tld_dir, nhb_running_seg.name)
         lower_model_method = nd.DistributionMethod.GRAVITY
         lower_calibration_zones_fname = None
         lower_calibration_areas = lower_calibration_area
@@ -289,6 +295,7 @@ def main():
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
             'calibrate_params': calibrate_params,
+            'memory_optimised': memory_optimised_multi_area_grav,
             'estimate_init_params': False,
             'use_perceived_factors': True,
         }
@@ -322,19 +329,18 @@ def main():
         # Define segmentations for trip ends and running
         if use_tram:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m7')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m7_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m7_tp')
         else:
             hb_agg_seg = nd.get_segmentation_level('hb_p_m')
-            nhb_agg_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday')
+            nhb_agg_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp')
         hb_running_seg = nd.get_segmentation_level('hb_p_m_tram')
-        nhb_running_seg = nd.get_segmentation_level('tms_nhb_p_m_tp_wday_tram')
+        nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_tp_tram')
 
         # Define segments
         hb_seg_name = 'p_m'
         nhb_seg_name = 'p_m_tp'
 
         # Define target tld dirs
-        target_tld_version = 'v1'
         geo_constraint_type = 'trip_OD'
 
         # Define kwargs for the distribution tiers
@@ -365,6 +371,7 @@ def main():
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
             'calibrate_params': calibrate_params,
+            'memory_optimised': memory_optimised_multi_area_grav,
             'estimate_init_params': False,
             'use_perceived_factors': True,
         }
@@ -375,7 +382,7 @@ def main():
             'outer_max_iters': 50,
             'furness_max_iters': 3000,
             'furness_tol': 0.1,
-            'calibrate': True,
+            'calibrate': False,
         }
 
         # Choose the correct kwargs
@@ -388,28 +395,47 @@ def main():
             lower_model_kwargs = [x[1].copy() for x in choice if x[0] == lower_model_method][0]
         else:
             lower_model_kwargs = None
+
     else:
         raise ValueError(
-            "Don't know what mode %s is!" % mode.value
+            f"Don't know what mode {mode.value} is!"
         )
+
+    # ## DEAL WITH PROCESS COUNT NEEDS ## #
+    process_count = -2
+    # process_count = 0
+    upper_model_process_count = process_count
+    lower_model_process_count = process_count
+
+    # Need to limit process count for memory usage if MSOA
+    if upper_zoning_system.name == 'msoa':
+        max_process_count = 7
+
+        if os.cpu_count() > 10 and (process_count > 8 or process_count < 0):
+            upper_model_process_count = max_process_count
+
+        # Limit further if multi-area
+        if not isinstance(upper_calibration_areas, str):
+            n_areas = len(upper_calibration_areas)
+            upper_model_process_count = int(max_process_count / n_areas)
 
     # ## SETUP TRIP END ARGS ## #
     kwargs = {
         'output_zoning': upper_zoning_system,
-        'base_year': base_year,
-        'scenario': scenario,
-        'notem_iteration_name': notem_iteration_name,
+        'base_year': BASE_YEAR,
+        'scenario': SCENARIO,
+        'notem_iteration_name': NOTEM_ITERATION_NAME,
         'time_format': nd.core.TimeFormat.AVG_DAY,
     }
     if use_tram:
         trip_end_getter = converters.TramToDistributionModel(
-            export_home=tram_export_home,
+            export_home=TRAM_EXPORT_HOME,
             **kwargs,
         )
         te_model_name = 'tram'
     else:
         trip_end_getter = converters.NoTEMToDistributionModel(
-            export_home=notem_export_home,
+            export_home=NOTEM_EXPORT_HOME,
             **kwargs,
         )
         te_model_name = 'notem'
@@ -429,10 +455,10 @@ def main():
 
     # arg builder
     dmab_kwargs = {
-        'year': base_year,
-        'import_home': dm_import_home,
+        'year': BASE_YEAR,
+        'import_home': DM_IMPORT_HOME,
         'running_mode': mode,
-        'target_tld_version': target_tld_version,
+        'target_tld_version': TARGET_TLD_VERSION,
         'upper_zoning_system': upper_zoning_system,
         'upper_running_zones': upper_zoning_system.unique_zones,
         'upper_model_method': upper_model_method,
@@ -447,21 +473,24 @@ def main():
         'lower_calibration_zones_fname': lower_calibration_zones_fname,
         'lower_calibration_areas': lower_calibration_areas,
         'lower_calibration_naming': lower_calibration_naming,
-        'tour_props_version': tour_props_version,
+        'tour_props_version': TOUR_PROPS_VERSION,
         'tour_props_zoning_name': tour_props_zoning_name,
         'init_params_cols': gm_cost_function.parameter_names,
         'intrazonal_cost_infill': intrazonal_cost_infill,
     }
 
+    distributor_kwargs = {'cost_name': 'Distance', 'cost_units': 'KM'}
+
     # Distribution model
     dm_kwargs = {
-        'iteration_name': dm_iteration_name,
+        'iteration_name': DM_ITERATION_NAME,
         'upper_model_method': upper_model_method,
-        'upper_distributor_kwargs': None,
+        'upper_distributor_kwargs': distributor_kwargs,
         'lower_model_method': lower_model_method,
-        'lower_distributor_kwargs': None,
-        'export_home': dm_export_home,
-        'process_count': -2,
+        'lower_distributor_kwargs': distributor_kwargs,
+        'export_home': DM_EXPORT_HOME,
+        'upper_model_process_count': upper_model_process_count,
+        'lower_model_process_count': lower_model_process_count,
     }
 
     # Init params fnames
@@ -483,16 +512,16 @@ def main():
 
     # ## RUN THE MODEL ## #
     if run_hb:
-        trip_origin = 'hb'
+        trip_origin = nd.TripOrigin.HB
 
         # Build the trip end kwargs
         subset_name = HB_SUBSET_SEG_BASE_NAME.format(
-            trip_origin=trip_origin,
+            trip_origin=trip_origin.value,
             te_model_name=te_model_name,
         )
         trip_end_kwargs = {
             'reduce_segmentation': None,
-            'subset_segmentation': nd.get_segmentation_level(subset_name),
+            # 'subset_segmentation': nd.get_segmentation_level(subset_name),
             'aggregation_segmentation': hb_agg_seg,
             'modal_segmentation': hb_running_seg,
         }
@@ -522,21 +551,22 @@ def main():
             run_lower_model=run_lower_model,
             run_pa_matrix_reports=run_pa_matrix_reports,
             run_pa_to_od=run_pa_to_od,
+            run_pa_split_by_tp=run_pa_split_by_tp,
             run_od_matrix_reports=run_od_matrix_reports,
         )
 
     if run_nhb:
-        trip_origin = 'nhb'
+        trip_origin = nd.TripOrigin.NHB
 
         # Build the trip end kwargs
-        kwargs = {'trip_origin': trip_origin, 'te_model_name': te_model_name}
+        kwargs = {'trip_origin': trip_origin.value, 'te_model_name': te_model_name}
         subset_name = NHB_SUBSET_SEG_BASE_NAME.format(**kwargs)
         reduce_name = REDUCE_SEG_BASE_NAME.format(**kwargs)
         trip_end_kwargs = {
             'reduce_segmentation': nd.get_segmentation_level(reduce_name),
-            'subset_segmentation': nd.get_segmentation_level(subset_name),
-            'aggregation_segmentation': hb_agg_seg,
-            'modal_segmentation': hb_running_seg,
+            # 'subset_segmentation': nd.get_segmentation_level(subset_name),
+            'aggregation_segmentation': nhb_agg_seg,
+            'modal_segmentation': nhb_running_seg,
         }
 
         arg_builder = DistributionModelArgumentBuilder(
@@ -564,6 +594,7 @@ def main():
             run_lower_model=run_lower_model,
             run_pa_matrix_reports=run_pa_matrix_reports,
             run_pa_to_od=run_pa_to_od,
+            run_pa_split_by_tp=run_pa_split_by_tp,
             run_od_matrix_reports=run_od_matrix_reports,
         )
 
@@ -575,7 +606,7 @@ def main():
         elif 'nhb_distributor' in locals():
             nhb_distributor.compile_to_assignment_format()
         else:
-            trip_origin = 'hb'
+            trip_origin = nd.TripOrigin.HB
             arg_builder = DistributionModelArgumentBuilder(
                 trip_origin=trip_origin,
                 trip_end_getter=trip_end_getter,

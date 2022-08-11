@@ -286,9 +286,10 @@ def _find_matrices(folder: Path) -> pd.DataFrame:
         - `purpose`
     """
     files = []
-    file_types = (".pbz2", ".csv", ".bz2")
+    file_types = (".pbz2", ".csv", ".csv.bz2")
     for p in folder.iterdir():
-        if p.is_dir() or p.suffix.lower() not in file_types:
+        suffixes = "".join(p.suffixes)
+        if p.is_dir() or suffixes.lower() not in file_types:
             continue
         suffix = "".join(p.suffixes)
         try:
@@ -298,11 +299,11 @@ def _find_matrices(folder: Path) -> pd.DataFrame:
             continue
         file_data["path"] = p
         files.append(file_data)
-    files = pd.DataFrame(files)
-    files.to_csv(folder / "Matrices list.csv", index=False)
+    files_df = pd.DataFrame(files)
+    files_df.to_csv(folder / "Matrices list.csv", index=False)
     index_cols = ["matrix_type", "year", "mode", "purpose"]
-    files = files.loc[:, index_cols + ["path"]].set_index(index_cols)
-    return files
+    files_df = files_df.loc[:, index_cols + ["path"]].set_index(index_cols)
+    return files_df
 
 
 def _read_matrices(paths: Dict[int, Path]) -> Dict[int, pd.DataFrame]:
@@ -321,7 +322,7 @@ def pa_matrix_comparison(
     tempro_data: tempro_trip_ends.TEMProTripEnds,
     mode: int,
     comparison_zone_system: dict,
-    base_year,
+    base_year: int,
 ):
     """Produce TEMPro comparisons for PA matrices.
 
@@ -333,6 +334,8 @@ def pa_matrix_comparison(
         Folder containing PA matrices.
     tempro_data : TEMProTripEnds
         TEMPro trip end data.
+    base_year : int
+        Base model year.
     """
     LOG.info("PA matrix trip ends comparison with TEMPro")
     output_folder = pa_folder / "TEMPro Comparisons"
@@ -383,7 +386,10 @@ def pa_matrix_comparison(
             (base_year, yr),
             comparison_zone_system=comparison_zone_system,
         )
-        out = output_folder / f"PA_TEMPro_comparisons-{yr}-LAD.csv"
+        out = (
+            output_folder
+            / f"PA_TEMPro_comparisons-{yr}-{comparison_zone_system['trip end']}.csv"
+        )
         file_ops.write_df(comparison, out)
         LOG.info("Written: %s", out)
 
@@ -403,7 +409,11 @@ def pa_matrix_comparison(
 
 
 def translate_matrix(
-    matrix: pd.DataFrame, matrix_zoning_name: str, new_zoning_name: str, **kwargs,
+    matrix: pd.DataFrame,
+    matrix_zoning_name: str,
+    new_zoning_name: str,
+    weighting: str = None,
+    **kwargs,
 ) -> pd.DataFrame:
     """Tranlate square matrix into new zoning system.
 
@@ -418,6 +428,8 @@ def translate_matrix(
         Name of the current zone system.
     new_zoning_name : str
         Name of the zone system to translate to.
+    weighting : str, optional
+        Translation weighting to use.
 
     Returns
     -------
@@ -431,7 +443,7 @@ def translate_matrix(
     # Get correspondence DataFrame
     matrix_zoning = nd_core.get_zoning_system(matrix_zoning_name)
     new_zoning = nd_core.get_zoning_system(new_zoning_name)
-    lookup = matrix_zoning._get_translation_definition(new_zoning)
+    lookup = matrix_zoning._get_translation_definition(new_zoning, weighting)
     # Translate matrix
     return translation.pandas_matrix_zone_translation(
         matrix,
@@ -771,6 +783,8 @@ def od_matrix_comparison(
         Name of the current matrix zoning system.
     comparison_zoning : str
         Name of the zoning system for the summaries.
+    years : List[int]
+        List of forecast years.
     """
     OD_MATRIX_NAMES = {
         "base": "synthetic_od_{purp}_yr2021_m3_tp{tp}.csv",

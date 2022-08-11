@@ -40,13 +40,13 @@ from tqdm import tqdm
 import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
+from normits_demand import logging as nd_log
 from normits_demand.utils import general as du
 from normits_demand.utils import file_ops
 from normits_demand.utils import compress
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.matrices import pa_to_od as pa2od
-from normits_demand.matrices import utils as mat_utils
 from normits_demand.matrices import compilation as mat_comp
 from normits_demand.distribution import furness
 from normits_demand.concurrency import multiprocessing
@@ -54,6 +54,8 @@ from normits_demand.validation import checks
 
 from normits_demand.matrices.tms_matrix_processing import *
 
+
+LOG = nd_log.get_logger(__name__)
 
 
 def _aggregate(
@@ -74,8 +76,9 @@ def _aggregate(
 
     if in_fnames == list():
         raise nd.NormitsDemandError(
-            "Couldn't find any matrices to aggregate up to create %s!"
-            % os.path.basename(export_path)
+            "Couldn't find any matrices to aggregate up to create %s!\n"
+            "Looking in %s"
+            % (os.path.basename(export_path), import_dir)
         )
 
     for fname in in_fnames:
@@ -396,7 +399,7 @@ def aggregate_matrices(
         fn=_aggregate_matrices_internal,
         kwargs=kwarg_list,
         process_count=process_count,
-        # process_count=0,
+
     )
 
 
@@ -1372,6 +1375,7 @@ def build_norms_vdm_compile_params(
     years_needed: Iterable[int],
     m_needed: List[int],
     tp_needed: Iterable[int] = None,
+    tp_filter: Iterable[int] = None,
     output_headers: List[str] = None,
     output_format: str = "wide",
     params_suffix: str = None,
@@ -1382,8 +1386,8 @@ def build_norms_vdm_compile_params(
     # Error checking
     if len(m_needed) > 1:
         raise ValueError(
-            "Matrix compilation can only handle one mode at a "
-            "time. Received %d modes" % len(m_needed)
+            f"Matrix compilation can only handle one mode at a time. "
+            f"Received {len(m_needed):d} modes"
         )
     mode = m_needed[0]
 
@@ -1410,9 +1414,9 @@ def build_norms_vdm_compile_params(
 
             # ## FILTER DOWN TO USER CLASS ## #
             # include _ before and after to avoid clashes
-            ps = ["_p" + str(x) + "_" for x in purposes]
-            mode_str = "_m" + str(mode) + "_"
-            year_str = "_yr" + str(year) + "_"
+            ps = [f"_p{x}_" for x in purposes]
+            mode_str = f"_m{mode}_"
+            year_str = f"_yr{year}_"
 
             # Narrow down to matrices for this compilation
             compile_mats = [x for x in compile_mats if year_str in x]
@@ -1421,21 +1425,41 @@ def build_norms_vdm_compile_params(
 
             # Filter by time period if needed
             if tp is not None:
-                tp_str = "_tp" + str(tp)
+                tp_str = f"_tp{tp}"
                 compile_mats = [x for x in compile_mats if tp_str in x]
+
+            elif tp_filter is not None:
+                # Only keep the wanted tps
+                tps = [f"_tp{tp}" for tp in tp_filter]
+                compile_mats = [x for x in compile_mats if du.is_in_string(tps, x)]
 
             # ## FILTER DOWN TO SUB USER CLASS ## #
             # We're keeping the mats which contain any item in the list
-            filtered = list()
-            for to in seg_dict["to"]:
-                filtered += [x for x in compile_mats if du.starts_with(x, to)]
-            compile_mats = filtered.copy()
+            if "to" in seg_dict:
+                filtered = list()
+                for to in seg_dict["to"]:
+                    filtered += [x for x in compile_mats if du.starts_with(x, to)]
+                compile_mats = list(set(filtered))
 
-            filtered = list()
-            for ca in seg_dict["ca"]:
-                ca_str = "_ca%s" % str(ca)
-                filtered += [x for x in compile_mats if ca_str in x]
-            compile_mats = filtered.copy()
+            if "ca" in seg_dict:
+                filtered = list()
+                for ca in seg_dict["ca"]:
+                    ca_str = f"_ca{str(ca)}"
+                    filtered += [x for x in compile_mats if ca_str in x]
+                compile_mats = list(set(filtered))
+
+            # Figure out what format of matrices to keep
+            if "fmt" in seg_dict:
+                filtered = list()
+                for fmt in seg_dict["fmt"]:
+                    filtered += [x for x in compile_mats if fmt in x]
+                compile_mats = list(set(filtered))
+
+            if "no_fmt" in seg_dict:
+                filtered = list()
+                for fmt in seg_dict["no_fmt"]:
+                    filtered += [x for x in compile_mats if fmt in x]
+                compile_mats = du.list_safe_remove(compile_mats, filtered)
 
             # ## BUILD THE COMPILATION PARAMS ## #
             # Build the final output name
@@ -1447,7 +1471,7 @@ def build_norms_vdm_compile_params(
                 mode=str(mode),
                 ca=None,
                 tp=str(tp),
-                suffix="_%s" % vdm_mat_name,
+                suffix=f"_{vdm_mat_name}",
                 csv=csv_out,
                 compress=compress_out,
             )
@@ -1577,8 +1601,8 @@ def build_norms_compile_params(
 
 
 def build_compile_params(
-    import_dir: str,
-    export_dir: str,
+    import_dir: nd.PathLike,
+    export_dir: nd.PathLike,
     matrix_format: str,
     years_needed: Iterable[int],
     m_needed: List[int] = efs_consts.MODES_NEEDED,
@@ -1665,7 +1689,7 @@ def build_compile_params(
     tp_needed = [None] if tp_needed is None else tp_needed
     to_needed = [None] if not split_hb_nhb else ["hb", "nhb"]
     od_from_to = [None] if not split_od_from_to else ["od_from", "od_to"]
-    all_od_matrices = du.list_files(import_dir)
+    all_od_matrices = du.list_files(import_dir, consts.VALID_MAT_FTYPES)
     out_paths = list()
 
     if output_headers is None:
@@ -1690,8 +1714,8 @@ def build_compile_params(
 
                 # Narrow down further if we're using ca
                 if ca is not None:
-                    ca_str = "_ca" + str(ca) + "_"
-                    compile_mats = [x for x in compile_mats if ca_str in x]
+                    ca_strs = [f"_ca{ca}{x}" for x in "_."]
+                    compile_mats = [x for x in compile_mats if du.is_in_string(ca_strs, x)]
 
                 # Narrow down again if we're using tp
                 if tp is not None:
@@ -2428,14 +2452,15 @@ def _compile_matrices_internal(
 
 
 def compile_matrices(
-    mat_import: str,
-    mat_export: str,
-    compile_params_path: str,
+    mat_import: nd.PathLike,
+    mat_export: nd.PathLike,
+    compile_params_path: nd.PathLike,
     factor_pickle_path: str = None,
     round_dp: int = consts.DEFAULT_ROUNDING,
     factors_fname: str = "od_compilation_factors.pickle",
     avoid_zero_splits: bool = False,
     process_count: int = consts.PROCESS_COUNT,
+    overwrite: bool = True,
 ) -> nd.PathLike:
     """
     Compiles the matrices in mat_import, writes to mat_export
@@ -2469,6 +2494,11 @@ def compile_matrices(
         factors. Where there would have been zero splits, this will be
         replaced with even splits across inputs.
 
+    overwrite: bool, default True
+        If False, checks if any of the compiled matrices already exist and
+        doesn't recreate them. If all output matrices already exist then the
+        function will return early.
+
     Returns
     -------
     None
@@ -2492,6 +2522,28 @@ def compile_matrices(
     # Init
     compile_params = pd.read_csv(compile_params_path)
     compiled_names = compile_params["compilation"].unique()
+
+    if not overwrite:
+        # Don't bother recreating any outputs that already exist
+        export_folder = pathlib.Path(mat_export)
+        exists = []
+        for nm in compiled_names:
+            if (export_folder / nm).is_file():
+                exists.append(nm)
+        del export_folder
+
+        compiled_names = [i for i in compiled_names if i not in exists]
+        if compiled_names == []:
+            LOG.info("All compiled matrices already exist and aren't being overwritten")
+            return
+
+        if exists != []:
+            LOG.info(
+                "%s compiled matrices already exist and aren't being overwritten: %s",
+                len(exists),
+                ", ".join(exists),
+            )
+        del exists
 
     # Need to get the size of the output matrices
     check_mat_name = compile_params.loc[0, "distribution_name"]
@@ -2766,10 +2818,10 @@ def matrices_to_vector(
         matrix_format = checks.validate_matrix_format(temp_seg_dict["matrix_format"])
 
         # Figure out which column names we should use
-        if matrix_format in consts.PA_MATRIX_FORMATS:
+        if matrix_format in efs_consts.PA_MATRIX_FORMATS:
             p_or_o_val_name = "productions"
             a_or_d_val_name = "attractions"
-        elif matrix_format in consts.OD_MATRIX_FORMATS:
+        elif matrix_format in efs_consts.OD_MATRIX_FORMATS:
             p_or_o_val_name = "origin"
             a_or_d_val_name = "destination"
         else:
@@ -2807,8 +2859,10 @@ def matrices_to_vector(
                     continue
 
                 # Extract just the zones we need
-                zone_mask = mat_utils.get_wide_mask(
-                    df=matrix, zones=zone_nums, join_fn=join_fn,
+                zone_mask = pd_utils.get_wide_mask(
+                    df=matrix,
+                    zones=zone_nums,
+                    join_fn=join_fn,
                 )
                 matrix = matrix.where(zone_mask, 0)
 
@@ -2999,15 +3053,15 @@ def maybe_convert_matrices_to_vector(
 
     # Figure out the file paths we should be using
     if matrix_format == "pa":
-        hb_p_or_o_fname = consts.PRODS_FNAME % ("cache", "hb")
-        nhb_p_or_o_fname = consts.PRODS_FNAME % ("cache", "nhb")
-        hb_a_or_o_fname = consts.ATTRS_FNAME % ("cache", "hb")
-        nhb_a_or_o_fname = consts.ATTRS_FNAME % ("cache", "nhb")
+        hb_p_or_o_fname = efs_consts.PRODS_FNAME % ("cache", "hb")
+        nhb_p_or_o_fname = efs_consts.PRODS_FNAME % ("cache", "nhb")
+        hb_a_or_o_fname = efs_consts.ATTRS_FNAME % ("cache", "hb")
+        nhb_a_or_o_fname = efs_consts.ATTRS_FNAME % ("cache", "nhb")
     elif matrix_format == "od":
-        hb_p_or_o_fname = consts.ORIGS_FNAME % ("cache", "hb")
-        nhb_p_or_o_fname = consts.ORIGS_FNAME % ("cache", "nhb")
-        hb_a_or_o_fname = consts.DESTS_FNAME % ("cache", "hb")
-        nhb_a_or_o_fname = consts.DESTS_FNAME % ("cache", "nhb")
+        hb_p_or_o_fname = efs_consts.ORIGS_FNAME % ("cache", "hb")
+        nhb_p_or_o_fname = efs_consts.ORIGS_FNAME % ("cache", "nhb")
+        hb_a_or_o_fname = efs_consts.DESTS_FNAME % ("cache", "hb")
+        nhb_a_or_o_fname = efs_consts.DESTS_FNAME % ("cache", "nhb")
     else:
         raise ValueError(
             "%s seems to be a valid matrix format, but I don't know what to "
@@ -3076,6 +3130,7 @@ def compile_norms_to_vdm_internal(
     years_needed: List[str],
     m_needed: List[int],
     matrix_format: str,
+    tp_filter: Iterable[int] = None,
     avoid_zero_splits: bool = False,
 ) -> List[str]:
     """
@@ -3105,6 +3160,11 @@ def compile_norms_to_vdm_internal(
         The format of of the matrices to compile. Needs to be one of
         efs_consts.MATRIX_FORMATS
 
+    tp_filter:
+        A filter to apply to the time periods being compiled. When there are
+        more time periods in `mat_import` than those needing to be compiled,
+        the argument can be used to limit those being selected.
+
     avoid_zero_splits:
         If set to True, then no zero splits will appear in the splitting
         factors. Where there would have been zero splits, this will be
@@ -3126,6 +3186,7 @@ def compile_norms_to_vdm_internal(
         segmentation_aggregation=consts.NORMS_VDM_SEG_INTERNAL,
         years_needed=years_needed,
         m_needed=m_needed,
+        tp_filter=tp_filter,
         params_suffix=fname_suffix,
     )
 
@@ -3158,6 +3219,7 @@ def compile_norms_to_vdm_external(
     years_needed: List[str],
     m_needed: List[int],
     matrix_format: str,
+    tp_filter: Iterable[int] = None,
     avoid_zero_splits: bool = False,
 ) -> List[str]:
     """
@@ -3187,6 +3249,11 @@ def compile_norms_to_vdm_external(
         The format of of the matrices to compile. Needs to be one of
         efs_consts.MATRIX_FORMATS
 
+    tp_filter:
+        A filter to apply to the time periods being compiled. When there are
+        more time periods in `mat_import` than those needing to be compiled,
+        the argument can be used to limit those being selected.
+
     avoid_zero_splits:
         If set to True, then no zero splits will appear in the splitting
         factors. Where there would have been zero splits, this will be
@@ -3205,9 +3272,10 @@ def compile_norms_to_vdm_external(
         import_dir=mat_import,
         export_dir=params_export,
         matrix_format=matrix_format,
-        segmentation_aggregation=consts.NORMS_VDM_SEG_EXTERNAL,
+        segmentation_aggregation=consts.NORMS_VDM_SEG_EXTERNAL_OD,
         years_needed=years_needed,
         m_needed=m_needed,
+        tp_filter=tp_filter,
         params_suffix=fname_suffix,
     )
 
@@ -3319,13 +3387,19 @@ def split_internal_external(
     external_export = None if external_zones is None else external_export
 
     # Filter down to just the year we want
+    # TODO(BT): Why does this even need to split the matrix out?
+    #  Just make it attach a suffix to the end of the name using the new
+    #  file_ops functionality
     mat_seg_vals = list()
     for path in mat_paths:
         # Parse the filename
         seg_vals = du.fname_to_calib_params(
-            path, get_trip_origin=True, get_matrix_format=False
+            path,
+            get_trip_origin=True,
+            get_matrix_format=True,
         )
-        seg_vals["matrix_format"] = matrix_format
+        if seg_vals["matrix_format"] != matrix_format:
+            continue
 
         # Skip over any file which is not the wanted year
         if seg_vals["yr"] != year:
@@ -3358,15 +3432,19 @@ def split_internal_external(
 
 
 def compile_norms_to_vdm(
-    mat_import: nd.PathLike,
+    mat_pa_import: nd.PathLike,
+    mat_od_import: nd.PathLike,
     mat_export: nd.PathLike,
     params_export: nd.PathLike,
     year: str,
     m_needed: List[int],
-    matrix_format: str,
+    pa_matrix_format: str,
+    od_to_matrix_format: str,
+    od_from_matrix_format: str,
+    nhb_od_matrix_format: str,
     internal_zones: List[int],
     external_zones: List[int],
-    from_to_split_factors: nd.FactorsDict = None,
+    tp_filter: Iterable[int] = None,
     avoid_zero_splits: bool = False,
 ) -> str:
     # TODO(BT) Write compile_norms_to_vdm() docs
@@ -3380,44 +3458,48 @@ def compile_norms_to_vdm(
     for path in [int_dir, ext_dir]:
         file_ops.create_folder(path)
 
-    # Temporary output if we need to split from/to
-    compiled_dir = mat_export
-    if from_to_split_factors is not None:
-        compiled_dir = os.path.join(mat_export, "compiled_non_split")
-        file_ops.create_folder(compiled_dir)
-
+    # Grab internal PA, external OD
     # Split internal and external
     print("Splitting into internal and external matrices...")
     split_internal_external(
-        mat_import=mat_import,
-        matrix_format=matrix_format,
+        mat_import=mat_pa_import,
+        matrix_format=pa_matrix_format,
         internal_export=int_dir,
-        external_export=ext_dir,
         year=year,
         internal_zones=internal_zones,
-        external_zones=external_zones,
     )
+    
+    for mtx_fmt in [od_from_matrix_format, od_to_matrix_format, nhb_od_matrix_format]:
+        split_internal_external(
+            mat_import=mat_od_import,
+            matrix_format=mtx_fmt,
+            external_export=ext_dir,
+            year=year,
+            external_zones=external_zones,
+        )
 
     # Compile and get the splitting factors for internal mats
     print("Generating internal splitting factors...")
     int_split_factors = compile_norms_to_vdm_internal(
         mat_import=int_dir,
-        mat_export=compiled_dir,
+        mat_export=mat_export,
         params_export=params_export,
         years_needed=[year],
         m_needed=m_needed,
-        matrix_format=matrix_format,
+        matrix_format=pa_matrix_format,
+        tp_filter=tp_filter,
         avoid_zero_splits=avoid_zero_splits,
     )
 
     print("Generating external splitting factors...")
     ext_split_factors = compile_norms_to_vdm_external(
         mat_import=ext_dir,
-        mat_export=compiled_dir,
+        mat_export=mat_export,
         params_export=params_export,
         years_needed=[year],
         m_needed=m_needed,
-        matrix_format=matrix_format,
+        matrix_format=nhb_od_matrix_format,
+        tp_filter=tp_filter,
         avoid_zero_splits=avoid_zero_splits,
     )
 
@@ -3425,23 +3507,15 @@ def compile_norms_to_vdm(
     int_split_factors = int_split_factors[0]
     ext_split_factors = ext_split_factors[0]
 
-    # If we don't have the post_me path, exit now. Can't do any more
-    if from_to_split_factors is None:
-        return int_split_factors, ext_split_factors
-
-    # ## CONVERT TO THE NORMS POST-ME FORMAT ## #
-    print("Converting matrices into NoRMS format...")
-    mat_comp.convert_efs_to_norms_matrices(
-        mat_import=compiled_dir,
-        mat_export=mat_export,
-        year=year,
-        from_to_split_factors=from_to_split_factors,
-    )
-
     return int_split_factors, ext_split_factors
 
 
-def _recombine_internal_external_internal(in_paths, output_path, output_suffix,) -> None:
+def _recombine_internal_external_internal(
+    in_paths,
+    output_path,
+    output_suffix,
+    rounding: int = None,
+) -> None:
     # Read in the matrices and compile
     partial_mats = [file_ops.read_df(x, index_col=0, find_similar=True) for x in in_paths]
     full_mat = functools.reduce(lambda x, y: x.values + y.values, partial_mats)
@@ -3450,6 +3524,9 @@ def _recombine_internal_external_internal(in_paths, output_path, output_suffix,)
     full_mat = pd.DataFrame(
         full_mat, index=partial_mats[0].index, columns=partial_mats[0].columns,
     )
+
+    if rounding is not None:
+        full_mat = full_mat.round(rounding)
 
     # Sort out the output suffix
     base_path = file_ops.remove_suffixes(pathlib.Path(output_path))
@@ -3464,6 +3541,7 @@ def combine_partial_matrices(
     export_dir: List[nd.PathLike],
     segmentation: nd.SegmentationLevel,
     import_suffixes: List[str] = None,
+    rounding: int = None,
     csv_out: bool = False,
     process_count: int = consts.PROCESS_COUNT,
     pbar_kwargs: Dict[str, Any] = None,
@@ -3486,6 +3564,10 @@ def combine_partial_matrices(
         A list of the suffixes for each directory in import_dirs. Should be
         a parallel list to import_dirs. Any directories without a suffix
         should be set to None.
+
+    rounding:
+        the number of decimal places to round the output matrix to. If left as
+        None, then no rounding is done.
 
     csv_out:
         Whether to write the combined matrices out as csvs. If False, files
@@ -3544,9 +3626,12 @@ def combine_partial_matrices(
     # ## COMPILE THE MATRICES ## #
     kwarg_list = list()
     for output_path, in_paths in combine_dict.items():
-        kwarg_list.append(
-            {"output_path": output_path, "in_paths": in_paths, "output_suffix": output_suffix,}
-        )
+        kwarg_list.append({
+            "output_path": output_path,
+            "in_paths": in_paths,
+            "output_suffix": output_suffix,
+            "rounding": rounding,
+        })
 
     multiprocessing.multiprocess(
         fn=_recombine_internal_external_internal,

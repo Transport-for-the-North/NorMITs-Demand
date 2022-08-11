@@ -22,6 +22,7 @@ import pandas as pd
 from tqdm import tqdm
 
 sys.path.append('..')
+import normits_demand as nd
 from normits_demand.concurrency import multiprocessing
 from normits_demand import constants as consts
 
@@ -110,7 +111,7 @@ def compare_mats_fn(mat_fname, original_dir, compare_dir):
         )
 
     # noinspection PyTypeChecker
-    if all(orig.index != comp.index):
+    if len(orig.index) != len(comp.index) or all(orig.index != comp.index):
         raise ValueError(
             "The index names of matrix %s do not match in the original "
             "and compare directories. Please check manually."

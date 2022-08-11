@@ -33,7 +33,7 @@ class SharedNumpyArrayHelper:
         data: np.ndarray,
         create: bool = True,
         lock: threading.Lock = None,
-        dtype: np.dtype = None,
+        dtype: type = None,
     ):
         # Set defaults
         if lock is None:

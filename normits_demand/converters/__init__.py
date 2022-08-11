@@ -14,3 +14,4 @@ File purpose:
 from normits_demand.converters.notem import ToDistributionModel
 from normits_demand.converters.notem import NoTEMToDistributionModel
 from normits_demand.converters.tram import TramToDistributionModel
+from normits_demand.converters.traveller_segmentation_trip_ends import NoTEMToTravellerSegmentation

@@ -20,14 +20,16 @@ from typing import Union
 # Third Party
 
 # Local Imports
-import normits_demand as nd
-
 from normits_demand import core as nd_core
+from normits_demand import logging as nd_log
 from normits_demand.pathing import NoTEMExportPaths
 
 
+LOG = nd_log.get_logger(__name__)
+
+
 class ToDistributionModel:
-    
+
     def __init__(
         self,
         output_zoning: nd_core.ZoningSystem,
@@ -74,12 +76,12 @@ class ToDistributionModel:
 
     def convert(
         self,
+        *args,
         trip_origin: nd_core.TripOrigin,
         ignore_cache: bool = False,
-        *args,
         **kwargs,
     ) -> Tuple[nd_core.DVector, nd_core.DVector]:
-        """Reads in and converts the trip origin Dvectors
+        """Reads in and converts the trip origin DVectors
 
         Wrapper class for `self.convert_hb()` or `self.convert_nhb()`.
 
@@ -119,18 +121,18 @@ class ToDistributionModel:
         `self.maybe_read_and_convert_trip_end()`
         """
         if trip_origin == nd_core.TripOrigin.HB:
-            return self.convert_hb(ignore_cache=ignore_cache, *args, **kwargs)
-        elif trip_origin == nd_core.TripOrigin.NHB:
-            return self.convert_nhb(ignore_cache=ignore_cache, *args, **kwargs)
-        else:
-            raise ValueError(
-                "Don't know how to convert the trip ends for trip origin: %s"
-                % trip_origin.value
-            )
+            return self.convert_hb(*args, ignore_cache=ignore_cache, **kwargs)
+
+        if trip_origin == nd_core.TripOrigin.NHB:
+            return self.convert_nhb(*args, ignore_cache=ignore_cache, **kwargs)
+
+        raise ValueError(
+            f"Don't know how to convert the trip ends for trip origin: "
+            f"{trip_origin.value}"
+        )
 
     def convert_hb(
         self,
-        ignore_cache: bool = False,
         *args,
         **kwargs,
     ) -> Tuple[nd_core.DVector, nd_core.DVector]:
@@ -144,10 +146,6 @@ class ToDistributionModel:
 
         Parameters
         ----------
-        ignore_cache:
-            Whether to ignore the cache and recreate the cache no matter
-            what.
-
         args:
             Used for compatibility with `self.maybe_read_and_convert_trip_end()`
 
@@ -166,13 +164,12 @@ class ToDistributionModel:
         `self.maybe_read_and_convert_trip_end()`
         """
         return (
-            self.convert_hb_productions(ignore_cache, *args, **kwargs),
-            self.convert_hb_attractions(ignore_cache, *args, **kwargs),
+            self.convert_hb_productions(*args, **kwargs),
+            self.convert_hb_attractions(*args, **kwargs),
         )
 
     def convert_nhb(
         self,
-        ignore_cache: bool = False,
         *args,
         **kwargs,
     ) -> Tuple[nd_core.DVector, nd_core.DVector]:
@@ -186,10 +183,6 @@ class ToDistributionModel:
 
         Parameters
         ----------
-        ignore_cache:
-            Whether to ignore the cache and recreate the cache no matter
-            what.
-
         args:
             Used for compatibility with `self.maybe_read_and_convert_trip_end()`
 
@@ -208,14 +201,14 @@ class ToDistributionModel:
         `self.maybe_read_and_convert_trip_end()`
         """
         return (
-            self.convert_nhb_productions(ignore_cache, *args, **kwargs),
-            self.convert_nhb_attractions(ignore_cache, *args, **kwargs),
+            self.convert_nhb_productions(*args, **kwargs),
+            self.convert_nhb_attractions(*args, **kwargs),
         )
 
     def convert_hb_productions(
         self,
-        ignore_cache: bool = False,
         *args,
+        ignore_cache: bool = False,
         **kwargs,
     ) -> nd_core.DVector:
         """Reads in and converts the hb_production Dvector
@@ -259,18 +252,18 @@ class ToDistributionModel:
             )
 
         return self.maybe_read_and_convert_trip_end(
+            *args,
             dvector_path=self.hb_productions_path,
             cache_fname='hb_productions_dvec.pkl',
             ignore_cache=ignore_cache,
             translation_weighting='population',
-            *args,
             **kwargs
         )
 
     def convert_hb_attractions(
         self,
-        ignore_cache: bool = False,
         *args,
+        ignore_cache: bool = False,
         **kwargs,
     ) -> nd_core.DVector:
         """Reads in and converts the hb_attraction Dvector
@@ -314,18 +307,18 @@ class ToDistributionModel:
             )
 
         return self.maybe_read_and_convert_trip_end(
+            *args,
             dvector_path=self.hb_attractions_path,
             cache_fname='hb_attractions_dvec.pkl',
             ignore_cache=ignore_cache,
             translation_weighting='employment',
-            *args,
             **kwargs
         )
 
     def convert_nhb_productions(
         self,
-        ignore_cache: bool = False,
         *args,
+        ignore_cache: bool = False,
         **kwargs,
     ) -> nd_core.DVector:
         """Reads in and converts the nhb_production Dvector
@@ -369,18 +362,18 @@ class ToDistributionModel:
             )
 
         return self.maybe_read_and_convert_trip_end(
+            *args,
             dvector_path=self.nhb_productions_path,
             cache_fname='nhb_productions_dvec.pkl',
             ignore_cache=ignore_cache,
             translation_weighting='population',
-            *args,
             **kwargs
         )
 
     def convert_nhb_attractions(
         self,
-        ignore_cache: bool = False,
         *args,
+        ignore_cache: bool = False,
         **kwargs,
     ) -> nd_core.DVector:
         """Reads in and converts the nhb_attraction Dvector
@@ -425,18 +418,18 @@ class ToDistributionModel:
             )
 
         return self.maybe_read_and_convert_trip_end(
+            *args,
             dvector_path=self.nhb_attractions_path,
             cache_fname='nhb_attractions_dvec.pkl',
             ignore_cache=ignore_cache,
             translation_weighting='employment',
-            *args,
             **kwargs
         )
 
     def maybe_read_and_convert_trip_end(
         self,
         dvector_path: pathlib.Path,
-        cache_fname: pathlib.Path,
+        cache_fname: Union[pathlib.Path, str],
         ignore_cache: bool,
         translation_weighting: str,
         reduce_segmentation: nd_core.SegmentationLevel = None,
@@ -502,12 +495,14 @@ class ToDistributionModel:
                     ignore_cache = True
 
         # Return the cache only if it's safe to
-        if not ignore_cache and cache_path.is_file():
-            dvec = nd_core.DVector.load(cache_path)
+        if cache_path is not None:
+            if not ignore_cache and cache_path.is_file():
+                LOG.debug("Loading trip ends from cache: %s", cache_path)
+                dvec = nd_core.DVector.load(cache_path)
 
-            # Do a few checks
-            if dvec.zoning_system == self.output_zoning:
-                return dvec
+                # Do a few checks
+                if dvec.zoning_system == self.output_zoning:
+                    return dvec
 
         # If here, we need to recreate the cache
         converted_dvec = self.read_and_convert_trip_end(
@@ -521,6 +516,7 @@ class ToDistributionModel:
 
         # Save into cache and return
         if cache_path is not None:
+            cache_path.parent.mkdir(exist_ok=True, parents=True)
             converted_dvec.save(cache_path)
         return converted_dvec
 
@@ -576,7 +572,7 @@ class ToDistributionModel:
             The convert trip_end_or_path DVector
         """
         # Read in DVector if given path
-        if isinstance(trip_end_or_path, nd.core.data_structures.DVector):
+        if isinstance(trip_end_or_path, nd_core.data_structures.DVector):
             dvec = trip_end_or_path
         else:
             dvec = nd_core.DVector.load(trip_end_or_path)
@@ -586,12 +582,15 @@ class ToDistributionModel:
             dvec = dvec.reduce(out_segmentation=reduce_segmentation)
 
         # Convert from ave_week to ave_day
-        dvec = dvec.subset(out_segmentation=subset_segmentation)
+        if subset_segmentation is not None:
+            dvec = dvec.subset(out_segmentation=subset_segmentation)
         dvec = dvec.convert_time_format(self.time_format)
 
         # Convert zoning and segmentation to desired
-        dvec = dvec.aggregate(aggregation_segmentation)
-        dvec = dvec.subset(modal_segmentation)
+        if aggregation_segmentation is not None:
+            dvec = dvec.aggregate(aggregation_segmentation)
+        if modal_segmentation is not None:
+            dvec = dvec.subset(modal_segmentation)
         dvec = dvec.translate_zoning(self.output_zoning, translation_weighting)
 
         return dvec
@@ -621,19 +620,19 @@ class NoTEMToDistributionModel(ToDistributionModel):
 
         base_year:
             The year the Distribution Model is running for. Needed for
-            compatibility with nd.pathing.NoTEMExportPaths
+            compatibility with normits_demand.pathing.NoTEMExportPaths
 
         scenario:
             The name of the scenario to run for. Needed for
-            compatibility with nd.pathing.NoTEMExportPaths
+            compatibility with normits_demand.pathing.NoTEMExportPaths
 
         notem_iteration_name:
             The name of this iteration of the NoTEM models. Will be passed to
-            nd.pathing.NoTEMExportPaths to generate the NoTEM paths.
+            normits_demand.pathing.NoTEMExportPaths to generate the NoTEM paths.
 
         export_home:
             The home directory of all the export paths. Will be passed to
-            nd.pathing.NoTEMExportPaths to generate the NoTEM paths.
+            normits_demand.pathing.NoTEMExportPaths to generate the NoTEM paths.
 
         cache_dir:
             A path to the directory to store the cached DVectors.
@@ -644,7 +643,7 @@ class NoTEMToDistributionModel(ToDistributionModel):
         # Get the path to the NoTEM Exports
         notem_exports = NoTEMExportPaths(
             path_years=[base_year],
-            scenario=scenario.value,
+            scenario=scenario,
             iteration_name=notem_iteration_name,
             export_home=export_home,
         )

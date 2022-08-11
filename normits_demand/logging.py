@@ -68,6 +68,7 @@ def write_instantiate_message(logger: logging.Logger,
 def get_logger(logger_name: str,
                log_file_path: nd.PathLike = None,
                instantiate_msg: str = None,
+               log_version: bool = False,
                ) -> logging.Logger:
     """Creates a child logger for this package.
 
@@ -85,6 +86,9 @@ def get_logger(logger_name: str,
         A message to output on instantiation. This will be output at the
         logging.DEBUG level, and will be wrapped in a line of asterisk before
         and after.
+
+    log_version:
+        Log a message with the package version information, default False.
 
     Returns
     -------
@@ -109,6 +113,9 @@ def get_logger(logger_name: str,
     if instantiate_msg is not None:
         write_instantiate_message(logger, instantiate_msg)
 
+    if log_version:
+        logger.info("NorMITs-Demand v%s", nd.__version__)
+
     return logger
 
 
@@ -116,6 +123,7 @@ def get_custom_logger(logger_name: str,
                       console_handler: logging.StreamHandler = None,
                       file_handler: logging.FileHandler = None,
                       instantiate_msg: str = None,
+                      log_version: bool = False,
                       ) -> logging.Logger:
     """Creates a child logger for this package.
 
@@ -141,6 +149,9 @@ def get_custom_logger(logger_name: str,
         logging.DEBUG level, and will be wrapped in a line of asterisk before
         and after.
 
+    log_version:
+        Log a message with the package version information, default False.
+
     Returns
     -------
     logger:
@@ -163,6 +174,9 @@ def get_custom_logger(logger_name: str,
 
     if instantiate_msg is not None:
         write_instantiate_message(logger, instantiate_msg)
+
+    if log_version:
+        logger.info("NorMITs-Demand v%s", nd.__version__)
 
     return logger
 
@@ -188,6 +202,17 @@ def check_child_logger(logger_name: str) -> None:
             "The name should be the package name followed by a dot, and the "
             "name of the logger e.g. %s.notem"
         )
+
+
+def _make_child_logger(logger_name: str) -> str:
+    """Create a valid child logger name if name isn't already valid"""
+    try:
+        check_child_logger(logger_name)
+        new_logger_name = logger_name
+    except ValueError:
+        new_logger_name = f"{get_package_logger_name()}.{logger_name}"
+    return new_logger_name
+
 
 
 def get_console_handler(ch_format: str = None,

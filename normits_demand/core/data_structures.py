@@ -129,6 +129,16 @@ class TimeFormat(enum.Enum):
         }
 
     @staticmethod
+    def avg_hour_to_total_hour_factors() -> Dict[int, float]:
+        """Get a dictionary of conversion factors"""
+        return TimeFormat._hour_to_day_factors()
+
+    @staticmethod
+    def total_hour_to_avg_hour_factors() -> Dict[int, float]:
+        """Get a dictionary of conversion factors"""
+        return TimeFormat._day_to_hour_factors()
+
+    @staticmethod
     def get(value: str) -> TimeFormat:
         """Get an instance of this with value
 
@@ -202,8 +212,8 @@ class TimeFormat(enum.Enum):
         # Validate inputs
         if not isinstance(to_time_format, TimeFormat):
             raise ValueError(
-                "Expected to_time_format to be a TimeFormat object. Got: %s"
-                % (type(to_time_format))
+                "Expected to_time_format to be a TimeFormat object. "
+                f"Got: {type(to_time_format)}"
             )
 
         if to_time_format == self:
@@ -227,8 +237,7 @@ class TimeFormat(enum.Enum):
         else:
             raise nd.NormitsDemandError(
                 "Cannot figure out the conversion factors to get from "
-                "time_format %s to %s"
-                % (self.value, to_time_format.value)
+                f"time_format {self.value} to {to_time_format.value}"
             )
 
         return factors_fn()
@@ -897,11 +906,21 @@ class DVector:
                 zoning_system_zones = set(self.zoning_system.unique_zones)
                 extra_zones = seg_zones_set - zoning_system_zones
                 if len(extra_zones) > 0:
+                    # Shortern the error message if long
+                    if len(extra_zones) > 10:
+                        extra_zones = list(extra_zones)
+                        extra_zones_str = (
+                            f"{extra_zones[:10]} plus {len(extra_zones - 10)} more"
+                        )
+                    else:
+                        extra_zones_str = f"{extra_zones}"
+
                     raise ValueError(
-                        "Found zones that don't exist in %s zoning in the "
-                        "given DataFrame. For segment %s, the following "
-                        "zones do not belong to this zoning system:\n%s"
-                        % (self.zoning_system.name, segment, extra_zones)
+                        f"Found zones that don't exist in {self.zoning_system.name} "
+                        f"zoning in the given DataFrame.\n"
+                        f"For segment {segment}, the following zones do not "
+                        f"belong to this zoning system:\n"
+                        f"{extra_zones_str}"
                     )
 
                 # Filter down to just data as values, and zoning system as the index
@@ -955,9 +974,10 @@ class DVector:
             raise ValueError(
                 "Found extra columns in the given DataFrame than needed. The "
                 "given DataFrame should only contain val_col, "
-                "segmentation_cols, and the zone_col (where applicable). "
+                "segmentation_cols, and the zone_col (where applicable).\n"
+                "Expected: %s\n"
                 "Found the following extra columns: %s"
-                % extra_cols
+                % (required_cols, extra_cols)
             )
 
         # Add the segment column - drop the individual cols
@@ -1745,10 +1765,13 @@ class DVector:
         # Validate inputs
         if not isinstance(out_segmentation, nd.core.segments.SegmentationLevel):
             raise ValueError(
-                "target_segmentation is not the correct type. "
-                "Expected SegmentationLevel, got %s"
-                % type(out_segmentation)
+                f"target_segmentation is not the correct type. "
+                f"Expected SegmentationLevel, got {type(out_segmentation)}"
             )
+
+        # Return a copy of self if in/out segmentation the same
+        if self.segmentation == out_segmentation:
+            return self.copy()
 
         # Get the subset definition
         subset_list = self.segmentation.subset(out_segmentation)
@@ -1974,7 +1997,7 @@ class DVector:
             else:
                 other_segs = np.array([other._data[s] for s in out_seg_names])
                 zonal_sums = np.sum(other_segs, axis=0)
-                with np.errstate(divide='ignore'):
+                with np.errstate(all='ignore'):
                     split_factors = other_segs / zonal_sums
 
                 # If any divide by 0s, split evenly
@@ -2366,7 +2389,7 @@ class DVector:
                              ca_sector_path: nd.PathLike,
                              ie_sector_path: nd.PathLike,
                              lad_report_path: nd.PathLike = None,
-                             lad_report_seg: nd.core.segments.SegmentationLevel = None,
+                             lad_report_seg: nd.SegmentationLevel = None,
                              ) -> None:
         """
         Writes segment, CA sector, and IE sector reports to disk
