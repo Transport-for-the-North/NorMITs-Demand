@@ -28,5 +28,8 @@ Below, a brief summary of patches made since the previous version can be found.
       when none are supplied.
     - `GravityModel` now  defaults to the default cost function parameters when then
       given ones are infeasible.
+- Update the version handling
+  - Now using versioneer to handle versions. It is not clearer what version is
+    being run.
 - Bug Fixes
-  - 
+  - None
