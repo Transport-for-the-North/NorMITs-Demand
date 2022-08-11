@@ -24,7 +24,6 @@ import pandas as pd
 
 # self imports
 import normits_demand as nd
-from normits_demand import version
 from normits_demand import constants as consts
 from normits_demand import efs_constants as efs_consts
 from normits_demand.models import efs_production_model as pm
@@ -56,7 +55,7 @@ from normits_demand.utils import sector_reporter_v2 as sr_v2
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
-    __version__ = version.__version__
+    __version__ = nd.__version__
     out_dir = "NorMITs Demand"
 
     # defines all non-year columns
@@ -422,7 +421,7 @@ class ExternalForecastSystem:
         print("Initialising outputs...")
         write_input_info(
             os.path.join(self.exports['home'], "input_parameters.txt"),
-            version.__version__,
+            self.__version__,
             self.by_land_use_iteration,
             self.fy_land_use_iteration,
             base_year,
