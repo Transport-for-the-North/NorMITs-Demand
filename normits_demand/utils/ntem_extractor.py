@@ -99,7 +99,6 @@ class TemproParser:
         access_driver = self._access_driver if access_driver is None else access_driver
         data_source = self._data_source if data_source is None else data_source
         ntem_version = self._ntem_version if ntem_version is None else ntem_version
-        scenario = scenario
         out_folder = self._out_folder if out_folder is None else out_folder
         region_list = self._region_list if region_list is None else region_list
         output_years = self._output_years if output_years is None else output_years
@@ -109,7 +108,7 @@ class TemproParser:
 
         # Assign variables
         self.access_driver = access_driver
-        self.data_source = data_source + ntem_version
+        self.data_source = os.path.join(data_source, str(ntem_version))
         self.ntem_version = ntem_version
         self.scenario = scenario
         self.region_list = region_list
@@ -127,15 +126,8 @@ class TemproParser:
         self.ntem_lad_trans_path = os.path.join(config_path, 'ntem_lad_pop_weighted_lookup.csv')
         self.ntem_to_msoa_path = r"I:\NorMITs Demand\import\zone_translation\weighted\ntem_msoa_pop_weighted_lookup.csv"
 
-    def get_available_dbs(self,
-                          scenario: str = None):
+    def get_available_dbs(self):
         """
-        Parameters
-        ----------
-        scenario: str
-            Name of scenario, options as defined in class. If None and
-            NTEM8 selected, will return error
-
         Returns
         ----------
         available_dbs: list
@@ -154,7 +146,7 @@ class TemproParser:
             if self.scenario is None:
                 raise IOError('NTEM later than 7.2 requires scenario, none was passed')
             else:
-                db_list = [x for x in db_list if self.scenario in x]
+                available_dbs = [x for x in available_dbs if self.scenario in x]
 
         if available_dbs == list():
             raise IOError("Couldn't find any dbs to load from.")
