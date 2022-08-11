@@ -21,15 +21,6 @@ Below, a brief summary of patches made since the previous version can be found.
 
 ### V0.5.2
 - Tools
-  - Cost
-    - Added default parameters to the `CostFunction` class. 
-  - Distribution Model
-    - `GravityModel` distributor now picks up default parameters for the cost function
-      when none are supplied.
-    - `GravityModel` now  defaults to the default cost function parameters when then
-      given ones are infeasible.
-- Update the version handling
-  - Now using versioneer to handle versions. It is not clearer what version is
-    being run.
+  - None
 - Bug Fixes
   - None
