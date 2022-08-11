@@ -81,14 +81,6 @@ class IsValidEnumWithAutoNameLower(IsValidEnum):
         return name.lower()
 
 
-class AutoName(enum.Enum):
-    """Enum class to automatically use the Enum name for it's value."""
-
-    @staticmethod
-    def _generate_next_value_(name, start, count, last_values):
-        del start, count, last_values  # Unused
-        return name
-
 @enum.unique
 class Mode(IsValidEnum):
     """Collection of valid modes and their values/names"""

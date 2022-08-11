@@ -299,7 +299,7 @@ def capture_warnings(
     stream_handler: bool = True,
     stream_handler_args: Dict[str, Any] = None,
     file_handler_args: Dict[str, Any] = None
-    ) -> None:
+) -> None:
     """Capture warnings using logging.
 
     Runs `logging.captureWarnings(True)` to capture warnings then

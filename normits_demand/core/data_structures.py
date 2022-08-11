@@ -665,6 +665,7 @@ class DVector:
             import_data=dvec_data,
             process_count=self.process_count,
         )
+
     def __abs__(self) -> DVector:
         """
         Builds an identical DVector but with all values positive
