@@ -49,6 +49,7 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
     year: int
     disaggregation_output_segment: segment_disaggregator.DisaggregationOutputSegment
     trip_length_distribution_folder: pathlib.Path
+    cost_folder: pathlib.Path
     trip_length_distribution_units: nd.CostUnits = nd.CostUnits.KILOMETERS
     aggregate_time_periods: Optional[list[int]] = None
     disaggregation_settings: segment_disaggregator.DisaggregationSettings = (
@@ -61,29 +62,14 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         "notem_export_home",
         "trip_length_distribution_folder",
         "base_output_folder",
+        "cost_folder",
         allow_reuse=True,
-    )  # pylint: disable=no-self-argument
-    def _folder_exists(cls, value) -> pathlib.Path:
+    )
+    def _folder_exists(cls, value) -> pathlib.Path:  # pylint: disable=no-self-argument
         try:
             return file_ops.folder_exists(value)
         except NotADirectoryError as err:
             raise ValueError(err) from err
-
-    @staticmethod
-    def _build_cost_folder(
-        import_folder: pathlib.Path, model: nd.AssignmentModel
-    ) -> pathlib.Path:
-        return (
-            import_folder / "modal" / model.get_mode().get_name() / "costs" / model.get_name()
-        )
-
-    @pydantic.root_validator(skip_on_failure=True, allow_reuse=True)
-    def _check_cost_folder(  # pylint: disable=no-self-argument
-        cls, values: dict[str, Any]
-    ) -> dict[str, Any]:
-        cost_folder = cls._build_cost_folder(values.get("import_folder"), values.get("model"))  # type: ignore
-        cls._folder_exists(cost_folder)
-        return values
 
     @pydantic.validator("matrix_zoning")
     def _check_zone_system(cls, value: str) -> str:  # pylint: disable=no-self-argument
@@ -105,10 +91,6 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
             return None
 
         return value
-
-    @property
-    def cost_folder(self) -> pathlib.Path:
-        return self._build_cost_folder(self.import_folder, self.model)
 
     @property
     def iteration_folder(self) -> pathlib.Path:
@@ -260,6 +242,9 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
             "Running Traveller Segmentation Disaggregator",
             log_version=True,
         )
+        nd_log.capture_warnings(
+            file_handler_args=dict(log_file=params.output_folder / LOG_FILE)
+        )
 
     LOG.info("Outputs saved to: %s", params.output_folder)
     out = params.output_folder / "Traveller_segmentation_parameters.yml"
@@ -368,8 +353,6 @@ def example_config(path: pathlib.Path) -> None:
 
 ##### MAIN #####
 if __name__ == "__main__":
-    logging.captureWarnings(True)
-
     try:
         # TODO Add command line argument to specify config path,
         # with default as CONFIG_PATH if no arguments are given

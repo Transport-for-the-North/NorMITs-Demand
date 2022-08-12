@@ -943,15 +943,33 @@ def _dissag_seg(
 
 
 def get_costs(
-    cost_folder: pathlib.Path, calib_params: Dict[str, Any], zones: np.ndarray
+    cost_folder: pathlib.Path, calib_params: dict[str, Any], zones: np.ndarray
 ) -> pd.DataFrame:
-    purpose_lookup = {
-        "commute": [1],
-        "business": [2, 12],
-        "other": [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18],
-    }
+    """Find cost file for `calib_params`, raises error if not found.
 
-    seg_columns = ["trip_origin", "m", "p", "ca"]
+    Parameters
+    ----------
+    cost_folder : pathlib.Path
+        Folder containing cost matrices.
+    calib_params : dict[str, Any]
+        Matrix segmentation parameters to find cost for.
+    zones : np.ndarray
+        Zones to check the cost matrices contain.
+
+    Returns
+    -------
+    pd.DataFrame
+        Cost matrix.
+
+    Raises
+    ------
+    KeyError
+        If any number other than 1 cost file can be found with
+        parameters `calib_params`.
+    ValueError
+        If the cost matrices doesn't have the correct `zones`.
+    """
+    seg_columns = list(calib_params.keys())
     cost_files = pd.DataFrame(
         file_ops.parse_folder_files(
             cost_folder,
@@ -959,36 +977,34 @@ def get_costs(
             required_data=seg_columns,
         )
     )
+    if cost_files.empty:
+        raise KeyError(f"cannot find any cost files for {calib_params}")
     cost_files = cost_files.set_index(seg_columns)
 
-    purposes = purpose_lookup[calib_params["uc"]]
-    cost_files = cost_files.loc[
-        pd.IndexSlice[
-            calib_params["trip_origin"], calib_params["m"], purposes, calib_params["ca"]
-        ],
-        "path",
-    ]
+    try:
+        cost_path = cost_files.loc[
+            pd.IndexSlice[tuple(calib_params.values())],
+            "path",
+        ]
+    except KeyError as e:
+        raise KeyError(f"cannot find any cost files for {calib_params}") from e
 
-    if len(cost_files) == 0:
-        raise ValueError(f"cannot find any cost files for {calib_params}")
+    if isinstance(cost_path, (pd.Series, pd.DataFrame)):
+        if len(cost_path) == 1:
+            cost_path = cost_path.iloc[0]
+        else:
+            raise KeyError(f"{len(cost_path)} cost files found for {calib_params}")
 
-    costs: List[pd.DataFrame] = []
-    for file in cost_files:
-        mat = file_ops.read_df(file, index_col=0)
-        mat.columns = pd.to_numeric(mat.columns, errors="ignore", downcast="unsigned")
-        mat.index = pd.to_numeric(mat.index, errors="ignore", downcast="unsigned")
+    cost_mat = file_ops.read_df(cost_path, index_col=0)
+    cost_mat.columns = pd.to_numeric(cost_mat.columns, errors="ignore", downcast="unsigned")
+    cost_mat.index = pd.to_numeric(cost_mat.index, errors="ignore", downcast="unsigned")
 
-        if np.not_equal(mat.columns, zones).any():
-            raise ValueError("Wrong zones found in cost file columns: {file}")
-        if np.not_equal(mat.index, zones).any():
-            raise ValueError("Wrong zones found in cost file index: {file}")
+    if np.not_equal(cost_mat.columns, zones).any():
+        raise ValueError("Wrong zones found in cost file columns: {file}")
+    if np.not_equal(cost_mat.index, zones).any():
+        raise ValueError("Wrong zones found in cost file index: {file}")
 
-        costs.append(mat)
-
-    if len(costs) == 1:
-        return costs[0]
-
-    return pd.DataFrame(np.mean(costs, axis=0), index=costs[0].index, columns=costs[0].columns)
+    return cost_mat
 
 
 def build_path(
