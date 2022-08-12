@@ -1068,21 +1068,24 @@ def build_path(
     suffixes = "".join(path.suffixes)
     name = path.name.removesuffix(suffixes)
 
-    for index, cp in segmentation_params.items():
-        if index == "tlb":
-            continue  # Ignore trip length bands
-
-        if not _isnull(cp):
-            # Don't include UC before user classes
-            if index.lower() == "uc":
-                name += f"_{cp}"
-            else:
-                name += f"_{index}{cp}"
+    # Use notem segmentation as naming order because it should include all possible
+    if "uc" in (i.lower() for i in segmentation_params):
+        naming_order = nd.get_segmentation_level("notem_hb_output_uc").naming_order
+    else:
+        naming_order = nd.get_segmentation_level("notem_hb_output").naming_order
 
     if tp:
-        name += "_tp" + str(tp)
+        segmentation_params = segmentation_params.copy()
+        segmentation_params["tp"] = tp
 
-    path = path.parent / name
+    segment_str = nd.SegmentationLevel.generate_template_segment_str(
+        [n for n in naming_order if n in segmentation_params],
+        {k: v for k, v in segmentation_params.items() if not _isnull(v)},
+    )
+    template = nd.SegmentationLevel.generate_template_file_name(file_desc=name)
+
+    path = path.parent / template.format(segment_params=segment_str)
+
     if suffix:
         path = path.with_suffix(suffix)
 
