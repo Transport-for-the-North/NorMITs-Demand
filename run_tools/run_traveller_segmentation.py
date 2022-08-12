@@ -36,9 +36,49 @@ MODEL_SEGMENTATIONS = {
 
 ##### CLASSES #####
 class TravellerSegmentationParameters(config_base.BaseConfig):
-    # TODO Docstring explaining the parameters
+    """Parameters and config for the Traveller Segmentation tool.
+
+    Attributes
+    ----------
+    iteration : str
+        Name of the traveller segmentation iteration being ran,
+        used for naming the output folder.
+    base_output_folder : pathlib.Path
+        Base folder for saving outputs to, a new sub-folder will
+        be created using the `iteration` name.
+    notem_export_home : pathlib.Path
+        Base folder for the trip ends outputs.
+    notem_iteration : str
+        Iteration of the trip end model to use.
+    scenario : nd.Scenario
+        Trip end scenario to use.
+    matrix_folder : pathlib.Path
+        Folder containing the input matrices.
+    model : nd.AssignmentModel
+        Assignment model of the input matrices.
+    matrix_zoning : str
+        Zoning system that the matrices are in, usually `model` zone
+        system.
+    year : int
+        Year of trip ends and matrices to use.
+    disaggregation_output_segment : DisaggregationOutputSegment
+        Additional segment to disaggregate matrices to.
+    cost_folder : pathlib.Path
+        Folder containing the cost matrices which should be the same
+        segmentation as the input matrices.
+    trip_length_distribution_folder : pathlib.Path
+        Folder containing the TLDs which should be the same segmentation
+        as the matrices are being disaggregated to.
+    trip_length_distribution_units : nd.CostUnits, default KILOMETERS
+        Units the trip length distributions and cost matrices are in.
+    aggregate_time_periods : list[int], optional
+        List of time periods to aggregate together for the input
+        matrices, if not given time periods aren't aggregated.
+    disaggregation_settings : DisaggregationSettings, optional
+        Custom settings for the disaggregation process.
+    """
+
     iteration: str
-    import_folder: pathlib.Path
     base_output_folder: pathlib.Path
     notem_export_home: pathlib.Path
     notem_iteration: str
@@ -48,8 +88,8 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
     matrix_zoning: str
     year: int
     disaggregation_output_segment: segment_disaggregator.DisaggregationOutputSegment
-    trip_length_distribution_folder: pathlib.Path
     cost_folder: pathlib.Path
+    trip_length_distribution_folder: pathlib.Path
     trip_length_distribution_units: nd.CostUnits = nd.CostUnits.KILOMETERS
     aggregate_time_periods: Optional[list[int]] = None
     disaggregation_settings: segment_disaggregator.DisaggregationSettings = (
@@ -57,7 +97,6 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
     )
 
     @pydantic.validator(
-        "import_folder",
         "matrix_folder",
         "notem_export_home",
         "trip_length_distribution_folder",
@@ -230,7 +269,15 @@ def aggregate_purposes(
 
 
 def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> None:
-    # TODO Docstring
+    """Run traveller segmentation tool.
+
+    Parameters
+    ----------
+    params : TravellerSegmentationParameters
+        Parameters for running the tool.
+    init_logger : bool, default True
+        Whether or not to initialise a log file.
+    """
     # TODO For now use NoRMS syntheic Full PA aggregating to commute, business and other
     # TODO In future use EFS decompile post ME function to convert from NORMS/NOHAM to TMS segmentation
 
@@ -319,7 +366,6 @@ def example_config(path: pathlib.Path) -> None:
         """New sub-class which turns of path validation for writing example config."""
 
         @pydantic.validator(
-            "import_folder",
             "matrix_folder",
             "notem_export_home",
             "trip_length_distribution_folder",
@@ -335,7 +381,6 @@ def example_config(path: pathlib.Path) -> None:
 
     example = ExampleTSP(
         iteration="1",
-        import_folder="path/to/import/folder",
         base_output_folder="path/to/output/folder",
         notem_export_home="path/to/NoTEM/base/export/folder",
         notem_iteration="1",

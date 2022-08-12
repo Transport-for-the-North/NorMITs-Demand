@@ -1,5 +1,4 @@
 iteration: 1.7
-import_folder: I:\NorMITs Demand\import
 base_output_folder: I:\NorMITs Demand\Traveller Segmentation Tool
 notem_iteration: 9.10
 notem_export_home: I:\NorMITs Demand\NoTEM
@@ -17,10 +16,8 @@ aggregate_time_periods:
   - 3
   - 4
 disaggregation_settings:
-  aggregate_surplus_segments: yes
   export_original: yes
   export_furness: no
-  intrazonal_cost_infill: 0.5
   maximum_furness_loops: 1999
   pa_furness_convergence: 0.1
   bandshare_convergence: 0.975

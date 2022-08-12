@@ -38,12 +38,43 @@ class TripEndConstraint(nd_enum.IsValidEnumWithAutoNameLower):
 
 
 class DisaggregationSettings(pydantic.BaseModel):  # pylint: disable=no-member
-    """Optional settings for adjusting `disaggregate_segments`."""
+    """Optional settings for adjusting `disaggregate_segments`.
 
-    aggregate_surplus_segments: bool = True
+    Attributes
+    ----------
+    export_original : bool, default True
+        Whether or not to write out the final segmented matrices.
+    export_furness : bool, default False
+        Whether or not to write out the final furness matrices, before
+        they're factored to the input matrix total.
+    maximum_furness_loops : int, default 1999
+        Maximum number of furnessing loops, only used if `trip_end_constraint`
+        is DOUBLE.
+    pa_furness_convergence : float, default 0.1
+        The maximum R^2 between the achieved and the target values in
+        the furnessing to tolerate before exiting early. Only used if
+        `trip_end_constraint` is DOUBLE.
+    bandshare_convergence : float, default 0.975
+        Minimum $R^2$ value for between the matrix and target TLDs to stop
+        the bandshare convergence loops at.
+    max_bandshare_loops : int, default 200
+        Maximum number of bandshare convergence loops.
+    multiprocessing_threads : int, default -1
+        Number of processes to use when running, negative numbers are
+        subtracted from the total number of available cores.
+    pa_match_tolerance : float, default 0.95
+        Tolerance for balancing attractions total to productions total,
+        if the difference is less than this an error is raised.
+    minimum_bandshare_change : float, default 1e-8
+        If the change between the current and previous bandshare
+        convergence loop's R^2 value is less than this then end the
+        bandshare loops early.
+    trip_end_constraint : TripEndConstraint, default DOUBLE
+        Method of trip end constraint to perform.
+    """
+
     export_original: bool = True
     export_furness: bool = False
-    intrazonal_cost_infill: float = 0.5
     maximum_furness_loops: int = 1999
     pa_furness_convergence: float = 0.1
     bandshare_convergence: float = 0.975
@@ -633,6 +664,7 @@ def _segment_disaggregator_outputs(
 def _calculate_bandshare_convergence(
     matrix: cost.CostDistribution, target: cost.CostDistribution
 ) -> float:
+    """Calculate R^2 between the matrix and target band shares."""
     bs_con = 1 - (
         np.sum((matrix.band_shares - target.band_shares) ** 2)
         / np.sum((target.band_shares - np.mean(target.band_shares)) ** 2)
