@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
-"""Run script for disaggregating model matrices into other segmentations."""
+"""Traveller segmentation tool for disaggregating model matrices into other segmentations."""
 
 ##### IMPORTS #####
-import logging
+from __future__ import annotations
+
+import argparse
+import dataclasses
 import pathlib
 import re
 import sys
-from typing import Any, Optional
+from typing import Optional
 
 import pydantic
 
@@ -144,6 +147,58 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         output_folder = self.iteration_folder / str(self.disaggregation_output_segment.value)
         output_folder.mkdir(exist_ok=True)
         return output_folder
+
+
+@dataclasses.dataclass
+class TravellerSegmentationArguments:
+    """Command line arguments for traveller segmentation tool.
+
+    Attributes
+    ----------
+    config_path: pathlib.Path, default CONFIG_PATH
+        Path to config file.
+    example_config: bool, default False
+        If True write example config file to `config_path`
+        and exit the program.
+    """
+
+    config_path: pathlib.Path = CONFIG_PATH
+    example_config: bool = False
+
+    @classmethod
+    def parse(cls) -> TravellerSegmentationArguments:
+        """Parse command line arguments."""
+        parser = argparse.ArgumentParser(
+            description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
+        parser.add_argument(
+            "config",
+            nargs="?",
+            default=cls.config_path,
+            type=pathlib.Path,
+            help="path to config file containing parameters",
+        )
+        parser.add_argument(
+            "-e",
+            "--example",
+            action="store_true",
+            help="flag to create example config file and exit, instead of running the tool",
+        )
+
+        parsed_args = parser.parse_args()
+        return TravellerSegmentationArguments(parsed_args.config, parsed_args.example)
+
+    def validate(self) -> None:
+        """Raise error if any arguments are invalid."""
+        if not self.example_config and not self.config_path.is_file():
+            raise FileNotFoundError(f"config file doesn't exist: {self.config_path}")
+
+        if self.example_config and self.config_path.is_file():
+            raise FileExistsError(
+                "cannot create example config because file already "
+                f"exists: {self.config_path}.\nPlease provide a new "
+                "path to create the example config file at."
+            )
 
 
 ##### FUNCTIONS #####
@@ -295,7 +350,7 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
 
     LOG.info("Outputs saved to: %s", params.output_folder)
     out = params.output_folder / "Traveller_segmentation_parameters.yml"
-    parameters.save_yaml(out)
+    params.save_yaml(out)
     LOG.info("Input parameters saved to: %s", out)
     LOG.debug("Input parameters:\n%s", params.to_yaml())
 
@@ -360,24 +415,21 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
 
 
 def example_config(path: pathlib.Path) -> None:
-    """Writes an example of the input config YAML file to `path`."""
+    """Write an example of the input config YAML file to `path`."""
 
     class ExampleTSP(TravellerSegmentationParameters):
-        """New sub-class which turns of path validation for writing example config."""
+        """New sub-class which turns off path validation for writing example config."""
 
         @pydantic.validator(
             "matrix_folder",
             "notem_export_home",
             "trip_length_distribution_folder",
             "base_output_folder",
+            "cost_folder",
             allow_reuse=True,
         )  # pylint: disable=no-self-argument
         def _folder_exists(cls, value) -> pathlib.Path:
             return value
-
-        @pydantic.root_validator(skip_on_failure=True, allow_reuse=True)
-        def _check_cost_folder(cls, values: dict[str, Any]) -> dict[str, Any]:
-            return values
 
     example = ExampleTSP(
         iteration="1",
@@ -387,6 +439,8 @@ def example_config(path: pathlib.Path) -> None:
         scenario=nd.Scenario.SC01_JAM,
         matrix_folder="path/to/folder/containing/matrices/for/segmentation",
         model=nd.AssignmentModel.NORMS,
+        matrix_zoning="norms",
+        cost_folder="path/to/folder/containing/cost/matrices",
         year=2018,
         disaggregation_output_segment=segment_disaggregator.DisaggregationOutputSegment.SOC,
         trip_length_distribution_folder="path/to/tld/folder",
@@ -398,10 +452,15 @@ def example_config(path: pathlib.Path) -> None:
 
 ##### MAIN #####
 if __name__ == "__main__":
+    args = TravellerSegmentationArguments.parse()
+    args.validate()
+
+    if args.example_config:
+        example_config(args.config_path)
+        raise SystemExit()
+
     try:
-        # TODO Add command line argument to specify config path,
-        # with default as CONFIG_PATH if no arguments are given
-        parameters = TravellerSegmentationParameters.load_yaml(CONFIG_PATH)
+        parameters = TravellerSegmentationParameters.load_yaml(args.config_path)
     except (pydantic.ValidationError, NotADirectoryError) as err:
         LOG.critical("Config file error: %s", err)
         raise SystemExit(1) from err
