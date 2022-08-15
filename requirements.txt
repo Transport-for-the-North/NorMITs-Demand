@@ -12,6 +12,9 @@ seaborn>=0.11.2
 pydantic>=1.9
 strictyaml>=1.6
 
+# Git libraries
+git+https://github.com/Transport-for-the-North/MITs-Utils.git@v0.1.0#egg=mits_utils
+
 # Packaging controls
 setuptools>=61.2.0
 versioneer>=0.22
