@@ -10,6 +10,7 @@ Ways Of Working
 .. _`black`: https://github.com/psf/black
 .. _`pylint`: https://github.com/PyCQA/pylint
 .. _`mypy`: https://github.com/python/mypy
+.. _`pyproject.toml`: pyproject.toml
 .. _`todo comments`: https://google.github.io/styleguide/pyguide.html#312-todo-comments
 .. _`old-style`: https://docs.python.org/3/library/stdtypes.html#old-string-formatting
 .. _`new-style`: https://docs.python.org/3/library/stdtypes.html#str.format
@@ -28,13 +29,16 @@ For smaller pieces of work, such as a bug fix, a normal pull request can be made
 Coding Style
 ------------
 
-NorMITs Demand follows Transport for the North's coding standards, which include:
+NorMITs Demand follows Transport for the North's (TFN) coding standards, which include:
 
 - Code must conform to `Google Python Style Guide`_
 - Code uses numpy-style doc-strings, checked with `pydocstyle`_
 - Code must be formatted with `black`_
 - Code must be checked, and all errors corrected, by running `pylint`_
 - Code must be checked, and all errors corrected, by running `mypy`_
+
+See this project's `pyproject.toml`_ to see how these tools have been set up in order
+to meet TFN's coding standards.
 
 A few important cases are highlighted below:
 
