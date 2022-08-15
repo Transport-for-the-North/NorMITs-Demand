@@ -22,3 +22,6 @@ max-statements = 100
 
 [tool.mypy]
 ignore_missing_imports = true
+
+[tool.pydocstyle]
+convention = "numpy"
