@@ -31,7 +31,7 @@ Coding Style
 NorMITs Demand follows Transport for the North's coding standards, which include:
 
 - Code must conform to `Google Python Style Guide`_
-- Code uses numpy-style doc-strings, check with `pydocstyle`_
+- Code uses numpy-style doc-strings, checked with `pydocstyle`_
 - Code must be formatted with `black`_
 - Code must be checked, and all errors corrected, by running `pylint`_
 - Code must be checked, and all errors corrected, by running `mypy`_
