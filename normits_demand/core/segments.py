@@ -122,7 +122,7 @@ class SegmentationLevel:
 
     _subset_definitions_path = segment_definitions_path / "subset.csv"
     _segment_translation_dir = segment_definitions_path / "_translations"
-    _tfn_tt_expansion_path = segment_definitions_path / "tfn_tt_splits.pbz2"
+    _tfn_tt_expansion_path = _segment_translation_dir / "tfn_tt_splits.pbz2"
 
     # Separators for the files above
     _list_separator = ';'
@@ -2326,9 +2326,10 @@ def _determine_import_path(name: str) -> pathlib.Path:
             return try_path
 
     # If here, the name couldn't be found
+    error_fmt = "\n".join([f"\t{str(x)}" for x in import_dirs])
     raise nd.NormitsDemandError(
         f"We don't seem to have any data for the segmentation {name}.\n"
-        f"Tried looking for the data in the following places: {import_dirs}"
+        f"Tried looking for the data in the following places: {error_fmt}"
     )
 
 
