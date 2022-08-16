@@ -33,6 +33,8 @@ import numpy as np
 import pandas as pd
 import tqdm
 
+from caf.toolkit import pandas_utils as caf_pd_utils
+
 # Local Imports
 import normits_demand as nd
 
@@ -863,7 +865,7 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             return None
 
         # Make sure the columns we need do exist
-        seg_init_params = pd_utils.reindex_cols(
+        seg_init_params = caf_pd_utils.reindex_cols(
             df=seg_init_params,
             columns=self.init_params_cols,
             dataframe_name='init_params',

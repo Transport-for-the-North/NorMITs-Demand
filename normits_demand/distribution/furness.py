@@ -13,17 +13,20 @@ import os
 import operator
 import warnings
 
-import pandas as pd
-import numpy as np
-from numpy.testing import assert_approx_equal
-
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Tuple
 from typing import Callable
 
-# self imports
+# Third Party
+import pandas as pd
+import numpy as np
+from numpy.testing import assert_approx_equal
+
+from caf.toolkit import pandas_utils as caf_pd_utils
+
+# Local imports
 import normits_demand as nd
 from normits_demand import constants as consts
 
@@ -61,7 +64,7 @@ class Furness3D:
         # TODO(BT): Write Furness3D __init__ docs
         # Validate attributes
         for key, tcd in target_cost_distributions.items():
-            tcd = pd_utils.reindex_cols(tcd, self._target_cost_distribution_cols)
+            tcd = caf_pd_utils.reindex_cols(tcd, self._target_cost_distribution_cols)
             target_cost_distributions[key] = tcd
 
         if running_log_path is not None:

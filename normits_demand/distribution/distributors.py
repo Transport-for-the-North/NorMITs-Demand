@@ -27,6 +27,8 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from caf.toolkit import pandas_utils as caf_pd_utils
+
 # Local Imports
 import normits_demand as nd
 from normits_demand import constants
@@ -410,7 +412,7 @@ class AbstractDistributor(abc.ABC, DistributorExportPaths):
         })
 
         # Order columns for output
-        return pd_utils.reindex_cols(report, report_cols.col_order())
+        return caf_pd_utils.reindex_cols(report, report_cols.col_order())
 
     @staticmethod
     def generate_cost_distribution_graph(

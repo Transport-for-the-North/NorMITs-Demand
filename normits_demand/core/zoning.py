@@ -29,6 +29,8 @@ from typing import Any, Dict, List, Tuple, Union, Optional
 import numpy as np
 import pandas as pd
 
+from caf.toolkit import pandas_utils as caf_pd_utils
+
 # Local Imports
 import normits_demand as nd
 from normits_demand import logging as nd_log
@@ -318,7 +320,7 @@ class ZoningSystem:
             self._translate_base_zone_col % other.name,
             trans_col
         ]
-        df = pd_utils.reindex_cols(df, index_cols)
+        df = caf_pd_utils.reindex_cols(df, index_cols)
         self._check_translation_zones(other, df, *index_cols[:2])
         return df
 
@@ -829,7 +831,7 @@ def _get_zones(name: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarra
     # Keep just the relevant columns
     if desc_col not in df:
         df[desc_col] = df[name_col].copy()
-    df = pd_utils.reindex_cols(df, columns=[name_col, desc_col])
+    df = caf_pd_utils.reindex_cols(df, columns=[name_col, desc_col])
 
     # Extract the columns and sort
     unsorted_zone_names = df[name_col].values

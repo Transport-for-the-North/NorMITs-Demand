@@ -35,6 +35,8 @@ from typing import Iterable
 import pandas as pd
 import numpy as np
 
+from caf.toolkit import pandas_utils as caf_pd_utils
+
 # Local Imports
 import normits_demand as nd
 
@@ -179,7 +181,7 @@ class SegmentationLevel:
                 )
 
         # Make sure the df is just the segment columns
-        self._segments = pd_utils.reindex_cols(valid_segments, self.naming_order)
+        self._segments = caf_pd_utils.reindex_cols(valid_segments, self.naming_order)
 
         # Validate that all columns are accounted for in typing
         missing_types = set(self.naming_order) - set(self._segment_types.keys())
@@ -666,7 +668,7 @@ class SegmentationLevel:
 
         # Must exist if we are here, read in and validate
         df = file_ops.read_df(file_path)
-        return pd_utils.reindex_cols(df, [col1, col2])
+        return caf_pd_utils.reindex_cols(df, [col1, col2])
 
     def _parse_reduce_cols(self, reduce_cols: str) -> Dict[str, Dict[Any, List[Any]]]:
         """
@@ -2372,7 +2374,7 @@ def _get_valid_segments(name: str) -> pd.DataFrame:
     # Tidy up the column names to match the naming_order
     rename_cols = {c: c.lower() for c in list(df)}
     df = df.rename(columns=rename_cols)
-    df = pd_utils.reindex_cols(df, naming_order)
+    df = caf_pd_utils.reindex_cols(df, naming_order)
 
     return df, naming_order, segment_types
 

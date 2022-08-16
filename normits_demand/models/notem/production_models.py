@@ -22,6 +22,8 @@ from typing import Dict
 # Third party imports
 import pandas as pd
 
+from caf.toolkit import pandas_utils as caf_pd_utils
+
 # local imports
 import normits_demand as nd
 from normits_demand import constants as consts
@@ -365,7 +367,7 @@ class HBProductionModel(HBProductionModelPaths):
         if str(year) in list(pop):
             pop = pop.rename(columns={str(year): 'people'})
 
-        pop = pd_utils.reindex_cols(pop, self._target_col_dtypes['pop'].keys())
+        pop = caf_pd_utils.reindex_cols(pop, self._target_col_dtypes['pop'].keys())
         for col, dt in self._target_col_dtypes['pop'].items():
             pop[col] = pop[col].astype(dt)
 
@@ -817,7 +819,7 @@ class NHBProductionModel(NHBProductionModelPaths):
             path=self.population_paths[year],
             find_similar=True,
         )
-        pop = pd_utils.reindex_cols(pop, self._target_col_dtypes['land_use'].keys())
+        pop = caf_pd_utils.reindex_cols(pop, self._target_col_dtypes['land_use'].keys())
         for col, dtype in self._target_col_dtypes['land_use'].items():
             pop[col] = pop[col].astype(dtype)
 

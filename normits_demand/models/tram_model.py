@@ -22,6 +22,8 @@ from typing import Tuple
 import pandas as pd
 import numpy as np
 
+from caf.toolkit import pandas_utils as caf_pd_utils
+
 # local imports
 import normits_demand as nd
 from normits_demand import core as nd_core
@@ -821,7 +823,7 @@ class TramModel(TramExportPaths):
         # Read in dataframe
         tram_data = file_ops.read_df(path=tram_data_path, find_similar=True)
         tram_data['m'] = nd.Mode.TRAM.get_mode_num()
-        tram_data = pd_utils.reindex_cols(tram_data, tram_target_cols)
+        tram_data = caf_pd_utils.reindex_cols(tram_data, tram_target_cols)
 
         # Make sure the input data is in the correct data types
         for col, dt in self._target_col_dtypes['tram'].items():
@@ -1042,7 +1044,7 @@ class TramModel(TramExportPaths):
             df = df.copy()
             df = df[df['m'] == mode].copy()
             df = df.drop(columns=['m'])
-            df = pd_utils.reindex_cols(df, index_cols)
+            df = caf_pd_utils.reindex_cols(df, index_cols)
             df = df.sort_values(join_cols)
             df = df.rename(columns={self._val_col: name})
             return df
@@ -1065,12 +1067,12 @@ class TramModel(TramExportPaths):
 
         # Calculate the future tram and tidy up
         all_data[future_tram_col] = all_data['base_tram'] * all_data['rail_growth']
-        future_tram = pd_utils.reindex_cols(all_data, join_cols + ['base_tram', future_tram_col])
+        future_tram = caf_pd_utils.reindex_cols(all_data, join_cols + ['base_tram', future_tram_col])
         future_tram = future_tram.rename(columns={'base_tram': self._val_col})
         future_tram['m'] = self._tram_mode
 
         # Extract the growth factors alone
-        growth_df = pd_utils.reindex_cols(all_data, join_cols + ['rail_growth'])
+        growth_df = caf_pd_utils.reindex_cols(all_data, join_cols + ['rail_growth'])
 
         return future_tram, growth_df
 
@@ -1158,7 +1160,7 @@ class TramModel(TramExportPaths):
         # Calculate, then keep only what we need
         adj_non_tram_north[self._val_col] -= adj_non_tram_north['tram_val']
         cols = self._tram_segment_cols + [self._val_col]
-        adj_non_tram_north = pd_utils.reindex_cols(adj_non_tram_north, cols)
+        adj_non_tram_north = caf_pd_utils.reindex_cols(adj_non_tram_north, cols)
 
         # CALCULATE THE DIFFERENCE BETWEEN ADJUSTED AND ORIGINAL
         # Remove tram trips for merge
@@ -1183,7 +1185,7 @@ class TramModel(TramExportPaths):
 
         # Filter down to all we need
         cols = self._tram_segment_cols + ['adj_factor']
-        non_tram_adj_factors = pd_utils.reindex_cols(north_df, cols)
+        non_tram_adj_factors = caf_pd_utils.reindex_cols(north_df, cols)
 
         # ## STEP 2. ADJUST NON-TRAM MSOA BY AVERAGE NORTH ADJUSTMENT ## #
         # Attach the avg north adj factors
@@ -1216,7 +1218,7 @@ class TramModel(TramExportPaths):
         compet_df['new_val'] = compet_df['new_mode_shares'] * compet_df['val_sum']
 
         # Stick the competitor and non-competitor back together
-        compet_df = pd_utils.reindex_cols(compet_df, list(non_compet_df))
+        compet_df = caf_pd_utils.reindex_cols(compet_df, list(non_compet_df))
         df_list = [compet_df, non_compet_df]
         north_no_tram_vector = pd.concat(df_list, ignore_index=True)
 
@@ -1321,13 +1323,13 @@ class TramModel(TramExportPaths):
 
         # Get back into input format
         train_cols = common_cols + ['train', 'new_train']
-        train_df = pd_utils.reindex_cols(tram_train_df, train_cols)
+        train_df = caf_pd_utils.reindex_cols(tram_train_df, train_cols)
         train_df['m'] = nd.Mode.TRAIN.get_mode_num()
         rename = {'train': self._val_col, 'new_train': 'new_val'}
         train_df.rename(columns=rename, inplace=True)
 
         tram_cols = common_cols + ['tram', 'new_tram']
-        tram_df = pd_utils.reindex_cols(tram_train_df, tram_cols)
+        tram_df = caf_pd_utils.reindex_cols(tram_train_df, tram_cols)
         tram_df['m'] = nd.Mode.TRAM.get_mode_num()
         rename = {'tram': self._val_col, 'new_tram': 'new_val'}
         tram_df.rename(columns=rename, inplace=True)
@@ -1358,7 +1360,7 @@ class TramModel(TramExportPaths):
         compet_df['new_val'] = compet_df['old_mode_shares'] * compet_df['new_val_sum']
 
         # ## TIDY UP DF FOR RETURN ## #
-        compet_df = pd_utils.reindex_cols(compet_df, list(non_compet_df))
+        compet_df = caf_pd_utils.reindex_cols(compet_df, list(non_compet_df))
         new_df = pd.concat([compet_df, non_compet_df], ignore_index=True)
 
         # Check we haven't dropped anything

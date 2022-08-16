@@ -34,63 +34,7 @@ from openpyxl.utils import dataframe as openpyxl_dataframe
 from normits_demand.utils import general as du
 from normits_demand.utils import math_utils
 
-
-def reindex_cols(df: pd.DataFrame,
-                 columns: List[str],
-                 throw_error: bool = True,
-                 dataframe_name: str = None,
-                 **kwargs,
-                 ) -> pd.DataFrame:
-    """
-    Wrapper around df.reindex. Will throw error if columns aren't in df
-
-    Parameters
-    ----------
-    df:
-        THe pandas.DataFrame that should be reindexed
-
-    columns:
-        The columns to reindex df to.
-
-    throw_error:
-        Whether to throw and error or not if the given columns don't exist in
-        df. If False, then operates exactly like calling df.reindex directly.
-
-    dataframe_name:
-        The name to give to the dataframe in the error message being thrown.
-        If left as none "the given dataframe" is used instead.
-
-    kwargs:
-        Any extra arguments to pass into df.reindex
-
-    Returns
-    -------
-    reindexed_df:
-        The given df, reindexed to only have columns as column names.
-
-    Raises
-    ------
-    ValueError:
-        If any of the given columns don't exists within df and throw_error is
-        True.
-    """
-    # Init
-    df = df.copy()
-
-    if dataframe_name is None:
-        dataframe_name = 'the given dataframe'
-
-    if throw_error:
-        # Check that all columns actually exist in df
-        for col in columns:
-            if col not in df:
-                raise ValueError(
-                    "No columns named '%s' in %s.\n"
-                    "Only found the following columns: %s"
-                    % (col, dataframe_name, list(df))
-                )
-
-    return df.reindex(columns=columns, **kwargs)
+from caf.toolkit import pandas_utils as caf_pd_utils
 
 
 def reindex_rows_and_cols(
@@ -470,7 +414,7 @@ def long_to_wide_infill(df: pd.DataFrame,
     index_vals = df[index_col].unique() if index_vals is None else index_vals
     column_vals = df[columns_col].unique() if column_vals is None else column_vals
     orig_total = df[values_col].values.sum()
-    df = reindex_cols(df, [index_col, columns_col, values_col])
+    df = caf_pd_utils.reindex_cols(df, [index_col, columns_col, values_col])
 
     # Make sure were not dropping too much. Indication of problems in arguments
     missing_idx = set(index_vals) - set(df[index_col].unique().tolist())

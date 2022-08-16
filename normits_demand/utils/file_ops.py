@@ -37,12 +37,13 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 
+from caf.toolkit import pandas_utils as caf_pd_utils
+
 # Local imports
 import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand.utils import compress
 from normits_demand.utils import general as du
-from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.concurrency import multiprocessing
 from normits_demand.concurrency import multithreading
@@ -766,7 +767,7 @@ def copy_defined_files(
     dst_dir = pathlib.Path(dst_dir)
 
     # Make sure the columns we need exist
-    df = pd_utils.reindex_cols(
+    df = caf_pd_utils.reindex_cols(
         df=copy_definition,
         columns=[src_col, dst_col],
         dataframe_name="copy_definition",

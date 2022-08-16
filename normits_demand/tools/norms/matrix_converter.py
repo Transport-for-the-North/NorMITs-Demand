@@ -26,6 +26,8 @@ import tqdm
 import numpy as np
 import pandas as pd
 
+from caf.toolkit import pandas_utils as caf_pd_utils
+
 # Local Imports
 
 from normits_demand import core as nd_core
@@ -322,7 +324,7 @@ class NormsOutputToOD:
 
             # Read in and check that all cols exist
             rename_df = pd.read_csv(matrix_renaming)
-            rename_df = pd_utils.reindex_cols(rename_df, expected_cols)
+            rename_df = caf_pd_utils.reindex_cols(rename_df, expected_cols)
 
             # Check that all filenames exist in the out_col
             got_filenames = set(rename_df[out_col].to_list())

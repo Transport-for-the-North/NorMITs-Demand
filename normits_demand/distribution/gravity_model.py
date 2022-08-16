@@ -38,6 +38,8 @@ import numpy as np
 import pandas as pd
 from scipy import optimize
 
+from caf.toolkit import pandas_utils as caf_pd_utils
+
 # Local Imports
 import normits_demand as nd
 
@@ -207,7 +209,7 @@ class GravityModelBase(abc.ABC):
                  cost_min_max_buf: float = 0.1,
                  ):
         # Validate attributes
-        target_cost_distribution = pd_utils.reindex_cols(
+        target_cost_distribution = caf_pd_utils.reindex_cols(
             target_cost_distribution,
             self._target_cost_distribution_cols,
         )
