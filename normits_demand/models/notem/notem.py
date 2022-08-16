@@ -31,7 +31,7 @@ from normits_demand.pathing import NoTEMExportPaths
 from normits_demand.utils import timing
 
 
-class NoTEM:
+class NoTEM(NoTEMExportPaths):
     EXPORT_PATHS_CLASS = NoTEMExportPaths
     _running_report_fname = 'running_parameters.txt'
     _log_fname = "NoTEM_log.log"
@@ -107,7 +107,7 @@ class NoTEM:
         self.adjustment_factors = trip_end_adjustments
 
         # Generate the export paths
-        self.exports = self.EXPORT_PATHS_CLASS(
+        super().__init__(
             export_home=export_home,
             path_years=self.years,
             scenario=scenario,
@@ -116,7 +116,7 @@ class NoTEM:
 
         # Create a logger
         logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
-        log_file_path = os.path.join(self.exports.export_home, self._log_fname)
+        log_file_path = os.path.join(self.export_home, self._log_fname)
         self._logger = nd.get_logger(
             logger_name=logger_name,
             log_file_path=log_file_path,
@@ -137,32 +137,32 @@ class NoTEM:
         # Define the lines to output
         out_lines = [
             'Code Version: %s' % str(nd.__version__),
-            '%s Iteration: %s' % (self.name, str(self.exports.iteration_name)),
+            '%s Iteration: %s' % (self.name, str(self.iteration_name)),
             'Scenario: %s' % str(self.scenario.value),
             '',
             '### HB Productions ###',
             'import_files: %s' % self.import_builder.generate_hb_production_imports(),
-            'vector_export: %s' % self.exports.hb_production.export_paths.home,
-            'report_export: %s' % self.exports.hb_production.report_paths.home,
+            'vector_export: %s' % self.hb_production.export_paths.home,
+            'report_export: %s' % self.hb_production.report_paths.home,
             '',
             '### HB Attractions ###',
             'import_files: %s' % self.import_builder.generate_hb_attraction_imports(),
-            'vector_export: %s' % self.exports.hb_attraction.export_paths.home,
-            'report_export: %s' % self.exports.hb_attraction.report_paths.home,
+            'vector_export: %s' % self.hb_attraction.export_paths.home,
+            'report_export: %s' % self.hb_attraction.report_paths.home,
             '',
             '### NHB Productions ###',
             'import_files: %s' % self.import_builder.generate_nhb_production_imports(),
-            'vector_export: %s' % self.exports.nhb_production.export_paths.home,
-            'report_export: %s' % self.exports.nhb_production.report_paths.home,
+            'vector_export: %s' % self.nhb_production.export_paths.home,
+            'report_export: %s' % self.nhb_production.report_paths.home,
             '',
             '### NHB Attractions ###',
             'import_files: %s' % self.import_builder.generate_nhb_attraction_imports(),
-            'vector_export: %s' % self.exports.nhb_attraction.export_paths.home,
-            'report_export: %s' % self.exports.nhb_attraction.report_paths.home,
+            'vector_export: %s' % self.nhb_attraction.export_paths.home,
+            'report_export: %s' % self.nhb_attraction.report_paths.home,
         ]
 
         # Write out to disk
-        output_path = os.path.join(self.exports.export_home, self._running_report_fname)
+        output_path = os.path.join(self.export_home, self._running_report_fname)
         with open(output_path, 'w') as out:
             out.write('\n'.join(out_lines))
 
@@ -258,7 +258,7 @@ class NoTEM:
         hb_prod = HBProductionModel(
             **import_files,
             constraint_paths=None,
-            export_home=self.exports.hb_production.export_paths.home,
+            export_home=self.hb_production.export_paths.home,
             trip_end_adjustments=self.adjustment_factors,
         )
 
@@ -279,7 +279,7 @@ class NoTEM:
         imports = self.import_builder.generate_hb_attraction_imports()
 
         # Get the hb productions
-        export_paths = self.exports.hb_production.export_paths
+        export_paths = self.hb_production.export_paths
         control_production_paths = {y: export_paths.notem_segmented[y] for y in self.years}
 
         self._logger.debug("Instantiating Home-Based Attraction Model")
@@ -287,7 +287,7 @@ class NoTEM:
             **imports,
             production_balance_paths=control_production_paths,
             constraint_paths=None,
-            export_home=self.exports.hb_attraction.export_paths.home,
+            export_home=self.hb_attraction.export_paths.home,
             balance_zoning=self.hb_attraction_balance_zoning,
         )
 
@@ -307,14 +307,14 @@ class NoTEM:
         imports = self.import_builder.generate_nhb_production_imports()
 
         # Get the hb attractions
-        export_paths = self.exports.hb_attraction.export_paths
+        export_paths = self.hb_attraction.export_paths
         hb_attraction_paths = {y: export_paths.notem_segmented[y] for y in self.years}
 
         self._logger.debug("Instantiating Non-Home-Based Production Model")
         nhb_prod = NHBProductionModel(
             **imports,
             hb_attraction_paths=hb_attraction_paths,
-            export_home=self.exports.nhb_production.export_paths.home,
+            export_home=self.nhb_production.export_paths.home,
             constraint_paths=None,
         )
 
@@ -335,18 +335,18 @@ class NoTEM:
         # imports = self.generate_nhb_attraction_imports()
 
         # Get the hb attractions
-        export_paths = self.exports.hb_attraction.export_paths
+        export_paths = self.hb_attraction.export_paths
         hb_attraction_paths = {y: export_paths.notem_segmented[y] for y in self.years}
 
         # Get the nhb productions
-        export_paths = self.exports.nhb_production.export_paths
+        export_paths = self.nhb_production.export_paths
         nhb_production_paths = {y: export_paths.notem_segmented[y] for y in self.years}
 
         self._logger.debug("Instantiating Non-Home-Based Attraction Model")
         nhb_attr = NHBAttractionModel(
             hb_attraction_paths=hb_attraction_paths,
             nhb_production_paths=nhb_production_paths,
-            export_home=self.exports.nhb_attraction.export_paths.home,
+            export_home=self.nhb_attraction.export_paths.home,
             constraint_paths=None,
             balance_zoning=self.nhb_attraction_balance_zoning,
         )
