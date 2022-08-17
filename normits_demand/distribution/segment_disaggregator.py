@@ -540,32 +540,7 @@ def _segment_build_worker(
             export_original=settings.export_original,
         )
 
-    # Graph comparing segmented matrix TLDs to original
-    tlds = [
-        cost_utils.PlotData(
-            results[0].input_matrix_tld.band_means,
-            results[0].input_matrix_tld.band_shares,
-            "Original Matrix",
-        )
-    ]
-
-    for res in results:
-        label = trip_origin.value.upper() + " ".join(
-            f"{k}{v}" for k, v in res.segmentation.items() if k != "trip_origin"
-        )
-        tlds.append(
-            cost_utils.PlotData(
-                res.final_matrix_tld.band_means, res.final_matrix_tld.band_shares, label
-            )
-        )
-
-    path = build_path(
-        reports_folder / (trip_origin.value + "_tld"),
-        {k: v for k, v in matrix_segmentation.items() if k != "trip_origin"},
-        suffix=".png",
-    )
-    cost_utils.plot_cost_distributions(tlds, path.stem, path=path)
-    print(f"Created: {path.name}")
+    _compare_input_to_disaggregated(results, reports_folder, trip_origin, matrix_segmentation)
 
     return results
 
@@ -659,6 +634,70 @@ def _segment_disaggregator_outputs(
     cost_utils.plot_cost_distributions(tlds, path.stem, path=path)
 
     return reports_folder
+
+
+def _compare_input_to_disaggregated(
+    results: list[DisaggregationResults],
+    reports_folder: pathlib.Path,
+    trip_origin: nd.TripOrigin,
+    matrix_segmentation: dict[str, Any],
+) -> None:
+    """Produce output summaries and graph comparing segmented matrices to input."""
+
+    def result_label(segmentation: dict[str, Any]) -> str:
+        """Create string label from output segmentation."""
+        path = build_path(
+            trip_origin.value.upper(),
+            {k: v for k, v in segmentation.items() if k != "trip_origin"},
+        )
+        return path.name.replace("_", " ")
+
+    # Summary table of matrix totals
+    data: dict[str, list] = {
+        "Matrix": ["Input"],
+        "Total Trips": [results[0].summary.input_matrix_total],
+    }
+    for res in results:
+        data["Matrix"].append(result_label(res.segmentation))
+        data["Total Trips"].append(res.summary.segmented_matrix_total)
+
+    totals_summary = pd.DataFrame(data).set_index("Matrix")
+    totals_summary.loc[:, "Total Trips Percentage of Input"] = (
+        totals_summary["Total Trips"] / totals_summary.at["Input", "Total Trips"]
+    )
+
+    path = build_path(
+        reports_folder / (trip_origin.value + "_combined_summary"),
+        {k: v for k, v in matrix_segmentation.items() if k != "trip_origin"},
+        suffix=".xlsx",
+    )
+    totals_summary.to_excel(path, sheet_name="Matrix Totals")
+    print(f"Created: {path.name}")
+
+    # Graph comparing segmented matrix TLDs to original
+    tlds = [
+        cost_utils.PlotData(
+            results[0].input_matrix_tld.band_means,
+            results[0].input_matrix_tld.band_shares,
+            "Original Matrix",
+        )
+    ]
+
+    for res in results:
+        label = result_label(res.segmentation)
+        tlds.append(
+            cost_utils.PlotData(
+                res.final_matrix_tld.band_means, res.final_matrix_tld.band_shares, label
+            )
+        )
+
+    path = build_path(
+        reports_folder / (trip_origin.value + "_tld"),
+        {k: v for k, v in matrix_segmentation.items() if k != "trip_origin"},
+        suffix=".png",
+    )
+    cost_utils.plot_cost_distributions(tlds, path.stem, path=path)
+    print(f"Created: {path.name}")
 
 
 def _calculate_bandshare_convergence(
