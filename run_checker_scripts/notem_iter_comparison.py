@@ -29,6 +29,11 @@ from normits_demand import logging as nd_log
 LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".notem_iter_comparison")
 LOG_FILE = "NoTEM_iter_comparison.log"
 
+BASE_FOLDER = r"F:\NorMITs Demand\NoTEM"
+COMPARE_ITERS = ("iter9.10", "iter9.10-tfn")
+SCENARIOS = (nd.Scenario.SC01_JAM, nd.Scenario.SC01_JAM)
+OUTPUT_FOLDER = r"F:\NorMITs Demand\NoTEM\comparisons"
+
 
 ###### CLASSES #####
 @dataclasses.dataclass
@@ -42,73 +47,94 @@ class ComparisonInputs:
 
 
 ###### FUNCTIONS #####
-def find_notem_reports(
+def find_and_compare_notem_reports(
     base_folder: Path,
     iters: Tuple[str, str],
     scenarios: tuple[nd.Scenario, nd.Scenario],
+    value_cols: Set,
 ) -> pd.DataFrame:
-    """Search for NoTEM iteration HB/NHB productions and attractions reports.
+    """Search for NoTEM reports and compare between iterations.
 
     Assumes `base_folder` has two sub-folders named `iters` then
     looks through folders to find reports e.g.
     `{base_folder}/{iters[0]}/{scenario}/hb_attractions/reports`.
+    These reports are then compared to one another to.
+
+    Note that this function assumes that iters[0] is the newer iteration, and
+    iters[1] is the older. Hence the names "new" and "old".
 
     Parameters
     ----------
     base_folder : Path
         Folder containing iteration sub-folders for NoTEM
         outputs.
+
     iters : Tuple[str, str]
         Names of the two iterations being compared.
+
     scenarios : Tuple[nd.Scenario, nd.Scenario]
         Name of the scenarios to compare.
 
+    value_cols : Set
+        Column names found inside the reports which should be considered
+        as values rather than indices.
+
     Returns
     -------
-    pd.DataFrame
+    reports_df:
         DataFrame with a row for each different report CSV with
         the following columns:
-        - new: path to the new iteration CSV (iters[0])
-        - old: path to the old iteration CSV
-        - `old_exists`: boolean for whether the old file exists
-        - `trip_origin`: nhb or hb
-        - `report_type`: name of report e.g. `pure_demand`
-        - `year`
-        - `sector`: type of zoning or sector system report e.g. `lad_totals`
-        - `pa`: productions or attractions
+        - iters[0]: path to the new iteration CSV (iters[0])
+        - iters[1]: path to the old iteration CSV
+        - `f"{old_iter} exists"`: boolean for whether the old file exists
+        - "trip_origin": nhb or hb
+        - "report_type": name of report e.g. `pure_demand`
+        - "year"
+        - "sector": type of zoning or sector system report e.g. `lad_totals`
+        - "pa": productions or attractions
+        - plus additional comparison columns
 
     Raises
     ------
     NotADirectoryError
         If either of the `iters` folders don't exist.
     """
-    pattern = re.compile(
+    # Assume the 0th item is the newest iter
+    new_iter = iters[0]
+    old_iter = iters[1]
+    old_exists_col = f"{old_iter} exists"
+
+    # Define pattern of the notem report fnames
+    notem_report_pattern = re.compile(
         r"^(?P<trip_origin>n?hb)_"
         r"(?P<report_type>\w+)_"
         r"(?P<year>\d+)_"
         r"(?P<sector>\w+)$",
         re.I,
     )
+
+    # Double check the paths actually exist
     folders = {
-        "new": base_folder / iters[0] / scenarios[0].get_name(),
-        "old": base_folder / iters[1] / scenarios[1].get_name(),
+        new_iter: base_folder / new_iter / scenarios[0].name,
+        old_iter: base_folder / old_iter / scenarios[1].name,
     }
     for nm, path in folders.items():
         if not path.is_dir():
             raise NotADirectoryError(f"{nm} iteration folder doesn't exist: {path}")
 
-    files = []
+    # Find all the "new" reports and compare to an "old" report
+    files = list()
     pbar = tqdm(
-        desc=f"Finding files in {folders['new']}",
+        desc=f"Finding files in {folders[new_iter]}",
         bar_format="{l_bar} {n_fmt} [{elapsed}, {rate_fmt}{postfix}]",
     )
     for trip_origin in ("hb", "nhb"):
         for pa in ("productions", "attractions"):
-            report_dir = folders["new"] / f"{trip_origin}_{pa}" / "reports"
+            report_dir = folders[new_iter] / f"{trip_origin}_{pa}" / "reports"
             for path in report_dir.iterdir():
-                test_path = folders["old"] / path.relative_to(folders["new"])
+                test_path = folders[old_iter] / path.relative_to(folders[new_iter])
 
-                match = pattern.match(path.stem)
+                match = notem_report_pattern.match(path.stem)
                 if match is None:
                     print(f"Unexpected filename: {path.stem}")
                     name_attr = {}
@@ -118,22 +144,60 @@ def find_notem_reports(
 
                 files.append(
                     {
-                        "new": path,
-                        "old": test_path,
-                        "old_exists": test_path.exists(),
+                        new_iter: path,
+                        old_iter: test_path,
+                        old_exists_col: test_path.exists(),
                         **name_attr,
                     }
                 )
                 pbar.update()
-
     pbar.close()
-    return pd.DataFrame(files)
+    files = pd.DataFrame(files)
+
+    # Generate the comparisons
+    comparisons = list()
+    pbar = tqdm(
+        files.loc[files[old_exists_col]].to_dict(orient="index").items(),
+        total=np.sum(files[old_exists_col].values),
+        desc="Comparing files",
+        dynamic_ncols=True,
+    )
+    for index, data in pbar:
+        try:
+            data = _read_csvs(
+                paths=data,
+                read_keys=(new_iter, old_iter),
+                value_cols=value_cols,
+            )
+        except ValueError as err:
+            # Note error and continue
+            comparisons.append({"index": index, "error": str(err)})
+            continue
+
+        if len(data) != 2:
+            # TODO(MB): Why exit here?
+            continue
+
+        # Compare the dataframes and store results
+        compared_dfs = _compare_dataframes(data[new_iter], data[old_iter])
+        comparisons.append({"index": index, **compared_dfs})
+
+    if not comparisons:
+        return files
+
+    comparisons = pd.DataFrame(comparisons).set_index("index")
+    comparisons = pd.concat([files, comparisons], axis=1)
+
+    # If all files are identical, this column won't exist
+    if "max_difference" in comparisons:
+        return comparisons.sort_values("max_difference", ascending=False)
+    return comparisons
 
 
-def _read_csvs(paths: Dict[str, Path], value_cols: Set) -> Dict[str, pd.DataFrame]:
+def _read_csvs(paths: Dict[str, Path], read_keys: Tuple[str, str], value_cols: Set) -> Dict[str, pd.DataFrame]:
     """Reads new and old CSVs for comparison."""
-    data = {}
-    for nm in ("new", "old"):
+    data = dict()
+    for nm in read_keys:
         df = pd.read_csv(paths[nm])
         df = df.dropna(axis=0, how="all").dropna(axis=1, how="all")
         if df.empty:
@@ -151,8 +215,7 @@ def _read_csvs(paths: Dict[str, Path], value_cols: Set) -> Dict[str, pd.DataFram
 
 def _compare_dataframes(new: pd.DataFrame, old: pd.DataFrame) -> Dict:
     """Compares 2 DataFrames and returns various comparison statistics."""
-    comparisons = {}
-    comparisons["identical"] = new.equals(old)
+    comparisons = {"identical": new.equals(old)}
     if not comparisons["identical"]:
         try:
             comparisons["identical_columns"] = (new.columns == old.columns).all()
@@ -165,53 +228,6 @@ def _compare_dataframes(new: pd.DataFrame, old: pd.DataFrame) -> Dict:
         comparisons["max_difference"] = np.max(np.abs((new - old).values))
         comparisons["max_%_difference"] = np.max(np.abs((new / old) - 1).values)
     return comparisons
-
-
-def compare_reports(files: pd.DataFrame, value_cols: Set) -> pd.DataFrame:
-    """Compare all given NoTEM iteration reports.
-
-    Parameters
-    ----------
-    files : pd.DataFrame
-        Paths to the reports to compare should contain, at least,
-        columns new and old with paths to the CSVs reports for
-        comparison.
-    value_cols : Set
-        Column names found inside the reports which should be considered
-        as values rather than indices.
-
-    Returns
-    -------
-    pd.DataFrame
-        `file` DataFrame with additional comparison columns added.
-
-    See Also
-    --------
-    find_notem_reports: for getting the `files` parameter
-    """
-    comparisons = []
-    pbar = tqdm(
-        files.loc[files["old_exists"]].itertuples(),
-        total=np.sum(files["old_exists"].values),
-        desc="Comparing files",
-        dynamic_ncols=True,
-    )
-    for paths in pbar:
-        try:
-            data = _read_csvs(paths._asdict(), value_cols)
-        except ValueError as err:
-            comparisons.append({"index": paths.Index, "error": str(err)})
-            continue
-        if len(data) != 2:
-            continue
-        comparisons.append({"index": paths.Index, **_compare_dataframes(**data)})
-
-    if comparisons == []:
-        return files
-
-    comparisons = pd.DataFrame(comparisons).set_index("index")
-    comparisons = pd.concat([files, comparisons], axis=1)
-    return comparisons.sort_values("max_difference", ascending=False)
 
 
 def find_dvectors(new_folder: Path, old_folder: Path) -> pd.DataFrame:
@@ -358,12 +374,12 @@ def main(params: ComparisonInputs, init_logger: bool = True) -> None:
     """
     name = "{}-{} to {}-{} comparison".format(
         params.compare_iters[0],
-        params.scenarios[0].get_name(),
+        params.scenarios[0].name,
         params.compare_iters[1],
-        params.scenarios[1].get_name(),
+        params.scenarios[1].name,
     )
     output_folder = params.output_folder / name
-    output_folder.mkdir(parents=True)
+    output_folder.mkdir(parents=True, exist_ok=True)
 
     if init_logger:
         nd_log.get_logger(
@@ -378,21 +394,22 @@ def main(params: ComparisonInputs, init_logger: bool = True) -> None:
     LOG.info("Base folder: %s", params.base_folder)
 
     # Find and compare all NoTEM reports CSVs
-    files = find_notem_reports(
-        params.base_folder,
-        params.compare_iters,
-        params.scenarios,
+    file_comparisons = find_and_compare_notem_reports(
+        base_folder=params.base_folder,
+        iters=params.compare_iters,
+        scenarios=params.scenarios,
+        value_cols={"val"},
     )
 
-    file_comparisons = compare_reports(files, {"val"})
+    # file_comparisons = compare_reports(files, params.scenarios, old_exists_col, {"val"})
     out = output_folder / (name + "-reports.xlsx")
     file_comparisons.to_excel(out, index=False)
     LOG.info("Written: %s", out)
 
     # Find and compare all DVectors
     dvectors = find_dvectors(
-        params.base_folder / params.compare_iters[0] / params.scenarios[0].get_name(),
-        params.base_folder / params.compare_iters[1] / params.scenarios[1].get_name(),
+        params.base_folder / params.compare_iters[0] / params.scenarios[0].name,
+        params.base_folder / params.compare_iters[1] / params.scenarios[1].name,
     )
     out = output_folder / (name + "-DVector_summary.csv")
     dvectors.to_csv(out, index=False)
@@ -417,13 +434,10 @@ if __name__ == "__main__":
     try:
         main(
             ComparisonInputs(
-                base_folder=Path(r"C:\Projects\MidMITS\Python\outputs\ApplyMND"),
-                compare_iters=("iter9.6e", "iter9.6c-COVID"),
-                scenarios=(nd.Scenario.NTEM, nd.Scenario.NTEM),
-                output_folder=Path(
-                    r"C:\Projects\MidMITS\Python\outputs\ApplyMND"
-                    r"\Iteration Comparison"
-                ),
+                base_folder=Path(BASE_FOLDER),
+                compare_iters=COMPARE_ITERS,
+                scenarios=SCENARIOS,
+                output_folder=Path(OUTPUT_FOLDER),
             )
         )
     except Exception:
