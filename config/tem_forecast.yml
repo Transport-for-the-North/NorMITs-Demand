@@ -1,6 +1,6 @@
 iteration: 9.7-COVID
 import_path: I:\NorMITs Demand\import
-model_name: miham
+assignment_model: MiHAM
 base_year: 2021
 future_years:
 - 2030

@@ -53,20 +53,21 @@ class NTEMImportMatrices:
         one mode per model.
     """
 
-    MATRIX_FOLDER = "{name}/post_me/tms_seg_pa"
     SEGMENTATION = {"hb": "hb_p_m", "nhb": "nhb_p_m"}
 
     def __init__(self, matrix_folder: Path, year: int, model: nd.AssignmentModel) -> None:
         self.year = int(year)
         self.model = model
         if self.model not in (nd.AssignmentModel.NOHAM, nd.AssignmentModel.MIHAM):
-            raise NotImplementedError(f"NTEM forecasting not yet implemented for {model.get_name()}")
-        
+            raise NotImplementedError(
+                f"NTEM forecasting not yet implemented for {model.get_name()}"
+            )
+
         self.matrix_folder = Path(matrix_folder)
         file_ops.check_path_exists(self.matrix_folder)
-        
+
         self.mode = self.model.get_mode().get_mode_num()
-    
+
         self.segmentation = {
             k: nd_core.get_segmentation_level(s) for k, s in self.SEGMENTATION.items()
         }
@@ -76,7 +77,7 @@ class NTEMImportMatrices:
     def __str__(self) -> str:
         return (
             f"{self.__class__.__name__}(matrix_folder={self.matrix_folder}, "
-            f"year={self.year}, model_name={self.model_name})"
+            f"year={self.year}, model_name={self.model.get_name()})"
         )
 
     def __repr__(self) -> str:
@@ -100,7 +101,7 @@ class NTEMImportMatrices:
         """
         name = self.segmentation[hb].generate_file_name(
             segment_params,
-            file_desc="synthetic_pa",
+            file_desc="pa",
             trip_origin=hb,
             year=str(self.year),
         )
@@ -215,7 +216,7 @@ class NTEMImportMatrices:
 ##### FUNCTIONS #####
 def trip_end_growth(
     tempro_vectors: Dict[int, nd_core.DVector],
-    model_zone_system: str,
+    model_zoning: nd.ZoningSystem,
     zone_weighting: str,
     base_year: int,
 ) -> Dict[int, nd_core.DVector]:
@@ -233,8 +234,7 @@ def trip_end_growth(
         keys should be years and must include
         `normits_demand.efs_constants.BASE_YEAR`.
     model_zone_system : str
-        Name of the zone system to convert the
-        TEMPro growth factors to.
+        Zone system to convert the TEMPro growth factors to.
     zone_weighting : str
         Name of the weighting to use when translating
         to `model_zone_system`.
@@ -257,7 +257,7 @@ def trip_end_growth(
     if base_year not in tempro_vectors:
         raise NTEMForecastError(f"base year ({base_year}) data not given")
     growth_zone = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
-    model_zoning = nd_core.get_zoning_system(model_zone_system)
+
     # Split data into internal and external DVectors
     # for different growth calculations
     base = tempro_vectors[base_year]
@@ -302,7 +302,7 @@ def trip_end_growth(
 
 def tempro_growth(
     tempro_data: TEMProTripEnds,
-    model_zone_system: str,
+    model_zone_system: nd.ZoningSystem,
     base_year: int,
 ) -> TEMProTripEnds:
     """Calculate LAD growth factors and return at original zone system.
@@ -314,9 +314,8 @@ def tempro_growth(
     ----------
     tempro_data : TEMProTripEnds
         TEMPro trip end data for all study years.
-    model_zone_system : str
-        Name of the zone system to convert the
-        TEMPro growth factors to.
+    model_zone_system : ZoningSystem
+        Zone system to convert the TEMPro growth factors to.
     base_year : int
         Model base year.
 
@@ -772,7 +771,7 @@ def convert_to_od(
     )
 
 
-def compile_highway_for_rail(pa_folder: Path, years: List[int], mode: dict) -> Path:
+def compile_highway_for_rail(pa_folder: Path, years: list[int], mode: list[int]) -> Path:
     """Compile the PA matrices into the 24hr VDM PA matrices format.
 
     The outputs are saved in a new folder called
@@ -782,8 +781,10 @@ def compile_highway_for_rail(pa_folder: Path, years: List[int], mode: dict) -> P
     ----------
     pa_folder : Path
         Folder containing PA matrices.
-    years : List[int]
+    years : list[int]
         List of the years to convert.
+    mode : list[int]
+        List of mode numbers.
 
     Returns
     -------
@@ -798,7 +799,7 @@ def compile_highway_for_rail(pa_folder: Path, years: List[int], mode: dict) -> P
         export_dir=vdm_folder,
         matrix_format="pa",
         years_needed=years,
-        m_needed=list(mode.keys()),
+        m_needed=mode,
         split_hb_nhb=True,
     )
     for path in paths:

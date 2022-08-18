@@ -1,6 +1,6 @@
 iteration: 1e
 import_path: I:\NorMITs Demand\import
-model_name: noham
+assignment_model: NoHAM
 base_year: 2018
 future_years:
 - 2030

@@ -356,7 +356,7 @@ def pa_matrix_comparison(
             base_matrices[nm],
             seg,
             "pa",
-            ntem_imports.model_name,
+            ntem_imports.model.get_name(),
             ntem_imports.mode,
             comparison_zone_system,
         )

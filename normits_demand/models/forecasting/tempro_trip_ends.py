@@ -63,7 +63,7 @@ class TEMProData:
         "Mode": int,
         "TimePeriod": int,
     }
-    SEGMENTATION = {"hb": "hb_p_m_tp_wday", "nhb": "tms_nhb_p_m_tp_wday"}
+    SEGMENTATION = {"hb": "hb_p_m_tp_wday", "nhb": "dimo_nhb_p_m_tp_wday"}
     SEGMENTATION_COLUMNS = {"p": "purpose", "m": "mode", "tp": "time_period"}
     ZONE_SYSTEM = "msoa"
     TIME_FORMAT = "avg_day"

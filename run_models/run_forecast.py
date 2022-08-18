@@ -124,7 +124,12 @@ def main(
             f"Running {model.value.upper()} forecast",
         )
     LOG.info(msg, params.export_path)
-    LOG.info("Input parameters: %r", params)
+    LOG.info("Input parameters:\n%s", params.to_yaml())
+
+    output_params_file = params.export_path / "forecasting_parameters.yml"
+    params.save_yaml(output_params_file)
+    LOG.info("Saved input parameters to %s", output_params_file)
+
 
     if model in (forecast_cnfg.ForecastModel.TRIP_END, forecast_cnfg.ForecastModel.NTEM):
         tem_forecasting(params, model)
@@ -160,7 +165,7 @@ def model_mode_subset(
     NotImplementedError
         If any `assignment_model` other than NoHAM or MiHAM is given.
     """
-    if assignment_model not in (nd.AssignmentModel.NOHAM, nd.AssignmentModel.MIHAM):
+    if assignment_model in (nd.AssignmentModel.NOHAM, nd.AssignmentModel.MIHAM):
         segmentation = {
             "hb_attractions": "hb_p_m_car",
             "hb_productions": "hb_p_m_car",
@@ -169,7 +174,8 @@ def model_mode_subset(
         }
     else:
         raise NotImplementedError(
-            f"Forecasting only implemented for model {assignment_model.get_name()}"
+            "Forecasting only implemented for NoHAM and MiHAM"
+            f"not {assignment_model.get_name()}"
         )
 
     return trip_ends.subset(segmentation)
@@ -226,7 +232,7 @@ def tem_forecasting(
         tripend_growth.save(params.export_path / f"{trip_end_name} Growth Factors")
 
     ntem_inputs = ntem_forecast.NTEMImportMatrices(
-        params.import_path, params.base_year, params.assignment_model
+        params.matrix_import_path, params.base_year, params.assignment_model
     )
     pa_output_folder = params.export_path / "Matrices" / "PA"
     ntem_forecast.grow_all_matrices(ntem_inputs, tripend_growth, pa_output_folder)
@@ -255,16 +261,21 @@ def tem_forecasting(
     )
 
     # Compile to output formats
-    ntem_forecast.compile_highway_for_rail(pa_output_folder, params.future_years)
+    ntem_forecast.compile_highway_for_rail(
+        pa_output_folder,
+        params.future_years,
+        params.assignment_model.get_mode().get_mode_values(),
+    )
     compiled_od_path = ntem_forecast.compile_highway(
         od_folder,
         params.future_years,
         params.car_occupancies_path,
     )
+
     ntem_forecast_checks.od_matrix_comparison(
         ntem_inputs.od_matrix_folder,
         compiled_od_path / "PCU",
-        params.assignment_model,
+        params.assignment_model.get_zoning_system().name,
         params.comparison_zone_systems["matrix 1"],
         params.user_classes,
         params.time_periods,
