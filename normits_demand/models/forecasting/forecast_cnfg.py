@@ -1,13 +1,21 @@
-"""
-Config file for run_forecast.  Generates a yaml file which the process runs from.
-"""
-from normits_demand.utils import config_base
+"""Config files and options for `run_forecast`."""
+import enum
 from pathlib import Path
 from typing import Dict
 
+from normits_demand.utils import config_base
+from normits_demand.core import enumerations as nd_enum
+
+
+class ForecastModel(nd_enum.IsValidEnumWithAutoNameLower):
+    """Forecasting models available."""
+
+    NTEM = enum.auto()
+    TRIP_END = enum.auto()
+    EFS = enum.auto()
+
 
 class ForecastParameters(config_base.BaseConfig):
-
     """Class for storing the parameters for running forecasting.
 
     Attributes
@@ -32,7 +40,7 @@ class ForecastParameters(config_base.BaseConfig):
         the class attributes, and additional optional values
         from `export_path_params`.
     tripend_path: Path
-        Base path for the process to read trip-end data from for 
+        Base path for the process to read trip-end data from for
         growth factors
     """
 
@@ -106,27 +114,4 @@ class ForecastParameters(config_base.BaseConfig):
         return path
 
 
-if __name__ == "__main__":
-    parameters = ForecastParameters(
-        iteration="9.7-COVID",
-        import_path=Path(r"I:/NorMITs Demand/import"),
-        model_name="miham",
-        base_year=2021,
-        future_years=[2030, 2040],
-        export_folder=Path(r"T:/MidMITs Demand/Forecasting"),
-        tripend_path=Path(r"T:\MidMITs Demand\MiTEM\iter9.7-COVID\NTEM"),
-        matrix_import_path=Path(
-            r"T:\MidMITs Demand\Distribution Model\iter9.7-COVID.2\car_and_passenger\Final Outputs\Full PA Matrices"
-        ),
-        hb_purposes_needed=list(range(1, 9)),
-        nhb_purposes_needed=[12, 13, 14, 15, 16, 18],
-        comparison_zone_systems={"trip end": "lad_2020", "matrix 1": "gor"},
-        mode={"car": 3},
-        time_periods=[1, 2, 3, 4],
-        user_classes=["commute", "business", "other"],
-    )
-    outputpath = r"NorMITs-Demand\config"
-    Path(outputpath).mkdir(parents=True, exist_ok=True)
-
-    parameters.save_yaml(Path(outputpath) / "run_forecast.yml")
-
+# TODO(MB) Function to create an example config file
