@@ -6,10 +6,9 @@ from __future__ import annotations
 # Standard imports
 import argparse
 import dataclasses
-import os
 import pathlib
 import sys
-from pathlib import Path
+from typing import Union
 
 # Third party imports
 
@@ -19,8 +18,12 @@ sys.path.append(".")
 # Local imports
 # pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
-from normits_demand.models import mitem_forecast, ntem_forecast, tempro_trip_ends
-from normits_demand.models.forecasting import forecast_cnfg
+from normits_demand.models.forecasting import (
+    tem_forecast,
+    ntem_forecast,
+    tempro_trip_ends,
+    forecast_cnfg,
+)
 from normits_demand import logging as nd_log
 from normits_demand.reports import ntem_forecast_checks
 from normits_demand.utils import timing
@@ -78,84 +81,6 @@ class ForecastingArguments:
 
 
 ##### FUNCTIONS #####
-def model_mode_subset(
-    trip_ends: tempro_trip_ends.TEMProTripEnds,
-    model_name: str,
-) -> tempro_trip_ends.TEMProTripEnds:
-    """Get subset of `trip_ends` segmentation for specific `model_name`.
-
-    Parameters
-    ----------
-    trip_ends : tempro_trip_ends.TEMProTripEnds
-        Trip end data, which has segmentation split by
-        mode.
-    model_name : str
-        Name of the model being ran, currently only
-        works for 'noham'.
-
-    Returns
-    -------
-    tempro_trip_ends.TEMProTripEnds
-        Trip end data at new segmentation.
-
-    Raises
-    ------
-    NotImplementedError
-        If any `model_name` other than 'noham' is
-        given.
-    """
-    model_name = model_name.lower().strip()
-    if model_name == "noham" or model_name == "miham":
-        segmentation = {
-            "hb_attractions": "hb_p_m_car",
-            "hb_productions": "hb_p_m_car",
-            "nhb_attractions": "nhb_p_m_car",
-            "nhb_productions": "nhb_p_m_car",
-        }
-    else:
-        raise NotImplementedError(
-            f"MiTEM forecasting only not implemented for model {model_name!r}"
-        )
-    return trip_ends.subset(segmentation)
-
-
-def read_tripends(
-    base_year: int, forecast_years: list[int], tripend_path: Path
-) -> tempro_trip_ends.TEMProTripEnds:
-    """
-    Reads in trip-end dvectors from picklefiles
-    Args:
-        base_year (int): The base year for the forecast
-        forecast_years (list[int]): A list of forecast years
-    Returns:
-        tempro_trip_ends.TEMProTripEnds: the same trip-ends read in
-    """
-    SEGMENTATION = {"hb": "hb_p_m", "nhb": "nhb_p_m"}
-    dvectors = {
-        "hb_attractions": {},
-        "hb_productions": {},
-        "nhb_attractions": {},
-        "nhb_productions": {},
-    }
-    for i in ["hb", "nhb"]:
-        for j in ["productions", "attractions"]:
-            years = {}
-            key = f"{i}_{j}"
-            for year in [base_year] + forecast_years:
-                dvec = nd.DVector.load(
-                    os.path.join(
-                        tripend_path,
-                        key,
-                        f"{i}_msoa_notem_segmented_{year}_dvec.pkl",
-                    )
-                )
-                if i == "nhb":
-                    dvec = dvec.reduce(nd.get_segmentation_level("notem_nhb_output_reduced"))
-                years[year] = dvec.aggregate(nd.get_segmentation_level(SEGMENTATION[i]))
-            dvectors[key] = years
-    return tempro_trip_ends.TEMProTripEnds(**dvectors)
-
-
 def main(
     model: forecast_cnfg.ForecastModel, config_path: pathlib.Path, init_logger: bool = True
 ):
@@ -179,8 +104,10 @@ def main(
     """
     start = timing.current_milli_time()
 
-    if model == forecast_cnfg.ForecastModel.TRIP_END or forecast_cnfg.ForecastModel.NTEM:
-        params = forecast_cnfg.ForecastParameters.load_yaml(config_path)
+    if model == forecast_cnfg.ForecastModel.TRIP_END:
+        params = forecast_cnfg.TEMForecastParameters.load_yaml(config_path)
+    elif model == forecast_cnfg.ForecastModel.NTEM:
+        params = forecast_cnfg.NTEMForecastParameters.load_yaml(config_path)
     else:
         raise NotImplementedError(f"forecasting not implemented for {model.value}")
 
@@ -199,10 +126,8 @@ def main(
     LOG.info(msg, params.export_path)
     LOG.info("Input parameters: %r", params)
 
-    if model == forecast_cnfg.ForecastModel.TRIP_END:
-        tem_forecasting(params)
-    elif model == forecast_cnfg.ForecastModel.NTEM:
-        raise NotImplementedError("forecasting not yet implemented for NTEM")
+    if model in (forecast_cnfg.ForecastModel.TRIP_END, forecast_cnfg.ForecastModel.NTEM):
+        tem_forecasting(params, model)
 
     LOG.info(
         "%s forecasting completed in %s",
@@ -211,36 +136,106 @@ def main(
     )
 
 
-def tem_forecasting(params: forecast_cnfg.ForecastParameters) -> None:
-    """Main function for running the TEM forecasting.
+def model_mode_subset(
+    trip_ends: tempro_trip_ends.TEMProTripEnds,
+    assignment_model: nd.AssignmentModel,
+) -> tempro_trip_ends.TEMProTripEnds:
+    """Get subset of `trip_ends` segmentation for specific `model_name`.
 
     Parameters
     ----------
-    params : ForecastParameters
-        Parameters for running TEM forecasting.
+    trip_ends : tempro_trip_ends.TEMProTripEnds
+        Trip end data, which has segmentation split by mode.
+    assignment_model : nd.AssignmentModel
+        Assignment model being ran, currently only works for
+        NoHAM or MiHAM.
+
+    Returns
+    -------
+    tempro_trip_ends.TEMProTripEnds
+        Trip end data at new segmentation.
+
+    Raises
+    ------
+    NotImplementedError
+        If any `assignment_model` other than NoHAM or MiHAM is given.
+    """
+    if assignment_model not in (nd.AssignmentModel.NOHAM, nd.AssignmentModel.MIHAM):
+        segmentation = {
+            "hb_attractions": "hb_p_m_car",
+            "hb_productions": "hb_p_m_car",
+            "nhb_attractions": "nhb_p_m_car",
+            "nhb_productions": "nhb_p_m_car",
+        }
+    else:
+        raise NotImplementedError(
+            f"Forecasting only implemented for model {assignment_model.get_name()}"
+        )
+
+    return trip_ends.subset(segmentation)
+
+
+def tem_forecasting(
+    params: Union[forecast_cnfg.TEMForecastParameters, forecast_cnfg.NTEMForecastParameters],
+    forecast_model: forecast_cnfg.ForecastModel,
+) -> None:
+    """Run the NTEM or trip end forecasting.
+
+    Parameters
+    ----------
+    params : NTEMForecastParameters | TEMForecastParameters
+        Parameters for running NTEM forecasting.
 
     See Also
     --------
-    normits_demand.models.mitem_forecast
+    normits_demand.models.ntem_forecast
     """
-    tripend_data = read_tripends(params.base_year, params.future_years, params.tripend_path)
-    tripend_data = model_mode_subset(tripend_data, params.model_name)
-    tempro_growth = ntem_forecast.tempro_growth(
-        tripend_data, params.model_name, params.base_year
+    if forecast_model == forecast_cnfg.ForecastModel.NTEM:
+        if not isinstance(params, forecast_cnfg.NTEMForecastParameters):
+            raise TypeError(
+                "expected NTEMForecastParameters for "
+                f"{forecast_model.value} forecasting not {type(params)}"
+            )
+
+        trip_end_name = "TEMPro"
+        tripend_data = ntem_forecast.get_tempro_data(
+            params.tempro_data_path, [params.base_year, *params.future_years]
+        )
+    elif forecast_model == forecast_cnfg.ForecastModel.TRIP_END:
+        if not isinstance(params, forecast_cnfg.TEMForecastParameters):
+            raise TypeError(
+                "expected TEMForecastParameters for "
+                f"{forecast_model.value} forecasting not {type(params)}"
+            )
+
+        trip_end_name = f"{params.assignment_model.get_name()} Trip End"
+        tripend_data = tem_forecast.read_tripends(
+            params.base_year, params.future_years, params.tripend_path
+        )
+    else:
+        raise ValueError(f"forecasting for trip end or NTEM only not {forecast_model}")
+
+    if params.output_trip_end_data:
+        tripend_data.save(params.export_path / f"{trip_end_name} Data")
+
+    tripend_data = model_mode_subset(tripend_data, params.assignment_model)
+    tripend_growth = ntem_forecast.tempro_growth(
+        tripend_data, params.assignment_model.get_zoning_system(), params.base_year
     )
-    tempro_growth.save(params.export_path / "TEMPro Growth Factors")
-    mitem_inputs = mitem_forecast.MiTEMImportMatrices(
-        params.matrix_import_path,
-        params.base_year,
-        params.model_name,
+    if params.output_trip_end_growth:
+        tripend_growth.save(params.export_path / f"{trip_end_name} Growth Factors")
+
+    ntem_inputs = ntem_forecast.NTEMImportMatrices(
+        params.import_path, params.base_year, params.assignment_model
     )
     pa_output_folder = params.export_path / "Matrices" / "PA"
-    ntem_forecast.grow_all_matrices(mitem_inputs, tempro_growth, pa_output_folder)
+    ntem_forecast.grow_all_matrices(ntem_inputs, tripend_growth, pa_output_folder)
+
     ntem_forecast_checks.pa_matrix_comparison(
-        mitem_inputs,
+        ntem_inputs,
         pa_output_folder,
         tripend_data,
-        list(params.mode.keys())[0],
+        params.assignment_model.get_mode().get_mode_values(),
         params.comparison_zone_systems,
         params.base_year,
     )
@@ -250,7 +245,7 @@ def tem_forecasting(params: forecast_cnfg.ForecastParameters) -> None:
         od_folder,
         params.base_year,
         params.future_years,
-        [mitem_inputs.mode],
+        params.assignment_model.get_mode().get_mode_values(),
         {"hb": params.hb_purposes_needed, "nhb": params.nhb_purposes_needed},
         params.pa_to_od_factors,
         params.iteration,
@@ -260,16 +255,16 @@ def tem_forecasting(params: forecast_cnfg.ForecastParameters) -> None:
     )
 
     # Compile to output formats
-    # ntem_forecast.compile_highway_for_rail(pa_output_folder, params.future_years, params.mode)
+    ntem_forecast.compile_highway_for_rail(pa_output_folder, params.future_years)
     compiled_od_path = ntem_forecast.compile_highway(
         od_folder,
         params.future_years,
         params.car_occupancies_path,
     )
     ntem_forecast_checks.od_matrix_comparison(
-        mitem_inputs.od_matrix_folder,
+        ntem_inputs.od_matrix_folder,
         compiled_od_path / "PCU",
-        params.model_name,
+        params.assignment_model,
         params.comparison_zone_systems["matrix 1"],
         params.user_classes,
         params.time_periods,

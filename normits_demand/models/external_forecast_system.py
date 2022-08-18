@@ -52,6 +52,7 @@ from normits_demand.utils import sector_reporter_v2 as sr_v2
 # BACKLOG: Implement a logger to log EFS run progress
 #  labels: QoL Updates
 
+# TODO(MB) Move to forecasting sub-package
 
 class ExternalForecastSystem:
     # ## Class Constants ## #

@@ -12,12 +12,16 @@ import numpy as np
 import pandas as pd
 
 # Local imports
+import normits_demand as nd
 from normits_demand.utils import file_ops, vehicle_occupancy
 from normits_demand import logging as nd_log
 from normits_demand import core as nd_core
-from normits_demand import efs_constants as efs_consts
 from normits_demand.distribution import furness
-from normits_demand.models.tempro_trip_ends import NTEMForecastError, TEMProTripEnds
+from normits_demand.models.forecasting.tempro_trip_ends import (
+    NTEMForecastError,
+    TEMProData,
+    TEMProTripEnds,
+)
 from normits_demand.matrices import pa_to_od, matrix_processing
 
 ##### CONSTANTS #####
@@ -52,22 +56,17 @@ class NTEMImportMatrices:
     MATRIX_FOLDER = "{name}/post_me/tms_seg_pa"
     SEGMENTATION = {"hb": "hb_p_m", "nhb": "nhb_p_m"}
 
-    def __init__(self, import_folder: Path, year: int, model_name: str) -> None:
-        file_ops.check_path_exists(import_folder)
+    def __init__(self, matrix_folder: Path, year: int, model: nd.AssignmentModel) -> None:
         self.year = int(year)
-        self.model_name = model_name.lower().strip()
-        if self.model_name != "noham":
-            raise NotImplementedError("this class currently only works for 'noham' model")
-        self.matrix_folder = import_folder / self.MATRIX_FOLDER.format(name=self.model_name)
+        self.model = model
+        if self.model not in (nd.AssignmentModel.NOHAM, nd.AssignmentModel.MIHAM):
+            raise NotImplementedError(f"NTEM forecasting not yet implemented for {model.get_name()}")
+        
+        self.matrix_folder = Path(matrix_folder)
         file_ops.check_path_exists(self.matrix_folder)
-        mode = efs_consts.MODEL_MODES[self.model_name]
-        if len(mode) == 1:
-            self.mode: int = mode[0]
-        else:
-            raise NotImplementedError(
-                "cannot handle models with more than one mode, "
-                f"this model ({self.model_name}) has {len(mode)} modes"
-            )
+        
+        self.mode = self.model.get_mode().get_mode_num()
+    
         self.segmentation = {
             k: nd_core.get_segmentation_level(s) for k, s in self.SEGMENTATION.items()
         }
@@ -163,12 +162,17 @@ class NTEMImportMatrices:
     @property
     def od_matrix_folder(self) -> Path:
         """PostME OD matrices folder, assumed to be in
-            the parent folder of the PA matrices.
+        the parent folder of the PA matrices.
         """
         return self.matrix_folder.parent
 
     def output_filename(
-        self, trip_origin: str, purpose: int, year: int, compressed: bool = True, **kwargs,
+        self,
+        trip_origin: str,
+        purpose: int,
+        year: int,
+        compressed: bool = True,
+        **kwargs,
     ) -> str:
         """Generate filename for output matrix.
 
@@ -348,7 +352,10 @@ def tempro_growth(
 
 
 def _trip_end_totals(
-    name: str, row_targets: pd.Series, col_targets: pd.Series, tolerance: float = 1e-7,
+    name: str,
+    row_targets: pd.Series,
+    col_targets: pd.Series,
+    tolerance: float = 1e-7,
 ) -> Dict[str, pd.Series]:
     """Compare `row_targets` and `col_targets` sum totals and factor if needed.
 
@@ -392,7 +399,9 @@ def _trip_end_totals(
 
 
 def _check_matrix(
-    matrix: pd.DataFrame, name: str, raise_nan_errors: bool = True,
+    matrix: pd.DataFrame,
+    name: str,
+    raise_nan_errors: bool = True,
 ):
     """Check if `matrix` contains any non-finite values and log some matrix statistics.
 
@@ -495,7 +504,9 @@ def grow_matrix(
         max_iters=3000,
     )
     LOG.debug(
-        "Furnessed internal trips with %s iterations and RMS = %.1e", iters, rms,
+        "Furnessed internal trips with %s iterations and RMS = %.1e",
+        iters,
+        rms,
     )
     # Factor external demand to row and column targets, make sure
     # row and column targets have the same totals
@@ -629,7 +640,9 @@ def _pa_growth_comparison(
 
 
 def grow_all_matrices(
-    matrices: NTEMImportMatrices, growth: TEMProTripEnds, output_folder: Path,
+    matrices: NTEMImportMatrices,
+    growth: TEMProTripEnds,
+    output_folder: Path,
 ) -> None:
     """Grow all base year `matrices` to all forecast years in `trip_ends`.
 
@@ -657,8 +670,16 @@ def grow_all_matrices(
     grow_matrix: for growing a single matrix.
     """
     iterator = {
-        "hb": (matrices.hb_paths, growth.hb_attractions, growth.hb_productions,),
-        "nhb": (matrices.nhb_paths, growth.nhb_attractions, growth.nhb_productions,),
+        "hb": (
+            matrices.hb_paths,
+            growth.hb_attractions,
+            growth.hb_productions,
+        ),
+        "nhb": (
+            matrices.nhb_paths,
+            growth.nhb_attractions,
+            growth.nhb_productions,
+        ),
     }
     output_folder.mkdir(exist_ok=True, parents=True)
     for hb, (paths, attractions, productions) in iterator.items():
@@ -782,7 +803,9 @@ def compile_highway_for_rail(pa_folder: Path, years: List[int], mode: dict) -> P
     )
     for path in paths:
         matrix_processing.compile_matrices(
-            mat_import=pa_folder, mat_export=vdm_folder, compile_params_path=path,
+            mat_import=pa_folder,
+            mat_export=vdm_folder,
+            compile_params_path=path,
         )
     LOG.info("Written 24hr VDM PA Matrices: %s", vdm_folder)
     return vdm_folder
@@ -823,7 +846,9 @@ def compile_highway(
     )
     for path in compile_params_paths:
         matrix_processing.compile_matrices(
-            mat_import=import_od_path, mat_export=compiled_od_path, compile_params_path=path,
+            mat_import=import_od_path,
+            mat_export=compiled_od_path,
+            compile_params_path=path,
         )
     LOG.info("Written Compiled OD matrices: %s", compiled_od_path)
     car_occupancies = pd.read_csv(car_occupancies_path)
@@ -840,3 +865,77 @@ def compile_highway(
     )
     LOG.info("Written Compiled OD PCU matrices: %s", compiled_od_pcu_path)
     return compiled_od_path
+
+
+def get_tempro_data(data_path: Path, years: list[int]) -> TEMProTripEnds:
+    """Read TEMPro data and convert it to DVectors.
+
+    Parameters
+    ----------
+    data_path : Path
+        Path to TEMPro data CSV or to the folder containing
+        the TEMPro databases.
+    years : list[int]
+        List of year columns to read from input file,
+        should include base and forecast years.
+
+    Returns
+    -------
+    tempro_trip_ends.TEMProTripEnds
+        TEMPro trip end data as DVectors stored in class
+        attributes for base and all future years.
+    """
+    tempro_data = TEMProData(data_path, years)
+    # Read data and convert to DVectors
+    trip_ends = tempro_data.produce_dvectors()
+    # Aggregate DVector to required segmentation
+    segmentation = NTEMImportMatrices.SEGMENTATION
+    return trip_ends.aggregate(
+        {
+            "hb_attractions": segmentation["hb"],
+            "hb_productions": segmentation["hb"],
+            "nhb_attractions": segmentation["nhb"],
+            "nhb_productions": segmentation["nhb"],
+        }
+    )
+
+
+def model_mode_subset(
+    trip_ends: TEMProTripEnds,
+    model_name: str,
+) -> TEMProTripEnds:
+    """Get subset of `trip_ends` segmentation for specific `model_name`.
+
+    Parameters
+    ----------
+    trip_ends : tempro_trip_ends.TEMProTripEnds
+        Trip end data, which has segmentation split by
+        mode.
+    model_name : str
+        Name of the model being ran, currently only
+        works for 'noham'.
+
+    Returns
+    -------
+    tempro_trip_ends.TEMProTripEnds
+        Trip end data at new segmentation.
+
+    Raises
+    ------
+    NotImplementedError
+        If any `model_name` other than 'noham' is
+        given.
+    """
+    model_name = model_name.lower().strip()
+    if model_name == "noham":
+        segmentation = {
+            "hb_attractions": "hb_p_m_car",
+            "hb_productions": "hb_p_m_car",
+            "nhb_attractions": "nhb_p_m_car",
+            "nhb_productions": "nhb_p_m_car",
+        }
+    else:
+        raise NotImplementedError(
+            f"NTEM forecasting only not implemented for model {model_name!r}"
+        )
+    return trip_ends.subset(segmentation)
