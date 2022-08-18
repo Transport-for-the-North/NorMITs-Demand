@@ -339,6 +339,9 @@ class AssignmentModel(IsValidEnum):
 
     NOHAM = "NoHAM"
     NORMS = "NoRMS"
+    # Models for Midlands Connect
+    MIHAM = "MiHAM"
+    MIRANDA = "MiRANDA"
 
     @classmethod
     def from_str(cls, model_name: str) -> AssignmentModel:
@@ -380,6 +383,8 @@ class AssignmentModel(IsValidEnum):
         return {
             cls.NOHAM: Mode.CAR,
             cls.NORMS: Mode.TRAIN,
+            cls.MIHAM: Mode.CAR,
+            cls.MIRANDA: Mode.TRAIN,
         }
 
     def get_mode(self) -> Mode:
@@ -387,6 +392,6 @@ class AssignmentModel(IsValidEnum):
         return self.mode_lookup()[self]
 
     @classmethod
-    def tfn_models(cls) -> Set[AssignmentModel]:
+    def tfn_models(cls) -> set[AssignmentModel]:
         """Transport for the North's assignment models."""
         return {cls.NOHAM, cls.NORMS}
