@@ -6,6 +6,11 @@ Ways Of Working
    :language: python
 
 .. _`Google Python Style Guide`: https://google.github.io/styleguide/pyguide.html
+.. _`pydocstyle`: http://www.pydocstyle.org/en/stable/index.html
+.. _`black`: https://github.com/psf/black
+.. _`pylint`: https://github.com/PyCQA/pylint
+.. _`mypy`: https://github.com/python/mypy
+.. _`pyproject.toml`: pyproject.toml
 .. _`todo comments`: https://google.github.io/styleguide/pyguide.html#312-todo-comments
 .. _`old-style`: https://docs.python.org/3/library/stdtypes.html#old-string-formatting
 .. _`new-style`: https://docs.python.org/3/library/stdtypes.html#str.format
@@ -24,31 +29,21 @@ For smaller pieces of work, such as a bug fix, a normal pull request can be made
 Coding Style
 ------------
 
-NorMITs Demand follows the `Google Python Style Guide`_ with some exceptions:
+NorMITs Demand follows Transport for the North's (TFN) coding standards, which include:
 
-- **Multiline if-statements** - To avoid a visual conflict with multiline
-  :code:`if`-statements this codebase chooses to forgo the space between :code:`if`
-  and the opening bracket. A comment should also be added, if reasonable. Therefore,
-  the following:
+- Code must conform to `Google Python Style Guide`_
+- Code uses numpy-style doc-strings, checked with `pydocstyle`_
+- Code must be formatted with `black`_
+- Code must be checked, and all errors corrected, by running `pylint`_
+- Code must be checked, and all errors corrected, by running `mypy`_
 
-  .. code-block:: python
+See this project's `pyproject.toml`_ to see how these tools have been set up in order
+to meet TFN's coding standards.
 
-    if (this_is_one_thing and
-        this_is_another_thing):
-        do_something()
-
-
-  Would become:
-
-  .. code-block:: python
-
-    if(this_is_one_thing and
-       this_is_another_thing):
-       # As both conditions are true, we should do the thing
-        do_something()
+A few important cases are highlighted below:
 
 - **Multiline for-statements** - Try to avoid these where possible to prevent
-  (less obstructive) visual conflicts. Instead, build the generator object before the
+  visual conflicts. Instead, build the generator object before the
   :code:`for`-statement, then call the generator. Therefore, the following:
 
   .. code-block:: python
@@ -71,28 +66,11 @@ NorMITs Demand follows the `Google Python Style Guide`_ with some exceptions:
         # Loop over one, two, and three
         do_something()
 
-- **Function definitions** - To clearly differentiate function definitions from function
-  calls at a glance, all function arguments should be on a separate line, in-line with
-  the opening bracket. The trailing bracket should also be in line with the arguments,
-  on a new line (along with return type hinting).
-  Note: If all function arguments can fit on a single line with the function name, then
-  that is the preferred option. As an example:
-
-  .. code-block:: python
-
-    def a_long_function_name(variable_name_one: int,
-                             variable_name_two: int,
-                             variable_name_three: int,
-                             variable_name_four: int,
-                             ) -> float:
-        # Do something
-        ...
-
 - **String Formatting** - Python has multiple different ways to format strings. Where
   possible avoid using concatenation to build strings as it can lead to difficult to
-  read and error prone code. Primarily either "`old-style`_" (similar to
-  :code:`printf()` in C) or "`new-style`_" string formatting
-  should used. For further information, see the links above.
+  read and error prone code. In order of preference, use either "`new-style`_"
+  string formatting, or "`old-style`_" (similar to :code:`printf()` in C). For
+  further information, see the links above.
 
 
 Special Code Comments
