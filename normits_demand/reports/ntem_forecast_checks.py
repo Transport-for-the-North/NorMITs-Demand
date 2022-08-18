@@ -22,7 +22,7 @@ from tqdm import tqdm
 # Local imports
 from normits_demand import core as nd_core
 from normits_demand import logging as nd_log
-from normits_demand.models import ntem_forecast, tempro_trip_ends
+from normits_demand.models.forecasting import ntem_forecast, tempro_trip_ends
 from normits_demand.utils import file_ops, translation
 
 ##### CONSTANTS #####
@@ -496,7 +496,8 @@ def _matrix_comparison_write(
         # Add purpose dropdown
         purposes = base_matrices["purpose"].unique().tolist()
         valid_purp = DataValidation(
-            "list", formula1=f'"{",".join(str(p) for p in purposes)}"',
+            "list",
+            formula1=f'"{",".join(str(p) for p in purposes)}"',
         )
         ws.add_data_validation(valid_purp)
         ws["B2"] = "Purpose"
