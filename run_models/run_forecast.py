@@ -241,7 +241,7 @@ def tem_forecasting(
         ntem_inputs,
         pa_output_folder,
         tripend_data,
-        params.assignment_model.get_mode().get_mode_values(),
+        params.assignment_model.get_mode(),
         params.comparison_zone_systems,
         params.base_year,
     )

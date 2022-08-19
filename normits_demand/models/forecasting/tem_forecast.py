@@ -31,6 +31,8 @@ def read_tripends(
     Returns:
         tempro_trip_ends.TEMProTripEnds: the same trip-ends read in
     """
+    LOG.info("Reading trip ends from %s", tripend_path)
+
     SEGMENTATION = {"hb": "hb_p_m", "nhb": "nhb_p_m"}
     dvectors = {
         "hb_attractions": {},

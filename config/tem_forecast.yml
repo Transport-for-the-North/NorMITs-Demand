@@ -1,14 +1,15 @@
-iteration: 9.7-COVID
+iteration: 9.10
 import_path: I:\NorMITs Demand\import
-assignment_model: MiHAM
-base_year: 2021
+assignment_model: NoHAM
+base_year: 2018
 future_years:
 - 2030
-- 2040
-export_folder: T:\MidMITs Demand
-tripend_path: T:\MidMITs Demand\MiTEM\iter9.7-COVID\NTEM
-matrix_import_path: T:\MidMITs Demand\Distribution Model\iter9.7-COVID.2\car_and_passenger\Final
-  Outputs\Full PA Matrices
+# export_folder: I:\NorMITs Demand
+export_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Outputs\Forecasting
+# base_tripend_path: I:\NorMITs Demand\NoTEM\iter9.10
+base_tripend_path: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Inputs\NoTEM\iter9.10-dummy_forecasts
+tem_scenario: SC01_JAM
+matrix_import_path: I:\NorMITs Demand\import\noham\post_me\tms_seg_pa
 hb_purposes_needed:
 - 1
 - 2
@@ -27,7 +28,7 @@ nhb_purposes_needed:
 - 18
 comparison_zone_systems:
   trip end: lad_2020
-  matrix 1: gor
+  matrix 1: ca_sector_2020
 time_periods:
 - 1
 - 2

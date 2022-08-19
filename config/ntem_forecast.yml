@@ -26,7 +26,7 @@ nhb_purposes_needed:
 - 18
 comparison_zone_systems:
   trip end: lad_2020
-  matrix 1: gor
+  matrix 1: ca_sector_2020
 time_periods:
 - 1
 - 2

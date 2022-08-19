@@ -1,6 +1,9 @@
 """Config files and options for `run_forecast`."""
 import enum
 from pathlib import Path
+from typing import Any
+
+import pydantic
 
 import normits_demand as nd
 from normits_demand.utils import config_base
@@ -36,11 +39,10 @@ class ForecastParameters(config_base.BaseConfig):
 
     @property
     def export_path(self) -> Path:
-        """
-        Read-only path to export folder, this is built from
-        the `export_path_fmt` with variables filled in from
-        the class attributes, and additional optional values
-        from `export_path_params`.
+        """Read-only path to export folder.
+
+        This is built from the `export_path_fmt` with variables filled
+        in from the class attributes.
         """
         return Path(
             self.export_path_fmt.format(
@@ -54,8 +56,11 @@ class ForecastParameters(config_base.BaseConfig):
         Paths to the PA to OD tour proportions, has
         keys `post_me_tours` and `post_me_fh_th_factors`.
         """
+        # TODO(MB) Add flexibility to how it finds the tour proportions
         tour_prop_home = Path(
-            self.import_path / self.assignment_model / "synthetic_tour_proportions"
+            self.import_path
+            / self.assignment_model.get_name().lower()
+            / "post_me_tour_proportions"
         )
         paths = {
             "post_me_tours": tour_prop_home,
@@ -80,8 +85,48 @@ class ForecastParameters(config_base.BaseConfig):
 class TEMForecastParameters(ForecastParameters):
     """Class for storing parameters for trip end forecasting."""
 
-    tripend_path: Path
-    export_path_fmt: str = "{export_folder}/{model_name}/TEM/iter{iteration}"
+    base_tripend_path: Path
+    tem_scenario: nd.Scenario
+    export_path_fmt: str = (
+        "{export_folder}/{model_name}/TEM/iter{iteration}/{tem_scenario_name}"
+    )
+
+    @pydantic.root_validator(skip_on_failure=True)
+    def _check_tripend_path(  # pylint: disable=no-self-argument
+        cls, values: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Check the trip end folder exists."""
+        base: Path = values["base_tripend_path"]
+        scenario: nd.Scenario = values["tem_scenario"]
+        path = base / str(scenario.value)
+        if not path.is_dir():
+            raise ValueError(
+                f"tripend folder doesn't exist: {path}, make sure the "
+                "base_tripend_path folder contains a sub-folder with the name "
+                f"defined by the tem_scenario parameter ({scenario.value})"
+            )
+
+        return values
+
+    @property
+    def tripend_path(self) -> Path:
+        """Folder containing trip end data."""
+        return self.base_tripend_path / self.tem_scenario.value
+
+    @property
+    def export_path(self) -> Path:
+        """Read-only path to export folder.
+
+        This is built from the `export_path_fmt` with variables filled
+        in from the class attributes.
+        """
+        return Path(
+            self.export_path_fmt.format(
+                model_name=self.assignment_model.get_name(),
+                tem_scenario_name=self.tem_scenario.value,
+                **self.dict(),
+            )
+        )
 
 
 class NTEMForecastParameters(ForecastParameters):

@@ -20,6 +20,7 @@ from openpyxl.utils import get_column_letter
 from tqdm import tqdm
 
 # Local imports
+import normits_demand as nd
 from normits_demand import core as nd_core
 from normits_demand import logging as nd_log
 from normits_demand.models.forecasting import ntem_forecast, tempro_trip_ends
@@ -136,7 +137,7 @@ def _compare_trip_ends(
     forecast_trip_ends: Dict[str, Dict[str, nd_core.DVector]],
     tempro_data: tempro_trip_ends.TEMProTripEnds,
     years: Tuple[int, int],
-    comparison_zone_system,
+    comparison_zone_system: dict[str, str],
 ) -> pd.DataFrame:
     """Compares matrix growth to `tempro_data`.
 
@@ -208,7 +209,7 @@ def matrix_dvectors(
     trip_end_type: str,
     matrix_zoning: str,
     mode: int,
-    comparison_zone_systems,
+    comparison_zone_systems: dict[str, str],
 ) -> Dict[str, nd_core.DVector]:
     """Calculate matrix trip ends and convert to DVectors
 
@@ -320,8 +321,8 @@ def pa_matrix_comparison(
     ntem_imports: ntem_forecast.NTEMImportMatrices,
     pa_folder: Path,
     tempro_data: tempro_trip_ends.TEMProTripEnds,
-    mode: int,
-    comparison_zone_system: dict,
+    mode: nd.Mode,
+    comparison_zone_system: dict[str, str],
     base_year: int,
 ):
     """Produce TEMPro comparisons for PA matrices.
@@ -346,7 +347,7 @@ def pa_matrix_comparison(
     # Read base matrices
     if ntem_imports.mode != 3:
         raise NotImplementedError("PA matrix comparison only works for mode 3")
-    segmentation = {"hb": f"hb_p_m_{mode}", "nhb": f"nhb_p_m_{mode}"}
+    segmentation = {"hb": f"hb_p_m_{mode.name.lower()}", "nhb": f"nhb_p_m_{mode.name.lower()}"}
     base_matrices = {}
     base_trip_ends = {}
     for nm, seg in segmentation.items():
@@ -356,7 +357,7 @@ def pa_matrix_comparison(
             base_matrices[nm],
             seg,
             "pa",
-            ntem_imports.model.get_name(),
+            ntem_imports.model.get_zoning_system().name,
             ntem_imports.mode,
             comparison_zone_system,
         )
@@ -375,7 +376,7 @@ def pa_matrix_comparison(
                 forecast_matrices[nm],
                 seg,
                 "pa",
-                ntem_imports.model_name,
+                ntem_imports.model.get_zoning_system().name,
                 ntem_imports.mode,
                 comparison_zone_system,
             )
@@ -400,7 +401,7 @@ def pa_matrix_comparison(
             matrix_comparison(
                 base_matrices,
                 forecast_matrices,
-                ntem_imports.model_name,
+                ntem_imports.model.get_zoning_system().name,
                 tempro_data,
                 comp_zone,
                 (base_year, yr),
