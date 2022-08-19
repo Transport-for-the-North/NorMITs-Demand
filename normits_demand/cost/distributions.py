@@ -40,7 +40,6 @@ class CostDistribution:
         band_trips: np.ndarray,
         cost_units: nd_core.CostUnits,
         band_mean_cost: np.ndarray = None,
-        sample_size: int = -1,
     ):
         """
         Parameters
@@ -60,12 +59,7 @@ class CostDistribution:
         band_mean_cost:
             Similar to `band_trips`. The mean cost in each band, as defined by
             `edges`. If left as None, this defaults to all -1 values.
-
-        sample_size:
-            The size of the sample used to create this TLD.
         """
-        # TODO(BT): Fully integrate the sample_size into csv/df IO
-
         # Set initial values
         if band_mean_cost is None:
             band_mean_cost = np.full(band_trips.shape, -1)
@@ -74,17 +68,12 @@ class CostDistribution:
         self._cost_units = cost_units
 
         self.edges = edges
-        self.sample_size = int(sample_size)
+        self._sample_size = band_trips.sum()
         self.min_bounds = edges[:-1]
         self.max_bounds = edges[1:]
         self.mid_bounds = (self.min_bounds + self.max_bounds) / 2
         self.band_means = band_mean_cost
         self.band_trips = band_trips
-
-        if np.sum(band_trips) > 0:
-            self.band_shares = band_trips / np.sum(band_trips)
-        else:
-            self.band_shares = np.zeros_like(band_trips)
 
         # Band means to use when plotting - can't be -1
         self._plot_band_means = np.where(
@@ -107,12 +96,8 @@ class CostDistribution:
         """Check if this CostDistribution is empty
 
         A CostDistribution is empty when `self.band_trips` and
-        `self.band_means` are set to arrays of 0s, and `self.sample_size is
-        set to -1.`
+        `self.band_means` are set to arrays of 0s
         """
-        if self.sample_size != -1:
-            return False
-
         # Check if arrays of 0s
         for array in (self.band_trips, self.band_means):
             if (array == 0).sum() != len(array):
@@ -130,6 +115,25 @@ class CostDistribution:
         """Sets the new cost units and updates column names"""
         self._cost_units = new_units
         self._set_col_names()
+
+    @property
+    def sample_size(self) -> float:
+        """The number of trips in this distribution"""
+        return self._sample_size
+
+    @sample_size.setter
+    def sample_size(self, new_sample_size: float) -> None:
+        """Updates the sample size and adjusts self.band_trips proportionally"""
+        adj_factor = new_sample_size / self.sample_size
+        self.band_trips *= adj_factor
+        self._sample_size = new_sample_size
+
+    @property
+    def band_shares(self) -> np.ndarray:
+        """An array of band shares that corresponds to self.edges"""
+        if self.sample_size > 0:
+            return self.band_trips / self.sample_size
+        return np.zeros_like(self.band_trips)
 
     @staticmethod
     def _get_col_names(cost_units: nd_core.CostUnits) -> tuple[str, str, str, str, str, str]:
@@ -267,7 +271,7 @@ class CostDistribution:
 
         # Build the output label
         if self.sample_size > 0:
-            label = f"{label} | n={self.sample_size}"
+            label = f"{label} | n={self.sample_size:.2f}"
 
         # Gather plotting data
         plot_data = cost_utils.PlotData(
@@ -314,7 +318,6 @@ class CostDistribution:
         max_bounds_col: str = None,
         trips_col: str = None,
         mean_col: str = None,
-        sample_size: int = -1,
     ) -> CostDistribution:
         """Reads in data from a csv to build a CostDistribution
 
@@ -343,10 +346,6 @@ class CostDistribution:
         mean_col:
             The name of the column containing the mean distance of the trips
             in each band
-
-        sample_size:
-            The size of the sample used to create this TLD. Will be passed
-            directly to the class constructor.
 
         Returns
         -------
@@ -388,7 +387,6 @@ class CostDistribution:
             band_trips=band_trips,
             cost_units=cost_units,
             band_mean_cost=band_mean_cost,
-            sample_size=sample_size,
         )
 
     @staticmethod
@@ -397,8 +395,7 @@ class CostDistribution:
 
         When `self.is_empty()` is checks, this class will return True.
         A CostDistribution is empty when `self.band_trips` and
-        `self.band_means` are set to arrays of 0s, and `self.sample_size is
-        set to -1.`
+        `self.band_means` are set to arrays of 0s.
 
         Parameters
         ----------
@@ -419,7 +416,6 @@ class CostDistribution:
             band_trips=np.zeros((len(edges) - 1, )),
             cost_units=cost_units,
             band_mean_cost=np.zeros((len(edges) - 1, )),
-            sample_size=-1,
         )
 
     @staticmethod

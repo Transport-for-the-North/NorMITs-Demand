@@ -1,7 +1,7 @@
+# Required libraries
 numpy>=1.19.0
 pandas>=1.4.0
 tqdm>=4.50.2
-setuptools>=49.2.0
 pytest>=6.2.1
 openpyxl>=3.0.5
 pyodbc>=4.0.30
@@ -11,3 +11,15 @@ matplotlib>=3.4.3
 seaborn>=0.11.2
 pydantic>=1.9
 strictyaml>=1.6
+
+# Packaging controls
+setuptools>=61.2.0
+versioneer>=0.22
+packaging>=21.3
+
+# package linters
+black>=22.6.0
+mypy>=0.910
+mypy_extensions>=0.4.3
+pydocstyle>=6.1.1
+pylint>=2.14.5

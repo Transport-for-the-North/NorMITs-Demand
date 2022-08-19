@@ -18,7 +18,6 @@ from typing import Any
 
 # Local imports
 import normits_demand as nd
-from normits_demand import version
 
 
 def get_package_logger_name():
@@ -115,7 +114,7 @@ def get_logger(logger_name: str,
         write_instantiate_message(logger, instantiate_msg)
 
     if log_version:
-        logger.info(version.version_info())
+        logger.info("NorMITs-Demand v%s", nd.__version__)
 
     return logger
 
@@ -177,7 +176,7 @@ def get_custom_logger(logger_name: str,
         write_instantiate_message(logger, instantiate_msg)
 
     if log_version:
-        logger.info(version.version_info())
+        logger.info("NorMITs-Demand v%s", nd.__version__)
 
     return logger
 

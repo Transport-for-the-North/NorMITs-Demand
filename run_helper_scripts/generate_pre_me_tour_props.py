@@ -36,12 +36,12 @@ from normits_demand.utils import file_ops
 
 # GLOBAL VARIABLES
 # TODO(BT): Make these command line arguments
-MODE = nd_core.Mode.CAR
+MODE = nd_core.Mode.BUS
 ZONING_NAME = "noham"
 YEAR = 2018
 IMPORT_DRIVE = "I:/"
-EXPORT_HOME = r"E:\temp\tour props"
-# EXPORT_PATH = r"I:\NorMITs Demand\import\modal"
+# EXPORT_HOME = r"E:\temp\tour props"
+EXPORT_HOME = r"I:\NorMITs Demand\import\modal"
 NOTEM_SCENARIO = nd_core.Scenario.SC01_JAM
 
 NOTEM_ITER = "9.10"

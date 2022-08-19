@@ -39,7 +39,8 @@ TRAM_EXPORT_HOME = r"I:\NorMITs Demand\Tram"
 # Distribution running args
 BASE_YEAR = 2018
 SCENARIO = nd.Scenario.SC01_JAM
-DM_ITERATION_NAME = '9.10.1'
+TARGET_TLD_VERSION = 'v2.1'
+DM_ITERATION_NAME = '9.10.3'
 DM_IMPORT_HOME = r"I:\NorMITs Demand\import"
 DM_EXPORT_HOME = r"E:\NorMITs Demand\Distribution Model"
 
@@ -49,36 +50,34 @@ REDUCE_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
 HB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output'
 NHB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
 
-# TODO(BT): KLUDGE. INPUTS SHOULDN'T NEED THIS!!
-TARGET_TLD_MULTIPLIER = constants.MILES_TO_KM
-
 # TODO(BT): If NHB segmentation isn't with tp, allow providing of NHB tp
 #  splits so tp split OD can be output still
 
 
 def main():
-    mode = nd.Mode.CAR
+    # mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
-    # mode = nd.Mode.TRAIN
+    mode = nd.Mode.TRAIN
     # mode = nd.Mode.TRAM
 
     # Running options
-    use_tram = True
+    use_tram = False
     memory_optimised_multi_area_grav = True
 
     calibrate_params = True
 
     # Choose what to run
     run_hb = True
-    run_nhb = False
+    run_nhb = True
 
     run_all = False
     run_upper_model = False
-    run_lower_model = True
+    run_lower_model = False
     run_pa_matrix_reports = False
     run_pa_to_od = False
+    run_pa_split_by_tp = False
     run_od_matrix_reports = False
-    compile_to_assignment = False
+    compile_to_assignment = True
 
     if mode == nd.Mode.CAR:
         # Define zoning systems
@@ -104,7 +103,6 @@ def main():
         nhb_seg_name = 'p_m_tp'
 
         # Define target tld dirs
-        target_tld_version = 'v1.1'
         geo_constraint_type = 'trip_OD'
 
         upper_calibration_area = 'gb'
@@ -187,7 +185,6 @@ def main():
         nhb_seg_name = 'p_m_tp'
 
         # Define target tld dirs
-        target_tld_version = 'v1.1'
         geo_constraint_type = 'trip_OD'
 
         # Define kwargs for the distribution tiers
@@ -262,19 +259,18 @@ def main():
         nhb_running_seg = nd.get_segmentation_level('dimo_nhb_p_m_ca_tp_rail')
 
         # Define segments
-        hb_seg_name = 'p_m_ca'
-        nhb_seg_name = 'p_m_ca_tp'
+        hb_seg_name = "p_m_ca"
+        nhb_seg_name = "p_m_ca_tp"
 
         # Define target tld dirs
-        target_tld_version = 'v1.1'
         geo_constraint_type = 'trip_OD'
 
         # Define kwargs for the distribution tiers
         upper_calibration_area = 'gb'
         upper_calibration_bands = 'dm_gb_rail_bands'
         upper_target_tld_dir = os.path.join(geo_constraint_type, upper_calibration_bands)
-        upper_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m_ca')
-        upper_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_ca_tp')
+        upper_hb_target_tld_dir = os.path.join(upper_target_tld_dir, hb_running_seg.name)
+        upper_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, nhb_running_seg.name)
         upper_model_method = nd.DistributionMethod.GRAVITY
         upper_calibration_zones_fname = None
         upper_calibration_areas = upper_calibration_area
@@ -283,8 +279,8 @@ def main():
         lower_calibration_area = 'north_and_mids'
         lower_calibration_bands = 'dm_north_rail_bands'
         lower_target_tld_dir = os.path.join(geo_constraint_type, lower_calibration_bands)
-        lower_hb_target_tld_dir = os.path.join(lower_target_tld_dir, 'hb_p_m_ca')
-        lower_nhb_target_tld_dir = os.path.join(lower_target_tld_dir, 'nhb_p_m_ca_tp')
+        lower_hb_target_tld_dir = os.path.join(lower_target_tld_dir, hb_running_seg.name)
+        lower_nhb_target_tld_dir = os.path.join(lower_target_tld_dir, nhb_running_seg.name)
         lower_model_method = nd.DistributionMethod.GRAVITY
         lower_calibration_zones_fname = None
         lower_calibration_areas = lower_calibration_area
@@ -345,7 +341,6 @@ def main():
         nhb_seg_name = 'p_m_tp'
 
         # Define target tld dirs
-        target_tld_version = 'v1.1'
         geo_constraint_type = 'trip_OD'
 
         # Define kwargs for the distribution tiers
@@ -408,12 +403,13 @@ def main():
 
     # ## DEAL WITH PROCESS COUNT NEEDS ## #
     process_count = -2
+    # process_count = 0
     upper_model_process_count = process_count
     lower_model_process_count = process_count
 
     # Need to limit process count for memory usage if MSOA
     if upper_zoning_system.name == 'msoa':
-        max_process_count = 8
+        max_process_count = 7
 
         if os.cpu_count() > 10 and (process_count > 8 or process_count < 0):
             upper_model_process_count = max_process_count
@@ -462,7 +458,7 @@ def main():
         'year': BASE_YEAR,
         'import_home': DM_IMPORT_HOME,
         'running_mode': mode,
-        'target_tld_version': target_tld_version,
+        'target_tld_version': TARGET_TLD_VERSION,
         'upper_zoning_system': upper_zoning_system,
         'upper_running_zones': upper_zoning_system.unique_zones,
         'upper_model_method': upper_model_method,
@@ -481,7 +477,6 @@ def main():
         'tour_props_zoning_name': tour_props_zoning_name,
         'init_params_cols': gm_cost_function.parameter_names,
         'intrazonal_cost_infill': intrazonal_cost_infill,
-        'target_tld_min_max_multiplier': TARGET_TLD_MULTIPLIER,
     }
 
     distributor_kwargs = {'cost_name': 'Distance', 'cost_units': 'KM'}
@@ -556,6 +551,7 @@ def main():
             run_lower_model=run_lower_model,
             run_pa_matrix_reports=run_pa_matrix_reports,
             run_pa_to_od=run_pa_to_od,
+            run_pa_split_by_tp=run_pa_split_by_tp,
             run_od_matrix_reports=run_od_matrix_reports,
         )
 
@@ -598,6 +594,7 @@ def main():
             run_lower_model=run_lower_model,
             run_pa_matrix_reports=run_pa_matrix_reports,
             run_pa_to_od=run_pa_to_od,
+            run_pa_split_by_tp=run_pa_split_by_tp,
             run_od_matrix_reports=run_od_matrix_reports,
         )
 

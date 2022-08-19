@@ -78,6 +78,8 @@ alternate inputs/outputs could be used:
 This section will be updated on more detail once we've produced a front-end
 to all our models, making the interaction between each much simpler!
 
+Information on how to install Python and the required packages is given in
+[Python environment instructions](testing_and_environment.md).
 
 ## [Required Data](#contents)
 To get NorMITs Demand running numerous data inputs are required.

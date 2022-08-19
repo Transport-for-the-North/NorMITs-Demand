@@ -37,8 +37,9 @@ import tqdm
 import normits_demand as nd
 
 from normits_demand import core as nd_core
-from normits_demand import constants
+from normits_demand import logging as nd_log
 from normits_demand.cost import utils as cost_utils
+from normits_demand.cost import distributions as cost_dist
 from normits_demand.utils import file_ops
 from normits_demand.utils import math_utils
 from normits_demand.utils import translation
@@ -46,6 +47,10 @@ from normits_demand.utils import general as du
 from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand import converters
+
+
+LOG = nd_log.get_logger(__name__)
+
 
 # ## DEFINE COLLECTIONS OF OUTPUT PATHS ## #
 # Exports
@@ -55,6 +60,7 @@ _DM_ExportPaths_NT = collections.namedtuple(
         'home',
         'upper_external_pa',
         'full_pa_dir',
+        'full_tp_pa_dir',
         'compiled_pa_dir',
         'full_od_dir',
         'combined_od_dir',
@@ -615,6 +621,10 @@ class DMArgumentBuilderBase(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def build_pa_split_by_tp_arguments(self) -> Dict[str, Any]:
+        pass
+
+    @abc.abstractmethod
     def build_pa_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
         pass
 
@@ -678,7 +688,6 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                  lower_calibration_zones_fname: Optional[str] = None,
                  lower_calibration_naming: Optional[Dict[Any, str]] = None,
                  intrazonal_cost_infill: Optional[float] = None,
-                 target_tld_min_max_multiplier: float = 1,
                  ):
         # Check paths exist
         file_ops.check_path_exists(import_home)
@@ -712,7 +721,6 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         self.upper_target_tld_dir = upper_target_tld_dir
         self.lower_target_tld_dir = lower_target_tld_dir
         self.target_tld_version = target_tld_version
-        self.target_tld_min_max_multiplier = target_tld_min_max_multiplier
 
         self.init_params_cols = init_params_cols
 
@@ -813,20 +821,22 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         )
 
         fname = self.running_segmentation.generate_file_name(
-            trip_origin=self.trip_origin.value,
-            file_desc="tlb",
+            file_desc="cost_distribution",
             segment_params=segment_params,
             csv=True,
         )
         path = os.path.join(tcd_dir, fname)
 
-        # Convert to expected format
-        target_cost_distribution = file_ops.read_df(path)
-
-        rename = {'lower': 'min', 'upper': 'max'}
-        target_cost_distribution = target_cost_distribution.rename(columns=rename)
-        target_cost_distribution['min'] *= self.target_tld_min_max_multiplier
-        target_cost_distribution['max'] *= self.target_tld_min_max_multiplier
+        # BACKLOG(BT): Update DiMo to accept TLD Classes and not Pandas DataFrame
+        # Read in and convert
+        tcd = cost_dist.CostDistribution.from_csv(path=path, cost_units=nd_core.CostUnits.KM)
+        rename = {
+            tcd.min_bounds_col: 'min',
+            tcd.max_bounds_col: 'max',
+            tcd.mean_col: "ave_km",
+            tcd.shares_col: "band_share",
+        }
+        target_cost_distribution = tcd.to_df().rename(columns=rename)
 
         return target_cost_distribution
 
@@ -844,6 +854,13 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
                 "Expecting only 1 row."
                 % (len(seg_init_params), seg_name)
             )
+
+        if len(seg_init_params) == 0:
+            LOG.warning(
+                "No default parameters found for `segment_params` %s. "
+                % segment_params
+            )
+            return None
 
         # Make sure the columns we need do exist
         seg_init_params = pd_utils.reindex_cols(
@@ -903,10 +920,13 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         # Generate by segment kwargs
         cost_matrices = dict()
         desc = "Reading in cost"
+        cost_matrix = None
         for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc):
             # Get the needed kwargs
             segment_name = self.running_segmentation.get_segment_name(segment_params)
-            cost_matrix = self._get_cost(segment_params, zoning_system)
+            if cost_matrix is None:
+                cost_matrix = self._get_cost(segment_params, zoning_system)
+            # cost_matrix = self._get_cost(segment_params, zoning_system)
 
             # Add to dictionary
             cost_matrices[segment_name] = cost_matrix
@@ -985,9 +1005,8 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
             )
         else:
             raise NotImplementedError(
-                "No function exists to build the further_kwargs for "
-                "DistributionMethod %s"
-                % method.value
+                f"No function exists to build the further_kwargs for "
+                f"DistributionMethod {method.value}"
             )
 
         return further_kwargs
@@ -1109,11 +1128,15 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
 
         return final_kwargs
 
-    def build_pa_to_od_arguments(self) -> Dict[str, Any]:
+    def _build_fh_th_factor_args(
+        self,
+        trip_origin: nd_core.TripOrigin,
+    ) -> tuple[pathlib.Path, str, str]:
+        """Builds the path and fnames for the from/to-home factors"""
         # Generate the template filenames for the factors
         template_fname = self.running_segmentation.generate_template_file_name(
             file_desc="{desc}",
-            trip_origin=self.trip_origin.value,
+            trip_origin=trip_origin.value,
             year=str(self.year),
             ftype=".pkl",
         )
@@ -1134,13 +1157,26 @@ class DistributionModelArgumentBuilder(DMArgumentBuilderBase):
         )
 
         # Build the dictionary of arguments
+        return (
+            pathlib.Path(fh_th_factors_dir),
+            template_fname(desc="fh_factors"),
+            template_fname(desc="th_factors"),
+        )
+
+    def build_pa_to_od_arguments(self) -> Dict[str, Any]:
+        path, fh_template, th_template = self._build_fh_th_factor_args(self.trip_origin)
         return {
-            'factor_dir': pathlib.Path(fh_th_factors_dir),
-            'template_fh_factor_name': template_fname(desc="fh_factors"),
-            'template_th_factor_name': template_fname(desc="th_factors"),
+            'factor_dir': path,
+            'template_fh_factor_name': fh_template,
+            'template_th_factor_name': th_template,
         }
 
+    def build_pa_split_by_tp_arguments(self) -> Dict[str, Any]:
+        path, fh_template, _ = self._build_fh_th_factor_args(self.trip_origin)
+        return {'factor_dir': path, 'template_factor_name': fh_template}
+
     def get_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
+        """Retrieves all the cost matrices at `zoning_system` """
         return self._build_cost_matrices(zoning_system)
 
     def build_pa_report_arguments(self, zoning_system: nd.ZoningSystem) -> Dict[str, np.ndarray]:
@@ -1238,6 +1274,7 @@ class DistributionModelExportPaths:
     # Export dir names
     _upper_external_pa_out_dir = 'Upper External PA Matrices'
     _full_pa_out_dir = 'Full PA Matrices'
+    _full_tp_pa_dir = 'Full TP PA Matrices'
     _compiled_pa_out_dir = 'Compiled PA Matrices'
     _full_od_out_dir = 'Full OD Matrices'
     _combined_od_out_dir = 'Combined OD Matrices'
@@ -1333,6 +1370,7 @@ class DistributionModelExportPaths:
         # Build the matrix output path
         upper_external_pa = os.path.join(export_home, self._upper_external_pa_out_dir)
         full_pa_dir = os.path.join(export_home, self._full_pa_out_dir)
+        full_tp_pa_dir = os.path.join(export_home, self._full_tp_pa_dir)
         compiled_pa_dir = os.path.join(export_home, self._compiled_pa_out_dir)
         full_od_dir = os.path.join(export_home, self._full_od_out_dir)
         compiled_od_dir = os.path.join(export_home, self._compiled_od_out_dir)
@@ -1346,6 +1384,7 @@ class DistributionModelExportPaths:
             home=export_home,
             upper_external_pa=upper_external_pa,
             full_pa_dir=full_pa_dir,
+            full_tp_pa_dir=full_tp_pa_dir,
             compiled_pa_dir=compiled_pa_dir,
             full_od_dir=full_od_dir,
             combined_od_dir=combined_od_dir,
@@ -1357,6 +1396,7 @@ class DistributionModelExportPaths:
         dir_paths = [
             upper_external_pa,
             full_pa_dir,
+            full_tp_pa_dir,
             compiled_pa_dir,
             full_od_dir,
             combined_od_dir,

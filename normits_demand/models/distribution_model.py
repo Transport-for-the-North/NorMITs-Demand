@@ -184,6 +184,7 @@ class DistributionModel(DistributionModelExportPaths):
             run_lower_model: bool = False,
             run_pa_matrix_reports: bool = False,
             run_pa_to_od: bool = False,
+            run_pa_split_by_tp: bool = False,
             run_od_matrix_reports: bool = False,
             ) -> None:
         """Runs the components of Distribution Model
@@ -227,6 +228,11 @@ class DistributionModel(DistributionModelExportPaths):
             Whether to run the PA to OD conversion process or not. This step
             depends on the external model and gravity model already being
             run - as these steps produce the PA matrices to convert.
+
+        run_pa_split_by_tp:
+            Whether to run the PA conversion to tp split matrices or not.
+            This step depends on the external model and gravity model already
+            being run - as these steps produce the PA matrices to convert.
 
         run_od_matrix_reports:
             Whether to run the matrix reports for full OD matrices or not.
@@ -279,6 +285,9 @@ class DistributionModel(DistributionModelExportPaths):
 
         if run_pa_to_od:
             self.run_pa_to_od()
+
+        if run_pa_split_by_tp:
+            self.run_pa_split_by_tp()
 
         if run_od_matrix_reports:
             self.run_od_matrix_reports()
@@ -409,17 +418,65 @@ class DistributionModel(DistributionModelExportPaths):
                 od_to_fname_template=template_fn(matrix_format=self._od_to_matrix_desc),
             )
 
+    def _build_filenames(
+        self,
+        file_desc: str,
+        trip_origin: str = None,
+        year: int = None,
+        dir_path: pathlib.Path = None,
+        **file_kwargs,
+    ) -> List[pathlib.Path]:
+        """Builds a list of filenames using class attributes as defaults"""
+        # Set defaults
+        trip_origin = self.trip_origin if trip_origin is None else trip_origin
+        year = str(self.year) if year is None else str(year)
+
+        # Attach default args to kwargs
+        file_kwargs = dict(file_kwargs, trip_origin=trip_origin, year=year, file_desc=file_desc,)
+
+        # Build the list of filenames
+        paths = list()
+        for segment_params in self.running_segmentation:
+            out_path = pathlib.Path(self.running_segmentation.generate_file_name(
+                segment_params=segment_params,
+                **file_kwargs,
+            ))
+            if dir_path is not None:
+                out_path = dir_path / out_path
+
+            paths.append(pathlib.Path(out_path))
+
+        return paths
+
     def _maybe_recombine_pa_matrices(self) -> None:
         """Combine pa matrices if it hasn't been done yet"""
-        # Build the I/O paths
-        in_paths = [
-            pathlib.Path(self.lower.export_paths.matrix_dir),
-            pathlib.Path(self.export_paths.upper_external_pa),
+        # Init
+        file_kwargs = {
+            "file_desc": self._pa_matrix_desc,
+            "compressed": True,
+        }
+
+        # Build the input paths
+        ext_suffix = self.arg_builder._external_suffix
+        import_dirs = [
+            (pathlib.Path(self.lower.export_paths.matrix_dir), None),
+            (pathlib.Path(self.export_paths.upper_external_pa), ext_suffix),
         ]
-        out_path = pathlib.Path(self.export_paths.full_pa_dir)
+        in_paths = list()
+        for dir_path, suffix in import_dirs:
+            fname_paths = self._build_filenames(
+                dir_path=dir_path,
+                suffix=suffix,
+                **file_kwargs
+            )
+            in_paths += fname_paths
+
+        # Build the output paths
+        out_dir = pathlib.Path(self.export_paths.full_pa_dir)
+        out_paths = self._build_filenames(dir_path=out_dir, **file_kwargs)
 
         # Only recombine if cache is older than original files
-        if file_ops.is_old_cache(original=in_paths, cache=out_path):
+        if file_ops.is_old_cache(original=in_paths, cache=out_paths):
             self._recombine_pa_matrices()
 
     def _recombine_pa_matrices(self):
@@ -439,6 +496,7 @@ class DistributionModel(DistributionModelExportPaths):
                 trip_origin=self.trip_origin,
                 year=str(self.year),
                 file_desc=self._pa_matrix_desc,
+                rounding=constants.DEFAULT_ROUNDING,
             )
         else:
             self._logger.info("Copying over Upper Tier Matrices")
@@ -453,9 +511,9 @@ class DistributionModel(DistributionModelExportPaths):
             )
 
     def _maybe_translate_matrices_for_compile(self,
-                                              matrices_path: nd.PathLike,
+                                              matrices_path: pathlib.Path,
                                               matrices_desc: str,
-                                              ) -> nd.PathLike:
+                                              ) -> pathlib.Path:
         """Translates the matrices for compilation if they need it
 
         Returns the path to the translated matrices if translated, otherwise
@@ -477,6 +535,12 @@ class DistributionModel(DistributionModelExportPaths):
         """
         # Init
         translation_weight_col = 'weight'
+        filename_kwargs = {
+            "trip_origin": self.trip_origin,
+            "year": str(self.year),
+            "file_desc": matrices_desc,
+            "compressed": True,
+        }
 
         # Figure out what the current zoning is
         if self.lower_model_zoning is not None:
@@ -488,8 +552,17 @@ class DistributionModel(DistributionModelExportPaths):
             return matrices_path
 
         # If here, a translation needs doing
-        out_dir = os.path.join(matrices_path, self._translated_dir_name)
+        out_dir = matrices_path / self._translated_dir_name
         file_ops.create_folder(out_dir)
+
+        # Check if translation needs doing
+        fnames = self._build_filenames(**filename_kwargs)
+        in_paths = [matrices_path / x for x in fnames]
+        out_paths = [out_dir / x for x in fnames]
+
+        # Just return path if cache is younger than original files
+        if not file_ops.is_old_cache(original=in_paths, cache=out_paths):
+            return out_dir
 
         # Get the translations
         pop_trans, emp_trans = translation.get_long_pop_emp_translations(
@@ -503,11 +576,8 @@ class DistributionModel(DistributionModelExportPaths):
         for segment_params in tqdm.tqdm(self.running_segmentation, desc=desc, total=total):
             # Read in DF
             fname = self.running_segmentation.generate_file_name(
-                trip_origin=self.trip_origin,
-                year=str(self.year),
-                file_desc=matrices_desc,
                 segment_params=segment_params,
-                compressed=True,
+                **filename_kwargs
             )
             path = os.path.join(matrices_path, fname)
             df = file_ops.read_df(path, index_col=0)
@@ -533,10 +603,17 @@ class DistributionModel(DistributionModelExportPaths):
         return out_dir
 
     def run_pa_to_od(self):
+        """Converts the generated PA matrices to OD"""
         # TODO(BT): Make sure the upper and lower matrices exist!
 
         # ## GET THE FULL PA MATRICES ## #
         self._maybe_recombine_pa_matrices()
+
+        # Translate matrices if needed
+        compile_in_path = self._maybe_translate_matrices_for_compile(
+            matrices_path=pathlib.Path(self.export_paths.full_pa_dir),
+            matrices_desc=self._pa_matrix_desc,
+        )
 
         # ## CONVERT HB PA TO OD ## #
         if self.trip_origin == 'hb':
@@ -561,7 +638,7 @@ class DistributionModel(DistributionModelExportPaths):
 
             # Convert the matrices
             pa_to_od.build_od_from_fh_th_factors(
-                pa_import_dir=pathlib.Path(self.export_paths.full_pa_dir),
+                pa_import_dir=pathlib.Path(compile_in_path),
                 od_export_dir=pathlib.Path(self.export_paths.full_od_dir),
                 segmentation=self.running_segmentation,
                 template_pa_name=template_pa_name,
@@ -576,7 +653,7 @@ class DistributionModel(DistributionModelExportPaths):
             # they're already OD anyway, just need a little name change
             self._logger.info("Copying NHB PA matrices to OD")
             matrix_processing.copy_nhb_matrices(
-                import_dir=self.export_paths.full_pa_dir,
+                import_dir=compile_in_path,
                 export_dir=self.export_paths.full_od_dir,
                 replace_pa_with_od=True,
                 pa_matrix_desc=self._pa_matrix_desc,
@@ -587,6 +664,50 @@ class DistributionModel(DistributionModelExportPaths):
             raise ValueError(
                 "Don't know how to compile PA matrices to OD for "
                 f"trip origin '{self.trip_origin}'."
+            )
+
+    def run_pa_split_by_tp(self) -> None:
+        """Splits the 24hr PA matrices by time periods"""
+        # TODO(BT): Make sure the upper and lower matrices exist!
+
+        # ## GET THE FULL PA MATRICES ## #
+        self._maybe_recombine_pa_matrices()
+
+        # Translate matrices if needed
+        compile_in_path = self._maybe_translate_matrices_for_compile(
+            matrices_path=pathlib.Path(self.export_paths.full_pa_dir),
+            matrices_desc=self._pa_matrix_desc,
+        )
+
+        # Generate file names
+        template_pa_name = self.running_segmentation.generate_template_file_name(
+            file_desc=self._pa_matrix_desc,
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            compressed=True,
+        )
+
+        if not self.running_segmentation.has_time_period_segments():
+            self._logger.info("Splitting PA matrices by time period")
+            kwargs = self.arg_builder.build_pa_split_by_tp_arguments()
+
+            pa_to_od.factors_split_by_tp(
+                import_dir=pathlib.Path(compile_in_path),
+                export_dir=pathlib.Path(self.export_paths.full_tp_pa_dir),
+                segmentation=self.running_segmentation,
+                template_in_name=template_pa_name,
+                template_out_name=template_pa_name,
+                process_count=self.process_count,
+                **kwargs
+            )
+        else:
+            self._logger.info("Matrices already split by time period. Copying over.")
+            file_ops.copy_template_segment_files(
+                src_dir=pathlib.Path(compile_in_path),
+                dst_dir=pathlib.Path(self.export_paths.full_tp_pa_dir),
+                segmentation=self.running_segmentation,
+                input_template_filename=template_pa_name,
+                process_count=self.process_count,
             )
 
     def run_od_matrix_reports(self):
@@ -687,24 +808,25 @@ class DistributionModel(DistributionModelExportPaths):
             )
 
         elif self.running_mode == nd.Mode.TRAIN:
-            self._maybe_recombine_pa_matrices()
-
-            # Translate matrices if needed
-            compile_in_path = self._maybe_translate_matrices_for_compile(
-                matrices_path=self.export_paths.full_pa_dir,
-                matrices_desc=self._pa_matrix_desc,
-            )
+            # Need TP split PA, and OD matrices for this to work
+            # self.run_pa_split_by_tp()
+            # self.run_pa_to_od()
 
             self._logger.info("Compiling NoRMS VDM Format")
             matrix_processing.compile_norms_to_vdm(
-                mat_import=compile_in_path,
-                mat_export=self.export_paths.compiled_pa_dir,
+                mat_pa_import=self.export_paths.full_tp_pa_dir,
+                mat_od_import=self.export_paths.full_od_dir,
+                mat_export=self.export_paths.compiled_pa_dir,  # TODO(BT): Rename to NoRMS
                 params_export=self.export_paths.compiled_pa_dir,
                 year=self.year,
                 m_needed=m_needed,
                 internal_zones=self.output_zoning.internal_zones.tolist(),
                 external_zones=self.output_zoning.external_zones.tolist(),
-                matrix_format=self._pa_matrix_desc,
+                pa_matrix_format=self._pa_matrix_desc,
+                od_to_matrix_format=self._od_to_matrix_desc,
+                od_from_matrix_format=self._od_from_matrix_desc,
+                nhb_od_matrix_format=self._od_matrix_desc,
+                tp_filter=[1, 2, 3, 4],         # TODO(BT): Parameterise this somehow
             )
 
         else:
