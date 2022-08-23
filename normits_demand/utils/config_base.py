@@ -109,6 +109,10 @@ class BaseConfig(pydantic.BaseModel):
         # Use pydantic to convert all types to json compatiable,
         # then convert this back to a dictionary to dump to YAML
         json_dict = json.loads(self.json())
+
+        # Strictyaml cannot handle None so excluding from output
+        json_dict = {k: v for k, v in json_dict.items() if v is not None}
+
         return strictyaml.as_document(json_dict).as_yaml()
 
     def save_yaml(self, path: pathlib.Path) -> None:

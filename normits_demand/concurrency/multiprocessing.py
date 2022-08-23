@@ -67,6 +67,7 @@ def create_kill_pool_fn(
             )
         else:
             print("Got the following exception while killing process:\n")
+
         if process_error is not None:
             traceback.print_exception(
                 type(process_error),
@@ -75,6 +76,7 @@ def create_kill_pool_fn(
             )
         else:
             print("Process error is None.")
+
         if process_callback:
             print("-" * 20, " End of process error. ", "-" * 20, "\n")
 

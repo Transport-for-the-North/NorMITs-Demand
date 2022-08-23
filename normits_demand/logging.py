@@ -309,9 +309,11 @@ def capture_warnings(
     ----------
     stream_handler : bool, default True
         Add stream handler to warnings logger.
+
     stream_handler_args : Dict[str, Any], optional
         Custom arguments for the stream handler,
         passed to `get_console_handler`.
+
     file_handler_args : Dict[str, Any], optional
         Custom arguments for the file handler,
         passed to `get_file_handler`.
