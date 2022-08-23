@@ -19,8 +19,12 @@ there.
 
 Below, a brief summary of patches made since the previous version can be found.
 
-### V0.5.2
+### V0.5.3
 - Tools
-  - None
+  - Traveller Segment Tool
+    - Front end adapted to optionally pick up weekday instead of weekly matrices
+    - Output naming aligned with rest of framework
+    - Front end run script finalised
+    - Added summary reports
 - Bug Fixes
   - None
