@@ -5,7 +5,7 @@
 # Standard imports
 import dataclasses
 from pathlib import Path
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Optional, Union
 
 # Third party imports
 import numpy as np
@@ -862,7 +862,12 @@ def compile_highway(
     return compiled_od_path
 
 
-def get_tempro_data(data_path: Path, years: list[int]) -> TEMProTripEnds:
+def get_tempro_data(
+    data_path: Path,
+    years: list[int],
+    ntem_version: Optional[float] = None,
+    ntem_scenario: Optional[str] = None,
+) -> TEMProTripEnds:
     """Read TEMPro data and convert it to DVectors.
 
     Parameters
@@ -873,6 +878,10 @@ def get_tempro_data(data_path: Path, years: list[int]) -> TEMProTripEnds:
     years : list[int]
         List of year columns to read from input file,
         should include base and forecast years.
+    ntem_version : float, optional
+        Version of NTEM data to use.
+    ntem_scenario : str, optional
+        NTEM scenario to use, required if `ntem_version` > 7.2.
 
     Returns
     -------
@@ -880,7 +889,9 @@ def get_tempro_data(data_path: Path, years: list[int]) -> TEMProTripEnds:
         TEMPro trip end data as DVectors stored in class
         attributes for base and all future years.
     """
-    tempro_data = TEMProData(data_path, years)
+    tempro_data = TEMProData(
+        data_path, years, ntem_version=ntem_version, ntem_scenario=ntem_scenario
+    )
     # Read data and convert to DVectors
     trip_ends = tempro_data.produce_dvectors()
     # Aggregate DVector to required segmentation

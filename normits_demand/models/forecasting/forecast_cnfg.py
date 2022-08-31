@@ -1,12 +1,12 @@
 """Config files and options for `run_forecast`."""
 import enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import pydantic
 
 import normits_demand as nd
-from normits_demand.utils import config_base
+from normits_demand.utils import config_base, ntem_extractor
 from normits_demand.core import enumerations as nd_enum
 
 
@@ -129,11 +129,58 @@ class TEMForecastParameters(ForecastParameters):
         )
 
 
+class NTEMDataParameters(pydantic.BaseModel):
+    """Parameters for defining what NTEM data to use."""
+
+    data_path: Path
+    version: float = ntem_extractor.TemproParser._ntem_version
+    scenario: Optional[str] = None
+
+    @pydantic.validator("scenario")
+    def _check_scenario(  # pylint: disable=no-self-argument
+        cls, value: Optional[str]
+    ) -> Optional[str]:
+        if value is not None and value not in ntem_extractor.TemproParser._scenario_list:
+            scenarios = ", ".join(f"'{s}'" for s in ntem_extractor.TemproParser._scenario_list)
+            raise ValueError(f"scenario should be one of {scenarios}, not '{value}'")
+
+        return value
+
+    @pydantic.root_validator(skip_on_failure=True)
+    def _check_version_and_scenario(  # pylint: disable=no-self-argument
+        cls, values: dict[str, Any]
+    ) -> dict[str, Any]:
+        if values["version"] > 7.2 and values.get("scenario", None) is None:
+            raise ValueError("scenario required for NTEM versions > 7.2")
+
+        return values
+
+
 class NTEMForecastParameters(ForecastParameters):
     """Class for storing parameters for NTEM forecasting."""
 
-    tempro_data_path: Path
-    export_path_fmt: str = "{export_folder}/{model_name}/NTEM/iter{iteration}"
+    ntem_parameters: NTEMDataParameters
+    export_path_fmt: str = "{export_folder}/{model_name}/NTEM/{ntem_version}/iter{iteration}"
+
+    @property
+    def export_path(self) -> Path:
+        """Read-only path to export folder.
+
+        This is built from the `export_path_fmt` with variables filled
+        in from the class attributes.
+        """
+        if self.ntem_parameters.version > 7.2:
+            version = f"v{self.ntem_parameters.version}-{self.ntem_parameters.scenario}"
+        else:
+            version = f"v{self.ntem_parameters.version}"
+
+        return Path(
+            self.export_path_fmt.format(
+                model_name=self.assignment_model.get_name(),
+                ntem_version=version,
+                **self.dict(),
+            )
+        )
 
 
 # TODO(MB) Function to create an example config file
