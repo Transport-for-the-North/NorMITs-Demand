@@ -15,7 +15,7 @@ import pandas as pd
 
 # Local imports
 import normits_demand
-from normits_demand.utils import file_ops, tempro_extractor
+from normits_demand.utils import file_ops, ntem_extractor
 from normits_demand import logging as nd_log
 from normits_demand import core as nd_core
 from normits_demand.utils import timing
@@ -115,7 +115,7 @@ class TEMProData:
 
     def _extract_tempro_database(self) -> pd.DataFrame:
         LOG.info("Extracting data from TEMPro databases in: %s", self.data_path)
-        parser = tempro_extractor.TemproParser(
+        parser = ntem_extractor.TemproParser(
             output_years=self._years, data_source=str(self.data_path)
         )
         return parser.get_trip_ends(

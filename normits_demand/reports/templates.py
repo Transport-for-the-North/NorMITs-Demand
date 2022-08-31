@@ -135,7 +135,7 @@ class DistributionModelMatrixBase(abc.ABC):
         return list()
 
     @property
-    def segment_cols(self) -> list[str]:
+    def segment_cols(self) -> List[str]:
         """A list of the segment columns in their output order"""
         return [
             self.p_col,
