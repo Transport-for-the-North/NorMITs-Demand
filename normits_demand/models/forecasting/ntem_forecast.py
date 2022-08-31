@@ -711,9 +711,6 @@ def convert_to_od(
     modes: List[int],
     purposes: Dict[str, List[int]],
     pa_to_od_factors: Dict[str, Path],
-    iteration: str,
-    time_periods: list[int],
-    matrix_import_path: Path,
     export_path: Path,
 ) -> None:
     """Converts PA matrices from folder to OD.
@@ -759,13 +756,10 @@ def convert_to_od(
         export_dir=od_folder,
         import_matrix_format="pa",
         export_matrix_format="od",
-        base_year=base_year,
+        tour_proportions_dir=pa_to_od_factors["post_me_tours"],
         future_years_needed=future_years,
         p_needed=purposes["nhb"],
         m_needed=modes,
-        iteration=iteration,
-        time_periods=time_periods,
-        matrix_import_path=matrix_import_path,
         export_path=export_path,
         compress_out=True,
     )

@@ -254,9 +254,6 @@ def tem_forecasting(
         params.assignment_model.get_mode().get_mode_values(),
         {"hb": params.hb_purposes_needed, "nhb": params.nhb_purposes_needed},
         params.pa_to_od_factors,
-        params.iteration,
-        params.time_periods,
-        params.matrix_import_path,
         params.export_path,
     )
 

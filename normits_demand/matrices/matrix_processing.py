@@ -77,8 +77,7 @@ def _aggregate(
     if in_fnames == list():
         raise nd.NormitsDemandError(
             "Couldn't find any matrices to aggregate up to create %s!\n"
-            "Looking in %s"
-            % (os.path.basename(export_path), import_dir)
+            "Looking in %s" % (os.path.basename(export_path), import_dir)
         )
 
     for fname in in_fnames:
@@ -399,7 +398,6 @@ def aggregate_matrices(
         fn=_aggregate_matrices_internal,
         kwargs=kwarg_list,
         process_count=process_count,
-
     )
 
 
@@ -1483,7 +1481,9 @@ def build_norms_vdm_compile_params(
 
         # Write outputs for this year
         output_fname = du.get_compile_params_name(
-            matrix_format=matrix_format, year=str(year), suffix=params_suffix,
+            matrix_format=matrix_format,
+            year=str(year),
+            suffix=params_suffix,
         )
         out_path = os.path.join(export_dir, output_fname)
         du.write_csv(output_headers, out_lines, out_path)
@@ -2071,13 +2071,13 @@ def match_distribution_params(
     Parameters
     ----------
     candidate_dist_params:
-        A dictionary of candidates to match to dist_params. The keys should 
+        A dictionary of candidates to match to dist_params. The keys should
         be the values to return if the value matches dist_params.
-    
+
     in_dist_params:
         A dictionary of distribution parameters to try and match to.
         THe keys are segmentation names, the values thier values.
-    
+
     match_seg_params:
         The segmentation parameters (keys of in_dist_params) that need to match
         in the candidate_dist_params to be called a match
@@ -2085,7 +2085,7 @@ def match_distribution_params(
     Returns
     -------
     matching_keys:
-        Returns a list of the keys in candidate_dist_params where the 
+        Returns a list of the keys in candidate_dist_params where the
         distribution parameters match to dist_params on match_seg_params.
 
     """
@@ -2144,61 +2144,21 @@ def _nhb_tp_split_via_factors_internal(
         file_ops.write_df(tp_mat, out_path)
 
 
-def calc_nhb_props(
-    year: int,
-    file_name: str,
-    purposes: list[int],
-    time_periods: list[int],
-    mode: int,
-    matrix_import_path: Path
-) -> dict:
-    """
-    Reads in nhb base year matrices by time period and purpose, and creates a nested dictionary of splitting factors
-    Args:
-        year (int): The year the data is for.  This will generally be the base year of the model
-        file_name (str): The common name of all matrices preceding 'yr...'
-        purposes (list[int]): List of purposes
-        time_periods (list[int]): List of time periods
-        mode (int): The mode being analysed in string form e.g. car
-        matrix_import_path (Path): The path to the folder the matrices are saved in
-    Returns:
-        dict: Dictionary of splitting factors {purpose:{time_period:factors dataframe}}
-    """
-    import_path = (
-        matrix_import_path
-    )
-    final = {}
-    for purp in purposes:
-        times = {}
-        for period in time_periods:
-            name = f'{file_name}_yr{year}_p{purp}_m{mode}_tp{period}'
-            matrix = pd.read_csv(
-                import_path / (name + ".csv.bz2"), index_col=0
-            )
-            times[name] = matrix
-        summed = reduce(lambda x, y: x + y, times.values())
-        final[f'{file_name}_yr{year}_p{purp}_m{mode}'] = {k: (v / summed).fillna(0) for k, v in times.items()}
-    return final
-
-
 def nhb_tp_split_via_factors(
     export_dir: nd.PathLike,
     import_matrix_format: str,
     export_matrix_format: str,
-    base_year: int,
+    tour_proportions_dir: nd.PathLike,
     future_years_needed: List[str],
     p_needed: List[int],
     m_needed: List[int],
-    iteration: str,
-    time_periods: list[int],
-    matrix_import_path: Path,
     export_path: Path,
     soc_needed: List[int] = None,
     ns_needed: List[int] = None,
     ca_needed: List[int] = None,
     process_count: int = consts.PROCESS_COUNT,
     compress_out: bool = False,
-    verbose: bool = True
+    verbose: bool = True,
 ) -> None:
     # TODO(BT): Write nhb_tp_split_via_factors() docs
     # Init
@@ -2213,15 +2173,11 @@ def nhb_tp_split_via_factors(
             )
 
     # Read in the splitting factors
-    du.print_w_toggle("Calculating the splitting factors...", verbose=verbose)
-    splitting_factors = calc_nhb_props(
-        year=base_year,
-        file_name="nhb_synthetic_pa",
-        purposes=p_needed,
-        mode=m_needed[0],
-        time_periods=time_periods,
-        matrix_import_path=matrix_import_path
-    )
+    du.print_w_toggle("Reading in the splitting factors...", verbose=verbose)
+    fname = consts.POSTME_TP_SPLIT_FACTORS_FNAME
+    factor_path = os.path.join(tour_proportions_dir, fname)
+    splitting_factors = file_ops.read_pickle(factor_path)
+
     # Figure out the level of segmentation we are working at
     check_key = list(splitting_factors.keys())[0]
     split_factor_seg_keys = list(du.fname_to_calib_params(check_key).keys())
@@ -2337,10 +2293,10 @@ def copy_nhb_matrices(
     ----------
     import_dir:
         Path to the directory where the nhb matrices to copy exist.
-    
+
     export_dir:
         Path to the directory to copy the nhb matrices to.
-    
+
     replace_pa_with_od:
         Whether to replace pa_matrix_desc in the matrix names with od_matrix_desc.
 
@@ -2674,13 +2630,19 @@ def load_matrix_from_disk(
 
     # Load in both matrices and stick together
     od_to_fname = du.calib_params_to_dist_name(
-        trip_origin=trip_origin, matrix_format="od_to", calib_params=segment_dict, csv=True,
+        trip_origin=trip_origin,
+        matrix_format="od_to",
+        calib_params=segment_dict,
+        csv=True,
     )
     od_to_path = os.path.join(mat_import_dir, od_to_fname)
     od_to = pd.read_csv(od_to_path, index_col=0)
 
     od_from_fname = du.calib_params_to_dist_name(
-        trip_origin=trip_origin, matrix_format="od_to", calib_params=segment_dict, csv=True,
+        trip_origin=trip_origin,
+        matrix_format="od_to",
+        calib_params=segment_dict,
+        csv=True,
     )
     od_from_path = os.path.join(mat_import_dir, od_from_fname)
     od_from = pd.read_csv(od_from_path, index_col=0)
@@ -2785,7 +2747,9 @@ def matrices_to_vector(
     for fname in mat_names:
         # Parse the matrix fname into a segment dict
         segment_dict = du.fname_to_calib_params(
-            fname=fname, get_trip_origin=True, get_matrix_format=True,
+            fname=fname,
+            get_trip_origin=True,
+            get_matrix_format=True,
         )
 
         mat_year = str(segment_dict["yr"])
@@ -3194,7 +3158,9 @@ def compile_norms_to_vdm_internal(
     sf_paths = list()
     for compile_params_path, year in zip(params_paths, years_needed):
         factors_fname = du.get_split_factors_fname(
-            matrix_format=matrix_format, year=str(year), suffix=fname_suffix,
+            matrix_format=matrix_format,
+            year=str(year),
+            suffix=fname_suffix,
         )
         split_factors_path = os.path.join(params_export, factors_fname)
 
@@ -3283,7 +3249,9 @@ def compile_norms_to_vdm_external(
     sf_paths = list()
     for compile_params_path, year in zip(params_paths, years_needed):
         factors_fname = du.get_split_factors_fname(
-            matrix_format=matrix_format, year=str(year), suffix=fname_suffix,
+            matrix_format=matrix_format,
+            year=str(year),
+            suffix=fname_suffix,
         )
         split_factors_path = os.path.join(params_export, factors_fname)
 
@@ -3427,7 +3395,9 @@ def split_internal_external(
 
     # Call
     multiprocessing.multiprocess(
-        fn=_split_int_ext, kwargs=kwarg_list, process_count=consts.PROCESS_COUNT,
+        fn=_split_int_ext,
+        kwargs=kwarg_list,
+        process_count=consts.PROCESS_COUNT,
     )
 
 
@@ -3468,7 +3438,7 @@ def compile_norms_to_vdm(
         year=year,
         internal_zones=internal_zones,
     )
-    
+
     for mtx_fmt in [od_from_matrix_format, od_to_matrix_format, nhb_od_matrix_format]:
         split_internal_external(
             mat_import=mat_od_import,
@@ -3522,7 +3492,9 @@ def _recombine_internal_external_internal(
 
     # Store back in a df
     full_mat = pd.DataFrame(
-        full_mat, index=partial_mats[0].index, columns=partial_mats[0].columns,
+        full_mat,
+        index=partial_mats[0].index,
+        columns=partial_mats[0].columns,
     )
 
     if rounding is not None:
@@ -3577,9 +3549,9 @@ def combine_partial_matrices(
         The number of processes to use when combining matrices.
 
     pbar_kwargs:
-        A dictionary of keyword arguments to pass into tqdm.tqdm to make a 
+        A dictionary of keyword arguments to pass into tqdm.tqdm to make a
         progress bar. If left as None, not progress bar will be shown.
-    
+
     file_kwargs:
         Any additional arguments to pass to segmentation.generate_file_name().
     """
@@ -3604,7 +3576,9 @@ def combine_partial_matrices(
     for segment_params in segmentation:
         # Get the output path
         out_fname = segmentation.generate_file_name(
-            segment_params=segment_params, compressed=True, **file_kwargs,
+            segment_params=segment_params,
+            compressed=True,
+            **file_kwargs,
         )
         out_path = os.path.join(export_dir, out_fname)
 
@@ -3612,7 +3586,9 @@ def combine_partial_matrices(
         in_paths = list()
         for in_dir, suffix in zip(import_dirs, import_suffixes):
             fname = segmentation.generate_file_name(
-                segment_params=segment_params, suffix=suffix, **file_kwargs,
+                segment_params=segment_params,
+                suffix=suffix,
+                **file_kwargs,
             )
             in_paths.append(os.path.join(in_dir, fname))
 
@@ -3626,12 +3602,14 @@ def combine_partial_matrices(
     # ## COMPILE THE MATRICES ## #
     kwarg_list = list()
     for output_path, in_paths in combine_dict.items():
-        kwarg_list.append({
-            "output_path": output_path,
-            "in_paths": in_paths,
-            "output_suffix": output_suffix,
-            "rounding": rounding,
-        })
+        kwarg_list.append(
+            {
+                "output_path": output_path,
+                "in_paths": in_paths,
+                "output_suffix": output_suffix,
+                "rounding": rounding,
+            }
+        )
 
     multiprocessing.multiprocess(
         fn=_recombine_internal_external_internal,
@@ -3756,4 +3734,3 @@ def recombine_internal_external(
         process_count=process_count,
         pbar_kwargs=pbar_kwargs,
     )
-
