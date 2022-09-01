@@ -788,8 +788,10 @@ def od_matrix_comparison(
     years : List[int]
         List of forecast years.
     """
+    # TODO(MB) Make this function more robust for base matrix names
+
     OD_MATRIX_NAMES = {
-        "base": "synthetic_od_{purp}_yr2021_m3_tp{tp}.csv",
+        "base": "od_m3_{purp}_tp{tp}_postME.csv",
         "base2": "od_m3_{purp}_tp{tp}.csv",
         "forecast": "od_{purp}_yr{yr}_m3_tp{tp}.csv",
     }
@@ -813,12 +815,7 @@ def od_matrix_comparison(
     with pd.ExcelWriter(out_path) as writer:
         for purpose in user_classes:
             for tp in time_periods:
-                base_path = (
-                    base_folder
-                    / "Compiled OD Matrices"
-                    / "PCU"
-                    / OD_MATRIX_NAMES["base"].format(purp=purpose, tp=tp)
-                )
+                base_path = base_folder / OD_MATRIX_NAMES["base"].format(purp=purpose, tp=tp)
                 if not base_path.exists():
                     print(base_path)
                     base_path = base_path.with_name(
