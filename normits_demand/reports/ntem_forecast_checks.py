@@ -9,6 +9,7 @@
 import functools
 import re
 from pathlib import Path
+from turtle import down
 from typing import Dict, Any, Tuple, Union, List
 
 # Third party imports
@@ -497,8 +498,7 @@ def _matrix_comparison_write(
         # Add purpose dropdown
         purposes = base_matrices["purpose"].unique().tolist()
         valid_purp = DataValidation(
-            "list",
-            formula1=f'"{",".join(str(p) for p in purposes)}"',
+            "list", formula1=f'"{",".join(str(p) for p in purposes)}"',
         )
         ws.add_data_validation(valid_purp)
         ws["B2"] = "Purpose"
@@ -860,7 +860,21 @@ def _compare_od_matrices(
         return matrix
 
     # Read base matrix which is in long format
-    base = file_ops.read_df(base_path, index_col=0)
+    base = file_ops.read_df(base_path, index_col=[0, 1], header=None, find_similar=True)
+
+    # Convert to square matrix and convert column / index to integers
+    base = base.unstack()
+    base.columns = pd.to_numeric(
+        base.columns.droplevel(0), errors="ignore", downcast="unsigned"
+    )
+    base.index = pd.to_numeric(base.index, errors="ignore", downcast="unsigned")
+
+    base = base.sort_index(axis=0).sort_index(axis=1)
+    if (base.index != base.columns).any():
+        # Reindex index to match columns then columns to match index
+        base = base.reindex(base.columns, axis=0)
+        base = base.reindex(base.index, axis=1)
+
     if base.isnull().values.any():
         LOG.warning(
             "Base matrix at %s contains %s null values.  These are being"
@@ -869,7 +883,7 @@ def _compare_od_matrices(
             base.isnull().sum().sum(),
         )
         base.fillna(0, inplace=True)
-    base.rename(columns={i: int(i) for i in base.columns}, inplace=True)
+
     base = translate_matrix(base, matrix_zoning, comparison_zoning)
     base = matrix_totals(base)
     base.to_excel(excel_writer, sheet_name=sheet, index_label="Base")
