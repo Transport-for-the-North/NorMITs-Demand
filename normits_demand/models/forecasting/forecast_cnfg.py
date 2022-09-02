@@ -101,6 +101,8 @@ class TEMForecastParameters(ForecastParameters):
     base_tripend_path: Path
     tem_iteration: str
     tem_scenario: nd.Scenario
+    forecasting_model_version: str
+    forecasting_model_name: str
 
     @staticmethod
     def _build_tripend_path(base: Path, tripend_iteration: str, scenario: nd.Scenario) -> Path:
@@ -139,7 +141,9 @@ class TEMForecastParameters(ForecastParameters):
         This is built from the `export_path_fmt` with variables filled
         in from the class attributes.
         """
-        return self._build_export_path("TfN-FTS", self.tem_iteration, self.tem_scenario.name)
+        return self._build_export_path(
+            self.forecasting_model_name, self.forecasting_model_version, self.tem_scenario.name
+        )
 
 
 class NTEMDataParameters(pydantic.BaseModel):
