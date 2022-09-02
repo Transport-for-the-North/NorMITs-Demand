@@ -81,6 +81,8 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         Custom settings for the disaggregation process.
     """
 
+    # TODO(MB) Add parameter for defining input matrix segmentation
+
     iteration: str
     base_output_folder: pathlib.Path
     notem_export_home: pathlib.Path
@@ -381,9 +383,12 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
         params.trip_length_distribution_folder,
     )
 
+    # TODO(MB) Add function for handling future year NoRMS matrices
     matrix_folder = aggregate_purposes(
         params.matrix_folder, params.model, params.year, params.aggregate_time_periods
     )
+
+    # TODO(MB) Add function for handling base NoHAM matrices (synthetic at NTEM purposes)
 
     for to in nd.TripOrigin:
         LOG.info(
