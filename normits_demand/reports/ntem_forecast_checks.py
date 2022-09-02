@@ -9,6 +9,7 @@
 import functools
 import re
 from pathlib import Path
+from turtle import down
 from typing import Dict, Any, Tuple, Union, List
 
 # Third party imports
@@ -788,8 +789,10 @@ def od_matrix_comparison(
     years : List[int]
         List of forecast years.
     """
+    # TODO(MB) Make this function more robust for base matrix names
+
     OD_MATRIX_NAMES = {
-        "base": "synthetic_od_{purp}_yr2021_m3_tp{tp}.csv",
+        "base": "od_m3_{purp}_tp{tp}_postME.csv",
         "base2": "od_m3_{purp}_tp{tp}.csv",
         "forecast": "od_{purp}_yr{yr}_m3_tp{tp}.csv",
     }
@@ -813,12 +816,7 @@ def od_matrix_comparison(
     with pd.ExcelWriter(out_path) as writer:
         for purpose in user_classes:
             for tp in time_periods:
-                base_path = (
-                    base_folder
-                    / "Compiled OD Matrices"
-                    / "PCU"
-                    / OD_MATRIX_NAMES["base"].format(purp=purpose, tp=tp)
-                )
+                base_path = base_folder / OD_MATRIX_NAMES["base"].format(purp=purpose, tp=tp)
                 if not base_path.exists():
                     print(base_path)
                     base_path = base_path.with_name(
@@ -862,8 +860,8 @@ def _compare_od_matrices(
         matrix.loc["Total"] = matrix.sum(axis=0)
         return matrix
 
-    # Read base matrix which is in long format
-    base = file_ops.read_df(base_path, index_col=0)
+    base = file_ops.read_matrix(base_path, find_similar=True)
+
     if base.isnull().values.any():
         LOG.warning(
             "Base matrix at %s contains %s null values.  These are being"
@@ -872,15 +870,14 @@ def _compare_od_matrices(
             base.isnull().sum().sum(),
         )
         base.fillna(0, inplace=True)
-    base.rename(columns={i: int(i) for i in base.columns}, inplace=True)
+
     base = translate_matrix(base, matrix_zoning, comparison_zoning)
     base = matrix_totals(base)
     base.to_excel(excel_writer, sheet_name=sheet, index_label="Base")
 
     for i, (yr, path) in enumerate(forecast_paths.items()):
-        # Read forecast matrix which is in square format
-        forecast = file_ops.read_df(path, index_col=0)
-        forecast.columns = pd.to_numeric(forecast.columns, downcast="integer")
+        forecast = file_ops.read_matrix(path, find_similar=True)
+
         if forecast.isnull().values.any():
             LOG.warning(
                 "Forecast matrix at %s contains %s null values.  These are "
@@ -889,8 +886,10 @@ def _compare_od_matrices(
                 forecast.isnull().sum().sum(),
             )
             forecast.fillna(0, inplace=True)
+
         forecast = translate_matrix(forecast, matrix_zoning, comparison_zoning)
         forecast = matrix_totals(forecast)
+
         col = i * (len(forecast) + 2)
         forecast.to_excel(
             excel_writer,
