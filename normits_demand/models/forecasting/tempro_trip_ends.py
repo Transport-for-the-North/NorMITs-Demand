@@ -8,14 +8,14 @@
 # Standard imports
 import dataclasses
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 # Third party imports
 import pandas as pd
 
 # Local imports
 import normits_demand
-from normits_demand.utils import file_ops, tempro_extractor
+from normits_demand.utils import file_ops, ntem_extractor
 from normits_demand import logging as nd_log
 from normits_demand import core as nd_core
 from normits_demand.utils import timing
@@ -42,6 +42,10 @@ class TEMProData:
         containing the TEMPro databases.
     years : List[int]
         List of year columns to read from data file.
+    ntem_version : float, optional
+        Version of NTEM data to use.
+    ntem_scenario : str, optional
+        NTEM scenario to use, required if `ntem_version` > 7.2.
 
     Raises
     ------
@@ -68,9 +72,18 @@ class TEMProData:
     ZONE_SYSTEM = "msoa"
     TIME_FORMAT = "avg_day"
 
-    def __init__(self, data_path: Path, years: List[int]) -> None:
+    def __init__(
+        self,
+        data_path: Path,
+        years: list[int],
+        ntem_version: Optional[float] = None,
+        ntem_scenario: Optional[str] = None,
+    ) -> None:
         self.data_path = Path(data_path)
         self.use_tempro_extractor = False
+
+        self.ntem_version = ntem_version
+        self.ntem_scenario = ntem_scenario
 
         # If data path is a folder then assumes this contains the TEMPro
         # databases, otherwise assumes the file is a CSV containing the data
@@ -115,8 +128,12 @@ class TEMProData:
 
     def _extract_tempro_database(self) -> pd.DataFrame:
         LOG.info("Extracting data from TEMPro databases in: %s", self.data_path)
-        parser = tempro_extractor.TemproParser(
-            output_years=self._years, data_source=str(self.data_path)
+        LOG.info("Using NTEM version %s %s scenario", self.ntem_version, self.ntem_scenario)
+        parser = ntem_extractor.TemproParser(
+            output_years=self._years,
+            data_source=str(self.data_path),
+            ntem_version=self.ntem_version,
+            scenario=self.ntem_scenario,
         )
         return parser.get_trip_ends(
             trip_type="pa", all_commute_hb=True, aggregate_car=False, average_weekday=False

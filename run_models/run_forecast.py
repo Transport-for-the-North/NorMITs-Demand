@@ -130,7 +130,6 @@ def main(
     params.save_yaml(output_params_file)
     LOG.info("Saved input parameters to %s", output_params_file)
 
-
     if model in (forecast_cnfg.ForecastModel.TRIP_END, forecast_cnfg.ForecastModel.NTEM):
         tem_forecasting(params, model)
 
@@ -205,7 +204,10 @@ def tem_forecasting(
 
         trip_end_name = "TEMPro"
         tripend_data = ntem_forecast.get_tempro_data(
-            params.tempro_data_path, [params.base_year, *params.future_years]
+            params.ntem_parameters.data_path,
+            [params.base_year, *params.future_years],
+            ntem_version=params.ntem_parameters.version,
+            ntem_scenario=params.ntem_parameters.scenario,
         )
     elif forecast_model == forecast_cnfg.ForecastModel.TRIP_END:
         if not isinstance(params, forecast_cnfg.TEMForecastParameters):

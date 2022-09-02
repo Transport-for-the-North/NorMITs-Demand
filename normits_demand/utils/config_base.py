@@ -111,7 +111,7 @@ class BaseConfig(pydantic.BaseModel):
         json_dict = json.loads(self.json())
 
         # Strictyaml cannot handle None so excluding from output
-        json_dict = {k: v for k, v in json_dict.items() if v is not None}
+        json_dict = _remove_none_dict(json_dict)
 
         return strictyaml.as_document(json_dict).as_yaml()
 
@@ -128,3 +128,17 @@ class BaseConfig(pydantic.BaseModel):
 
 
 ##### FUNCTIONS #####
+def _remove_none_dict(data: dict) -> dict:
+    """Remove items recursively from dictionary which are None."""
+    filtered = {}
+
+    for key, value in data.items():
+        if value is None:
+            continue
+
+        if isinstance(value, dict):
+            value = _remove_none_dict(value)
+
+        filtered[key] = value
+
+    return filtered
