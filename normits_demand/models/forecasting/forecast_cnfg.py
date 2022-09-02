@@ -27,7 +27,10 @@ class ForecastParameters(config_base.BaseConfig):
     base_year: int
     future_years: list[int]
     export_folder: Path
-    export_path_fmt: str = "{export_folder}/{model_name}/iter{iteration}"
+    export_path_fmt: str = (
+        "{export_folder}/Forecasting/{forecast_model}/"
+        "{forecast_version}/iter{iteration}/{scenario}/{mode}"
+    )
     matrix_import_path: Path
     hb_purposes_needed: list[int]
     nhb_purposes_needed: list[int]
@@ -37,6 +40,20 @@ class ForecastParameters(config_base.BaseConfig):
     output_trip_end_data: bool = False
     output_trip_end_growth: bool = False
 
+    def _build_export_path(
+        self, forecast_model: str, forecast_version: str, forecast_scenario: str
+    ) -> Path:
+        """Build export path from `export_path_fmt`."""
+        return Path(
+            self.export_path_fmt.format(
+                forecast_model=forecast_model,
+                forecast_version=forecast_version,
+                scenario=forecast_scenario,
+                mode=self.assignment_model.get_mode().get_name(),
+                **self.dict(),
+            )
+        )
+
     @property
     def export_path(self) -> Path:
         """Read-only path to export folder.
@@ -44,11 +61,7 @@ class ForecastParameters(config_base.BaseConfig):
         This is built from the `export_path_fmt` with variables filled
         in from the class attributes.
         """
-        return Path(
-            self.export_path_fmt.format(
-                model_name=self.assignment_model.get_name(), **self.dict()
-            )
-        )
+        return self._build_export_path("UNKNOWN", "UNKNOWN", "UNKNOWN")
 
     @property
     def pa_to_od_factors(self) -> dict[str, Path]:
@@ -86,10 +99,12 @@ class TEMForecastParameters(ForecastParameters):
     """Class for storing parameters for trip end forecasting."""
 
     base_tripend_path: Path
+    tem_iteration: str
     tem_scenario: nd.Scenario
-    export_path_fmt: str = (
-        "{export_folder}/{model_name}/TEM/iter{iteration}/{tem_scenario_name}"
-    )
+
+    @staticmethod
+    def _build_tripend_path(base: Path, tripend_iteration: str, scenario: nd.Scenario) -> Path:
+        return base / f"iter{tripend_iteration}/{scenario.value}"
 
     @pydantic.root_validator(skip_on_failure=True)
     def _check_tripend_path(  # pylint: disable=no-self-argument
@@ -97,8 +112,10 @@ class TEMForecastParameters(ForecastParameters):
     ) -> dict[str, Any]:
         """Check the trip end folder exists."""
         base: Path = values["base_tripend_path"]
+        iteration: str = values["tem_iteration"]
         scenario: nd.Scenario = values["tem_scenario"]
-        path = base / str(scenario.value)
+
+        path = cls._build_tripend_path(base, iteration, scenario)
         if not path.is_dir():
             raise ValueError(
                 f"tripend folder doesn't exist: {path}, make sure the "
@@ -111,7 +128,9 @@ class TEMForecastParameters(ForecastParameters):
     @property
     def tripend_path(self) -> Path:
         """Folder containing trip end data."""
-        return self.base_tripend_path / self.tem_scenario.value
+        return self._build_tripend_path(
+            self.base_tripend_path, self.tem_iteration, self.tem_scenario
+        )
 
     @property
     def export_path(self) -> Path:
@@ -120,13 +139,7 @@ class TEMForecastParameters(ForecastParameters):
         This is built from the `export_path_fmt` with variables filled
         in from the class attributes.
         """
-        return Path(
-            self.export_path_fmt.format(
-                model_name=self.assignment_model.get_name(),
-                tem_scenario_name=self.tem_scenario.value,
-                **self.dict(),
-            )
-        )
+        return self._build_export_path("TfN-FTS", self.tem_iteration, self.tem_scenario.name)
 
 
 class NTEMDataParameters(pydantic.BaseModel):
@@ -160,7 +173,6 @@ class NTEMForecastParameters(ForecastParameters):
     """Class for storing parameters for NTEM forecasting."""
 
     ntem_parameters: NTEMDataParameters
-    export_path_fmt: str = "{export_folder}/{model_name}/NTEM/{ntem_version}/iter{iteration}"
 
     @property
     def export_path(self) -> Path:
@@ -169,18 +181,14 @@ class NTEMForecastParameters(ForecastParameters):
         This is built from the `export_path_fmt` with variables filled
         in from the class attributes.
         """
-        if self.ntem_parameters.version > 7.2:
-            version = f"v{self.ntem_parameters.version}-{self.ntem_parameters.scenario}"
+        if self.ntem_parameters.version <= 7.2:
+            scenario = "Core"
+        elif self.ntem_parameters.scenario is not None:
+            scenario = self.ntem_parameters.scenario
         else:
-            version = f"v{self.ntem_parameters.version}"
+            raise ValueError("expected scenario for NTEM version > 7.2")
 
-        return Path(
-            self.export_path_fmt.format(
-                model_name=self.assignment_model.get_name(),
-                ntem_version=version,
-                **self.dict(),
-            )
-        )
+        return self._build_export_path("NTEM", str(self.ntem_parameters.version), scenario)
 
 
 # TODO(MB) Function to create an example config file

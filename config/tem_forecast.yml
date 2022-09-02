@@ -1,40 +1,39 @@
-iteration: 9.10
+iteration: 1
 import_path: I:\NorMITs Demand\import
 assignment_model: NoHAM
 base_year: 2018
 future_years:
-- 2030
-# export_folder: I:\NorMITs Demand
-export_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Outputs\Forecasting
-# base_tripend_path: I:\NorMITs Demand\NoTEM\iter9.10
-base_tripend_path: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Inputs\NoTEM\iter9.10-dummy_forecasts
+  - 2030
+export_folder: I:\NorMITs Demand
+base_tripend_path: I:\NorMITs Demand\NoTEM
+tem_iteration: 9.10
 tem_scenario: SC01_JAM
 matrix_import_path: I:\NorMITs Demand\import\noham\post_me\tms_seg_pa
 hb_purposes_needed:
-- 1
-- 2
-- 3
-- 4
-- 5
-- 6
-- 7
-- 8
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
 nhb_purposes_needed:
-- 12
-- 13
-- 14
-- 15
-- 16
-- 18
+  - 12
+  - 13
+  - 14
+  - 15
+  - 16
+  - 18
 comparison_zone_systems:
   trip end: lad_2020
   matrix 1: ca_sector_2020
 time_periods:
-- 1
-- 2
-- 3
-- 4
+  - 1
+  - 2
+  - 3
+  - 4
 user_classes:
-- commute
-- business
-- other
+  - commute
+  - business
+  - other
