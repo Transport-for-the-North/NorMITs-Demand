@@ -498,7 +498,8 @@ def _matrix_comparison_write(
         # Add purpose dropdown
         purposes = base_matrices["purpose"].unique().tolist()
         valid_purp = DataValidation(
-            "list", formula1=f'"{",".join(str(p) for p in purposes)}"',
+            "list",
+            formula1=f'"{",".join(str(p) for p in purposes)}"',
         )
         ws.add_data_validation(valid_purp)
         ws["B2"] = "Purpose"
@@ -859,21 +860,7 @@ def _compare_od_matrices(
         matrix.loc["Total"] = matrix.sum(axis=0)
         return matrix
 
-    # Read base matrix which is in long format
-    base = file_ops.read_df(base_path, index_col=[0, 1], header=None, find_similar=True)
-
-    # Convert to square matrix and convert column / index to integers
-    base = base.unstack()
-    base.columns = pd.to_numeric(
-        base.columns.droplevel(0), errors="ignore", downcast="unsigned"
-    )
-    base.index = pd.to_numeric(base.index, errors="ignore", downcast="unsigned")
-
-    base = base.sort_index(axis=0).sort_index(axis=1)
-    if (base.index != base.columns).any():
-        # Reindex index to match columns then columns to match index
-        base = base.reindex(base.columns, axis=0)
-        base = base.reindex(base.index, axis=1)
+    base = file_ops.read_matrix(base_path, find_similar=True)
 
     if base.isnull().values.any():
         LOG.warning(
@@ -889,9 +876,8 @@ def _compare_od_matrices(
     base.to_excel(excel_writer, sheet_name=sheet, index_label="Base")
 
     for i, (yr, path) in enumerate(forecast_paths.items()):
-        # Read forecast matrix which is in square format
-        forecast = file_ops.read_df(path, index_col=0)
-        forecast.columns = pd.to_numeric(forecast.columns, downcast="integer")
+        forecast = file_ops.read_matrix(path, find_similar=True)
+
         if forecast.isnull().values.any():
             LOG.warning(
                 "Forecast matrix at %s contains %s null values.  These are "
@@ -900,8 +886,10 @@ def _compare_od_matrices(
                 forecast.isnull().sum().sum(),
             )
             forecast.fillna(0, inplace=True)
+
         forecast = translate_matrix(forecast, matrix_zoning, comparison_zoning)
         forecast = matrix_totals(forecast)
+
         col = i * (len(forecast) + 2)
         forecast.to_excel(
             excel_writer,

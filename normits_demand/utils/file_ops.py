@@ -993,10 +993,12 @@ def copy_template_segment_files(
         else:
             out_filename = in_filename
 
-        kwarg_list.append({
-            "src": src_dir / in_filename,
-            "dst": dst_dir / out_filename,
-        })
+        kwarg_list.append(
+            {
+                "src": src_dir / in_filename,
+                "dst": dst_dir / out_filename,
+            }
+        )
 
     # Multiprocess the copy
     multiprocessing.multiprocess(
@@ -1121,7 +1123,7 @@ def compare_versions(
     ver2: version.Version,
     ver1_name: str,
     ver2_name: str,
-    match_str: bool = False
+    match_str: bool = False,
 ) -> Optional[str]:
     """
     Compares the versions and generates a message
@@ -1540,3 +1542,80 @@ def parse_folder_files(
                 continue
 
         yield {"path": file, **data}
+
+
+def read_matrix(
+    path: os.PathLike,
+    format_: Optional[str] = None,
+    find_similar: bool = False,
+) -> pd.DataFrame:
+    """Read matrix CSV in the square or long format.
+
+    Sorts the index and column names and makes sure they're
+    the same, doesn't infill any NaNs created when reindexing.
+
+    Parameters
+    ----------
+    path : os.PathLike
+        Path to CSV file
+    format_ : str, optional
+        Expected format of the matrix 'square' or 'long', if
+        not given attempts to figure out the format by reading
+        the top few lines of the file.
+    find_similar : bool, default False
+        If True and the given file at path cannot be found, files with the
+        same name but different extensions will be looked for and read in
+        instead. Will check for: '.csv', '.pbz2'
+
+    Returns
+    -------
+    pd.DataFrame
+        Matrix file in square format with sorted columns and indices
+
+    Raises
+    ------
+    ValueError
+        If the `format` cannot be determined by reading the file
+        or an invalid `format` is given.
+    """
+    if format_ is None:
+        # Determine format by reading top few lines of file
+        matrix = read_df(path, nrows=3, find_similar=find_similar)
+
+        if len(matrix.columns) == 3:
+            format_ = "long"
+
+            # Check if columns have a header
+            if matrix.columns[0].strip().lower() in ("o", "origin", "p", "productions"):
+                header = 0
+            else:
+                header = None
+
+        elif len(matrix.columns) > 3:
+            format_ = "square"
+            header = 0
+        else:
+            raise ValueError(f"cannot determine format of matrix {path}")
+
+    format_ = format_.strip().lower()
+    if format_ == "square":
+        matrix = read_df(path, index_col=0, find_similar=find_similar, header=header)
+    elif format_ == "long":
+        matrix = read_df(path, index_col=[0, 1], find_similar=True, header=header)
+
+        matrix = matrix.unstack()
+        matrix.columns = matrix.columns.droplevel(0)
+    else:
+        raise ValueError(f"unknown format {format_}")
+
+    # Attempt to convert to integers
+    matrix.columns = pd.to_numeric(matrix.columns, errors="ignore", downcast="integer")
+    matrix.index = pd.to_numeric(matrix.index, errors="ignore", downcast="integer")
+
+    matrix = matrix.sort_index(axis=0).sort_index(axis=1)
+    if (matrix.index != matrix.columns).any():
+        # Reindex index to match columns then columns to match index
+        matrix = matrix.reindex(matrix.columns, axis=0)
+        matrix = matrix.reindex(matrix.index, axis=1)
+
+    return matrix
