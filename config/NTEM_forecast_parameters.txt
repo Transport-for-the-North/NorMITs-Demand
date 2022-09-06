@@ -1,9 +1,0 @@
-[parameters]
-import_path = I:\NorMITs Demand\import
-tempro_data_path = Y:\Data Strategy\Data\TEMPRO
-model_name = noham
-iteration = 1d
-base_year = 2018
-future_years = 2042
-export_path_fmt = I:/NorMITs Demand/{model_name}/NTEM/iter{iteration}
-

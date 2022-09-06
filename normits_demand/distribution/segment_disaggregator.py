@@ -38,12 +38,43 @@ class TripEndConstraint(nd_enum.IsValidEnumWithAutoNameLower):
 
 
 class DisaggregationSettings(pydantic.BaseModel):  # pylint: disable=no-member
-    """Optional settings for adjusting `disaggregate_segments`."""
+    """Optional settings for adjusting `disaggregate_segments`.
 
-    aggregate_surplus_segments: bool = True
+    Attributes
+    ----------
+    export_original : bool, default True
+        Whether or not to write out the final segmented matrices.
+    export_furness : bool, default False
+        Whether or not to write out the final furness matrices, before
+        they're factored to the input matrix total.
+    maximum_furness_loops : int, default 1999
+        Maximum number of furnessing loops, only used if `trip_end_constraint`
+        is DOUBLE.
+    pa_furness_convergence : float, default 0.1
+        The maximum R^2 between the achieved and the target values in
+        the furnessing to tolerate before exiting early. Only used if
+        `trip_end_constraint` is DOUBLE.
+    bandshare_convergence : float, default 0.975
+        Minimum $R^2$ value for between the matrix and target TLDs to stop
+        the bandshare convergence loops at.
+    max_bandshare_loops : int, default 200
+        Maximum number of bandshare convergence loops.
+    multiprocessing_threads : int, default -1
+        Number of processes to use when running, negative numbers are
+        subtracted from the total number of available cores.
+    pa_match_tolerance : float, default 0.95
+        Tolerance for balancing attractions total to productions total,
+        if the difference is less than this an error is raised.
+    minimum_bandshare_change : float, default 1e-8
+        If the change between the current and previous bandshare
+        convergence loop's R^2 value is less than this then end the
+        bandshare loops early.
+    trip_end_constraint : TripEndConstraint, default DOUBLE
+        Method of trip end constraint to perform.
+    """
+
     export_original: bool = True
     export_furness: bool = False
-    intrazonal_cost_infill: float = 0.5
     maximum_furness_loops: int = 1999
     pa_furness_convergence: float = 0.1
     bandshare_convergence: float = 0.975
@@ -285,7 +316,7 @@ def disaggregate_segments(
     # Find all matrices and extract segmentation info
     LOG.info("Finding base matrices in %s", import_folder)
     base_mat_seg = pd.DataFrame(
-        nup.parse_matrix_folder(
+        file_ops.parse_folder_files(
             import_folder,
             extension_filter=constants.VALID_MAT_FTYPES,
             required_data=required_columns,
@@ -308,7 +339,7 @@ def disaggregate_segments(
     # Find all TLDs and extract segmentation info
     LOG.info("Finding TLDs in %s", target_tld_folder)
     tld_seg = pd.DataFrame(
-        nup.parse_matrix_folder(
+        file_ops.parse_folder_files(
             target_tld_folder,
             extension_filter=constants.VALID_MAT_FTYPES,
             required_data=segment_columns + [disaggregation_segment.value],
@@ -441,6 +472,11 @@ def _segment_build_worker(
     )
     if not base_matrix.index.equals(base_matrix.columns):
         raise ValueError("base matrix columns and index aren't equal")
+    if len(unique_zones) != len(base_matrix.index):
+        raise ValueError(
+            "base matrix has a different number of zones to expected zones, "
+            f"{len(base_matrix.index)} and {len(unique_zones)} respectively"
+        )
     if not np.equal(np.sort(unique_zones), np.sort(base_matrix.index.values)).all():
         raise ValueError("base matrix zones not equal to expected zones")
 
@@ -504,32 +540,7 @@ def _segment_build_worker(
             export_original=settings.export_original,
         )
 
-    # Graph comparing segmented matrix TLDs to original
-    tlds = [
-        cost_utils.PlotData(
-            results[0].input_matrix_tld.band_means,
-            results[0].input_matrix_tld.band_shares,
-            "Original Matrix",
-        )
-    ]
-
-    for res in results:
-        label = trip_origin.value.upper() + " ".join(
-            f"{k}{v}" for k, v in res.segmentation.items() if k != "trip_origin"
-        )
-        tlds.append(
-            cost_utils.PlotData(
-                res.final_matrix_tld.band_means, res.final_matrix_tld.band_shares, label
-            )
-        )
-
-    path = build_path(
-        reports_folder / (trip_origin.value + "_tld"),
-        {k: v for k, v in matrix_segmentation.items() if k != "trip_origin"},
-        suffix=".png",
-    )
-    cost_utils.plot_cost_distributions(tlds, path.stem, path=path)
-    print(f"Created: {path.name}")
+    _compare_input_to_disaggregated(results, reports_folder, trip_origin, matrix_segmentation)
 
     return results
 
@@ -625,9 +636,74 @@ def _segment_disaggregator_outputs(
     return reports_folder
 
 
+def _compare_input_to_disaggregated(
+    results: list[DisaggregationResults],
+    reports_folder: pathlib.Path,
+    trip_origin: nd.TripOrigin,
+    matrix_segmentation: dict[str, Any],
+) -> None:
+    """Produce output summaries and graph comparing segmented matrices to input."""
+
+    def result_label(segmentation: dict[str, Any]) -> str:
+        """Create string label from output segmentation."""
+        path = build_path(
+            trip_origin.value.upper(),
+            {k: v for k, v in segmentation.items() if k != "trip_origin"},
+        )
+        return path.name.replace("_", " ")
+
+    # Summary table of matrix totals
+    data: dict[str, list] = {
+        "Matrix": ["Input"],
+        "Total Trips": [results[0].summary.input_matrix_total],
+    }
+    for res in results:
+        data["Matrix"].append(result_label(res.segmentation))
+        data["Total Trips"].append(res.summary.segmented_matrix_total)
+
+    totals_summary = pd.DataFrame(data).set_index("Matrix")
+    totals_summary.loc[:, "Total Trips Percentage of Input"] = (
+        totals_summary["Total Trips"] / totals_summary.at["Input", "Total Trips"]
+    )
+
+    path = build_path(
+        reports_folder / (trip_origin.value + "_combined_summary"),
+        {k: v for k, v in matrix_segmentation.items() if k != "trip_origin"},
+        suffix=".xlsx",
+    )
+    totals_summary.to_excel(path, sheet_name="Matrix Totals")
+    print(f"Created: {path.name}")
+
+    # Graph comparing segmented matrix TLDs to original
+    tlds = [
+        cost_utils.PlotData(
+            results[0].input_matrix_tld.band_means,
+            results[0].input_matrix_tld.band_shares,
+            "Original Matrix",
+        )
+    ]
+
+    for res in results:
+        label = result_label(res.segmentation)
+        tlds.append(
+            cost_utils.PlotData(
+                res.final_matrix_tld.band_means, res.final_matrix_tld.band_shares, label
+            )
+        )
+
+    path = build_path(
+        reports_folder / (trip_origin.value + "_tld"),
+        {k: v for k, v in matrix_segmentation.items() if k != "trip_origin"},
+        suffix=".png",
+    )
+    cost_utils.plot_cost_distributions(tlds, path.stem, path=path)
+    print(f"Created: {path.name}")
+
+
 def _calculate_bandshare_convergence(
     matrix: cost.CostDistribution, target: cost.CostDistribution
 ) -> float:
+    """Calculate R^2 between the matrix and target band shares."""
     bs_con = 1 - (
         np.sum((matrix.band_shares - target.band_shares) ** 2)
         / np.sum((target.band_shares - np.mean(target.band_shares)) ** 2)
@@ -938,52 +1014,68 @@ def _dissag_seg(
 
 
 def get_costs(
-    cost_folder: pathlib.Path, calib_params: Dict[str, Any], zones: np.ndarray
+    cost_folder: pathlib.Path, calib_params: dict[str, Any], zones: np.ndarray
 ) -> pd.DataFrame:
-    purpose_lookup = {
-        "commute": [1],
-        "business": [2, 12],
-        "other": [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 18],
-    }
+    """Find cost file for `calib_params`, raises error if not found.
 
-    seg_columns = ["trip_origin", "m", "p", "ca"]
+    Parameters
+    ----------
+    cost_folder : pathlib.Path
+        Folder containing cost matrices.
+    calib_params : dict[str, Any]
+        Matrix segmentation parameters to find cost for.
+    zones : np.ndarray
+        Zones to check the cost matrices contain.
+
+    Returns
+    -------
+    pd.DataFrame
+        Cost matrix.
+
+    Raises
+    ------
+    KeyError
+        If any number other than 1 cost file can be found with
+        parameters `calib_params`.
+    ValueError
+        If the cost matrices doesn't have the correct `zones`.
+    """
+    seg_columns = list(calib_params.keys())
     cost_files = pd.DataFrame(
-        nup.parse_matrix_folder(
+        file_ops.parse_folder_files(
             cost_folder,
             extension_filter=constants.VALID_MAT_FTYPES,
             required_data=seg_columns,
         )
     )
+    if cost_files.empty:
+        raise KeyError(f"cannot find any cost files for {calib_params}")
     cost_files = cost_files.set_index(seg_columns)
 
-    purposes = purpose_lookup[calib_params["uc"]]
-    cost_files = cost_files.loc[
-        pd.IndexSlice[
-            calib_params["trip_origin"], calib_params["m"], purposes, calib_params["ca"]
-        ],
-        "path",
-    ]
+    try:
+        cost_path = cost_files.loc[
+            pd.IndexSlice[tuple(calib_params.values())],
+            "path",
+        ]
+    except KeyError as e:
+        raise KeyError(f"cannot find any cost files for {calib_params}") from e
 
-    if len(cost_files) == 0:
-        raise ValueError(f"cannot find any cost files for {calib_params}")
+    if isinstance(cost_path, (pd.Series, pd.DataFrame)):
+        if len(cost_path) == 1:
+            cost_path = cost_path.iloc[0]
+        else:
+            raise KeyError(f"{len(cost_path)} cost files found for {calib_params}")
 
-    costs: List[pd.DataFrame] = []
-    for file in cost_files:
-        mat = file_ops.read_df(file, index_col=0)
-        mat.columns = pd.to_numeric(mat.columns, errors="ignore", downcast="unsigned")
-        mat.index = pd.to_numeric(mat.index, errors="ignore", downcast="unsigned")
+    cost_mat = file_ops.read_df(cost_path, index_col=0)
+    cost_mat.columns = pd.to_numeric(cost_mat.columns, errors="ignore", downcast="unsigned")
+    cost_mat.index = pd.to_numeric(cost_mat.index, errors="ignore", downcast="unsigned")
 
-        if np.not_equal(mat.columns, zones).any():
-            raise ValueError("Wrong zones found in cost file columns: {file}")
-        if np.not_equal(mat.index, zones).any():
-            raise ValueError("Wrong zones found in cost file index: {file}")
+    if np.not_equal(cost_mat.columns, zones).any():
+        raise ValueError("Wrong zones found in cost file columns: {file}")
+    if np.not_equal(cost_mat.index, zones).any():
+        raise ValueError("Wrong zones found in cost file index: {file}")
 
-        costs.append(mat)
-
-    if len(costs) == 1:
-        return costs[0]
-
-    return pd.DataFrame(np.mean(costs, axis=0), index=costs[0].index, columns=costs[0].columns)
+    return cost_mat
 
 
 def build_path(
@@ -1015,21 +1107,24 @@ def build_path(
     suffixes = "".join(path.suffixes)
     name = path.name.removesuffix(suffixes)
 
-    for index, cp in segmentation_params.items():
-        if index == "tlb":
-            continue  # Ignore trip length bands
-
-        if not _isnull(cp):
-            # Don't include UC before user classes
-            if index.lower() == "uc":
-                name += f"_{cp}"
-            else:
-                name += f"_{index}{cp}"
+    # Use notem segmentation as naming order because it should include all possible
+    if "uc" in (i.lower() for i in segmentation_params):
+        naming_order = nd.get_segmentation_level("notem_hb_output_uc").naming_order
+    else:
+        naming_order = nd.get_segmentation_level("notem_hb_output").naming_order
 
     if tp:
-        name += "_tp" + str(tp)
+        segmentation_params = segmentation_params.copy()
+        segmentation_params["tp"] = tp
 
-    path = path.parent / name
+    segment_str = nd.SegmentationLevel.generate_template_segment_str(
+        [n for n in naming_order if n in segmentation_params],
+        {k: v for k, v in segmentation_params.items() if not _isnull(v)},
+    )
+    template = nd.SegmentationLevel.generate_template_file_name(file_desc=name)
+
+    path = path.parent / template.format(segment_params=segment_str)
+
     if suffix:
         path = path.with_suffix(suffix)
 

@@ -52,6 +52,7 @@ from normits_demand.utils import sector_reporter_v2 as sr_v2
 # BACKLOG: Implement a logger to log EFS run progress
 #  labels: QoL Updates
 
+# TODO(MB) Move to forecasting sub-package
 
 class ExternalForecastSystem:
     # ## Class Constants ## #
@@ -1365,7 +1366,7 @@ class ExternalForecastSystem:
             export_matrix_format='od',
             tour_proportions_dir=self.imports['post_me_tours'],
             model_name=self.model_name,
-            years_needed=years_needed,
+            future_years_needed=years_needed,
             **nhb_seg_params,
         )
 

@@ -109,6 +109,10 @@ class BaseConfig(pydantic.BaseModel):
         # Use pydantic to convert all types to json compatiable,
         # then convert this back to a dictionary to dump to YAML
         json_dict = json.loads(self.json())
+
+        # Strictyaml cannot handle None so excluding from output
+        json_dict = _remove_none_dict(json_dict)
+
         return strictyaml.as_document(json_dict).as_yaml()
 
     def save_yaml(self, path: pathlib.Path) -> None:
@@ -124,3 +128,17 @@ class BaseConfig(pydantic.BaseModel):
 
 
 ##### FUNCTIONS #####
+def _remove_none_dict(data: dict) -> dict:
+    """Remove items recursively from dictionary which are None."""
+    filtered = {}
+
+    for key, value in data.items():
+        if value is None:
+            continue
+
+        if isinstance(value, dict):
+            value = _remove_none_dict(value)
+
+        filtered[key] = value
+
+    return filtered

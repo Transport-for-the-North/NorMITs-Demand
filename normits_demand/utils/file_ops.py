@@ -14,24 +14,17 @@ A collections of utility functions for file operations
 # builtins
 from __future__ import annotations
 
+import itertools
 import os
+import pathlib
+import pickle
+import re
 import shutil
 import time
-import pickle
-import pathlib
 import warnings
-import itertools
-
 from os import PathLike
 from packaging import version
-
-from typing import Any
-from typing import List
-from typing import Tuple
-from typing import Union
-from typing import Optional
-from typing import Iterable
-from typing import Sequence
+from typing import Any, Collection, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 
 # Third Party
 import numpy as np
@@ -42,17 +35,15 @@ from caf.toolkit import pandas_utils as caf_pd_utils
 # Local imports
 import normits_demand as nd
 from normits_demand import constants as consts
+from normits_demand.concurrency import multiprocessing, multithreading
 from normits_demand.utils import compress
 from normits_demand.utils import general as du
-
-from normits_demand.concurrency import multiprocessing
-from normits_demand.concurrency import multithreading
 
 # Imports that need moving into here
 from normits_demand.utils.general import list_files
 
 # CONSTANTS
-PD_COMPRESSION = {'.zip', '.gzip', '.bz2', '.zstd', '.csv.bz2'}
+PD_COMPRESSION = {".zip", ".gzip", ".bz2", ".zstd", ".csv.bz2"}
 
 
 class WriteDfThread(multithreading.ReturnOrErrorThread):
@@ -99,7 +90,7 @@ def remove_suffixes(path: pathlib.Path) -> pathlib.Path:
         new = pathlib.Path(prev.stem)
 
         # No more suffixes to remove
-        if new.suffix == '':
+        if new.suffix == "":
             break
 
         prev = new
@@ -133,9 +124,10 @@ def file_exists(file_path: nd.PathLike) -> bool:
     return True
 
 
-def check_file_exists(file_path: nd.PathLike,
-                      find_similar: bool = False,
-                      ) -> None:
+def check_file_exists(
+    file_path: nd.PathLike,
+    find_similar: bool = False,
+) -> None:
     """
     Checks if a file exists at the given path. Throws an error if not.
 
@@ -158,9 +150,7 @@ def check_file_exists(file_path: nd.PathLike,
         return
 
     if not file_exists(file_path):
-        raise IOError(
-            "Cannot find a path to: %s" % str(file_path)
-        )
+        raise IOError("Cannot find a path to: %s" % str(file_path))
 
 
 def check_path_exists(path: nd.PathLike) -> None:
@@ -177,9 +167,8 @@ def check_path_exists(path: nd.PathLike) -> None:
     None
     """
     if not os.path.exists(path):
-        raise IOError(
-            "The following path does not exist: %s" % str(path)
-        )
+        raise IOError("The following path does not exist: %s" % str(path))
+
 
 def folder_exists(folder: nd.PathLike) -> pathlib.Path:
     """Raise an error if `folder` doesn't exist or isn't a folder.
@@ -223,20 +212,21 @@ def is_csv(file_path: nd.PathLike) -> bool:
         True if given file path points to a csv, else False
     """
     # Try to extract the filename extension
-    filename_parts = str(file_path).split('.')
+    filename_parts = str(file_path).split(".")
 
     # File doesn't seem to have an file_extension?
     if len(filename_parts) < 1:
         return False
 
     file_extension = filename_parts[-1].lower()
-    return file_extension == 'csv'
+    return file_extension == "csv"
 
 
-def maybe_add_suffix(path: nd.PathLike,
-                     suffix: str,
-                     overwrite: bool = True,
-                     ) -> pathlib.Path:
+def maybe_add_suffix(
+    path: nd.PathLike,
+    suffix: str,
+    overwrite: bool = True,
+) -> pathlib.Path:
     """
     Adds suffix to path if no suffix already exists.
 
@@ -267,7 +257,7 @@ def maybe_add_suffix(path: nd.PathLike,
         path = path.parent / path.stem
 
     # Add suffix if not there
-    if path.suffix == '':
+    if path.suffix == "":
         path = path.parent / (path.name + suffix)
 
     return path
@@ -300,14 +290,15 @@ def is_index_set(df: pd.DataFrame):
     return False
 
 
-def read_df(path: os.PathLike,
-            index_col: int = None,
-            find_similar: bool = False,
-            **kwargs,
-            ) -> pd.DataFrame:
+def read_df(
+    path: os.PathLike,
+    index_col: int = None,
+    find_similar: bool = False,
+    **kwargs,
+) -> pd.DataFrame:
     """
     Reads in the dataframe at path. Decompresses the df if needed.
-    
+
     Parameters
     ----------
     path:
@@ -332,12 +323,11 @@ def read_df(path: os.PathLike,
     # Try and find similar files if we are allowed
     if not os.path.exists(path):
         if not find_similar:
-            raise FileNotFoundError(
-                f"No such file or directory: '{path}'")
+            raise FileNotFoundError(f"No such file or directory: '{path}'")
         path = find_filename(path)
 
     # Determine how to read in df
-    if pathlib.Path(path).suffix == '.pbz2':
+    if pathlib.Path(path).suffix == ".pbz2":
         df = compress.read_in(path)
 
         # Optionally try and set the index
@@ -352,7 +342,7 @@ def read_df(path: os.PathLike,
         df.columns.name = None
         return df
 
-    if pathlib.Path(path).suffix == '.csv':
+    if pathlib.Path(path).suffix == ".csv":
         return pd.read_csv(path, index_col=index_col, **kwargs)
 
     if pathlib.Path(path).suffix in PD_COMPRESSION:
@@ -389,10 +379,10 @@ def write_df(df: pd.DataFrame, path: nd.PathLike, **kwargs) -> None:
     path = pathlib.Path(path)
 
     # Determine how to read in df
-    if pathlib.Path(path).suffix == '.pbz2':
+    if pathlib.Path(path).suffix == ".pbz2":
         compress.write_out(df, path)
 
-    elif pathlib.Path(path).suffix == '.csv':
+    elif pathlib.Path(path).suffix == ".csv":
         df.to_csv(path, **kwargs)
 
     elif pathlib.Path(path).suffix in PD_COMPRESSION:
@@ -430,10 +420,11 @@ def write_df_threaded(*args, **kwargs) -> WriteDfThread:
     return thread
 
 
-def filename_in_list(filename: nd.PathLike,
-                     lst: List[nd.PathLike],
-                     ignore_ftype: bool = False,
-                     ) -> bool:
+def filename_in_list(
+    filename: nd.PathLike,
+    lst: List[nd.PathLike],
+    ignore_ftype: bool = False,
+) -> bool:
     """Returns True if filename exists in lst
 
     Parameters
@@ -472,10 +463,11 @@ def filename_in_list(filename: nd.PathLike,
     return False
 
 
-def find_filename(path: nd.PathLike,
-                  alt_types: List[str] = None,
-                  return_full_path: bool = True,
-                  ) -> pathlib.Path:
+def find_filename(
+    path: nd.PathLike,
+    alt_types: List[str] = None,
+    return_full_path: bool = True,
+) -> pathlib.Path:
     """
     Checks if the file at path exists under a different file extension.
 
@@ -516,18 +508,18 @@ def find_filename(path: nd.PathLike,
         return ret_path.name
 
     if alt_types is None:
-        alt_types = ['.pbz2', '.csv'] + list(PD_COMPRESSION)
+        alt_types = [".pbz2", ".csv"] + list(PD_COMPRESSION)
 
     # Make sure they all start with a dot
     temp_alt_types = list()
     for ftype in alt_types:
-        if not du.starts_with(ftype, '.'):
-            ftype = '.' + ftype
+        if not du.starts_with(ftype, "."):
+            ftype = "." + ftype
         temp_alt_types.append(ftype)
     alt_types = temp_alt_types.copy()
 
     # Try to find the path as is
-    if path.suffix != '':
+    if path.suffix != "":
         if os.path.exists(path):
             return return_fn(path)
 
@@ -545,6 +537,7 @@ def find_filename(path: nd.PathLike,
         "Cannot find any similar files. Tried all of the following paths: %s"
         % str(attempted_paths)
     )
+
 
 def similar_file_exists(
     path: nd.PathLike,
@@ -578,12 +571,13 @@ def similar_file_exists(
     return does_file_exist
 
 
-def _copy_all_files_internal(import_dir: nd.PathLike,
-                             export_dir: nd.PathLike,
-                             force_csv_out: bool,
-                             index_col_out: bool,
-                             in_fname: nd.PathLike,
-                             ) -> None:
+def _copy_all_files_internal(
+    import_dir: nd.PathLike,
+    export_dir: nd.PathLike,
+    force_csv_out: bool,
+    index_col_out: bool,
+    in_fname: nd.PathLike,
+) -> None:
     """
     internal function of copy_all_files
     """
@@ -600,19 +594,20 @@ def _copy_all_files_internal(import_dir: nd.PathLike,
 
     # Only get here if we do need to convert the file type
     in_path = import_dir / in_fname
-    out_path = export_dir / (in_fname.stem + '.csv')
+    out_path = export_dir / (in_fname.stem + ".csv")
 
     # Read in, then write out as csv
     df = read_df(in_path)
     write_df(df, out_path, index=index_col_out)
 
 
-def copy_all_files(import_dir: nd.PathLike,
-                   export_dir: nd.PathLike,
-                   force_csv_out: bool = False,
-                   index_col_out: bool = True,
-                   process_count: int = consts.PROCESS_COUNT,
-                   ) -> None:
+def copy_all_files(
+    import_dir: nd.PathLike,
+    export_dir: nd.PathLike,
+    force_csv_out: bool = False,
+    index_col_out: bool = True,
+    process_count: int = consts.PROCESS_COUNT,
+) -> None:
     """
     Copies all of the files from import_dir into export_dir
 
@@ -651,16 +646,16 @@ def copy_all_files(import_dir: nd.PathLike,
 
     # ## MULTIPROCESS THE COPY ## #
     unchanging_kwargs = {
-        'import_dir': import_dir,
-        'export_dir': export_dir,
-        'index_col_out': index_col_out,
-        'force_csv_out': force_csv_out,
+        "import_dir": import_dir,
+        "export_dir": export_dir,
+        "index_col_out": index_col_out,
+        "force_csv_out": force_csv_out,
     }
 
     kwarg_list = list()
     for in_fname in fnames:
         kwargs = unchanging_kwargs.copy()
-        kwargs['in_fname'] = in_fname
+        kwargs["in_fname"] = in_fname
         kwarg_list.append(kwargs)
 
     multiprocessing.multiprocess(
@@ -707,7 +702,7 @@ def copy_and_rename_files(
     None
     """
     # Convert into a list of kwargs
-    keys = [('src', 'dst')] * len(files)
+    keys = [("src", "dst")] * len(files)
     kwarg_list = [dict(zip(ks, vs)) for ks, vs in zip(keys, files)]
 
     multiprocessing.multiprocess(
@@ -774,10 +769,12 @@ def copy_defined_files(
     )
 
     # Convert to a dictionary of kwargs
-    df = df.rename(columns={
-        src_col: "src",
-        dst_col: "dst",
-    })
+    df = df.rename(
+        columns={
+            src_col: "src",
+            dst_col: "dst",
+        }
+    )
     kwarg_list = df.to_dict(orient="records")
 
     # Attach directories to paths
@@ -793,9 +790,10 @@ def copy_defined_files(
     )
 
 
-def remove_from_fname(path: nd.PathLike,
-                      to_remove: str,
-                      ) -> pathlib.Path:
+def remove_from_fname(
+    path: nd.PathLike,
+    to_remove: str,
+) -> pathlib.Path:
     """
     Returns path without to_remove in it
 
@@ -816,14 +814,15 @@ def remove_from_fname(path: nd.PathLike,
     path = pathlib.Path(path)
 
     # Get a version of the filename without the suffix
-    new_fname = path.stem.replace(to_remove, '')
+    new_fname = path.stem.replace(to_remove, "")
 
     return path.parent / (new_fname + path.suffix)
 
 
-def add_to_fname(path: nd.PathLike,
-                 to_add: str,
-                 ) -> pathlib.Path:
+def add_to_fname(
+    path: nd.PathLike,
+    to_add: str,
+) -> pathlib.Path:
     """
     Returns path with to_add in it
 
@@ -887,12 +886,13 @@ def add_external_suffix(path: nd.PathLike) -> pathlib.Path:
     return add_to_fname(path, consts.EXTERNAL_SUFFIX)
 
 
-def copy_segment_files(src_dir: nd.PathLike,
-                       dst_dir: nd.PathLike,
-                       segmentation: nd.SegmentationLevel,
-                       process_count: int = consts.PROCESS_COUNT,
-                       **filename_kwargs
-                       ) -> None:
+def copy_segment_files(
+    src_dir: nd.PathLike,
+    dst_dir: nd.PathLike,
+    segmentation: nd.SegmentationLevel,
+    process_count: int = consts.PROCESS_COUNT,
+    **filename_kwargs,
+) -> None:
     """Copy segment files from src_dir to dst_dir
 
     Parameters
@@ -921,10 +921,12 @@ def copy_segment_files(src_dir: nd.PathLike,
     # Generate all the filenames
     filenames = list()
     for segment_params in segmentation:
-        filenames.append(segmentation.generate_file_name(
-            segment_params=segment_params,
-            **filename_kwargs,
-        ))
+        filenames.append(
+            segmentation.generate_file_name(
+                segment_params=segment_params,
+                **filename_kwargs,
+            )
+        )
 
     copy_files(
         src_dir=src_dir,
@@ -992,10 +994,12 @@ def copy_template_segment_files(
         else:
             out_filename = in_filename
 
-        kwarg_list.append({
-            "src": src_dir / in_filename,
-            "dst": dst_dir / out_filename,
-        })
+        kwarg_list.append(
+            {
+                "src": src_dir / in_filename,
+                "dst": dst_dir / out_filename,
+            }
+        )
 
     # Multiprocess the copy
     multiprocessing.multiprocess(
@@ -1005,11 +1009,12 @@ def copy_template_segment_files(
     )
 
 
-def copy_files(src_dir: nd.PathLike,
-               dst_dir: nd.PathLike,
-               filenames: List[str],
-               process_count: int = consts.PROCESS_COUNT,
-               ) -> None:
+def copy_files(
+    src_dir: nd.PathLike,
+    dst_dir: nd.PathLike,
+    filenames: List[str],
+    process_count: int = consts.PROCESS_COUNT,
+) -> None:
     """Copy files from src_dir to dst_dir
 
     Copies all files in `filenames` from `src_dir` into `dst_dir`. Internally
@@ -1037,23 +1042,26 @@ def copy_files(src_dir: nd.PathLike,
     # Setup kwargs
     kwarg_list = list()
     for fname in filenames:
-        kwarg_list.append({
-            'src': os.path.join(src_dir, fname),
-            'dst': os.path.join(dst_dir, fname),
-        })
+        kwarg_list.append(
+            {
+                "src": os.path.join(src_dir, fname),
+                "dst": os.path.join(dst_dir, fname),
+            }
+        )
 
     multiprocessing.multiprocess(
         fn=du.copy_and_rename,
         kwargs=kwarg_list,
         process_count=process_count,
-        pbar_kwargs={'disable': False},
+        pbar_kwargs={"disable": False},
     )
 
 
-def create_folder(folder_path: nd.PathLike,
-                  verbose_create: bool = True,
-                  verbose_exists: bool = False,
-                  ) -> None:
+def create_folder(
+    folder_path: nd.PathLike,
+    verbose_create: bool = True,
+    verbose_exists: bool = False,
+) -> None:
     """
     Create a new folder at desired location
 
@@ -1071,7 +1079,7 @@ def create_folder(folder_path: nd.PathLike,
     """
     # Check if path exists
     if os.path.exists(folder_path):
-        du.print_w_toggle('Folder already exists', verbose=verbose_exists)
+        du.print_w_toggle("Folder already exists", verbose=verbose_exists)
         return
 
     os.makedirs(folder_path, exist_ok=True)
@@ -1081,11 +1089,12 @@ def create_folder(folder_path: nd.PathLike,
     )
 
 
-def write_pickle(obj: object,
-                 path: os.PathLike,
-                 protocol: int = pickle.HIGHEST_PROTOCOL,
-                 **kwargs,
-                 ) -> None:
+def write_pickle(
+    obj: object,
+    path: os.PathLike,
+    protocol: int = pickle.HIGHEST_PROTOCOL,
+    **kwargs,
+) -> None:
     """Load any pickled object from disk at path.
 
     Parameters
@@ -1106,7 +1115,7 @@ def write_pickle(obj: object,
     -------
     None
     """
-    with open(path, 'wb') as file:
+    with open(path, "wb") as file:
         pickle.dump(obj, file, protocol=protocol, **kwargs)
 
 
@@ -1115,7 +1124,7 @@ def compare_versions(
     ver2: version.Version,
     ver1_name: str,
     ver2_name: str,
-    match_str: bool = False
+    match_str: bool = False,
 ) -> Optional[str]:
     """
     Compares the versions and generates a message
@@ -1203,7 +1212,7 @@ def read_pickle(path: nd.PathLike) -> Any:
         raise FileNotFoundError(f"No file to read in found at {path}")
 
     # Read in
-    with open(path, 'rb') as file:
+    with open(path, "rb") as file:
         obj = pickle.load(file)
 
     # If its a DVector, reset the process count
@@ -1211,11 +1220,11 @@ def read_pickle(path: nd.PathLike) -> Any:
         obj._process_count = nd.constants.PROCESS_COUNT
 
     # If no version, return now
-    if not hasattr(obj, '__version__'):
+    if not hasattr(obj, "__version__"):
         return obj
 
     # Check if class definition has a version (should do!)
-    if not hasattr(obj.__class__, '__version__'):
+    if not hasattr(obj.__class__, "__version__"):
         warn_msg = (
             f"The object loaded from '{path}' has a version, but the class "
             "definition in the code does not. Aborting version check!\n"
@@ -1418,3 +1427,196 @@ def is_old_cache(
     cache = _convert_to_path_list(cache)
 
     return get_oldest_modified_time(cache) < get_latest_modified_time(original)
+
+
+def iterate_files(
+    path: PathLike, suffixes: Optional[list[str]] = None, recursive: bool = False
+) -> Iterator[pathlib.Path]:
+    """Iterate through files in `path` based on optional filtering.
+
+    Parameters
+    ----------
+    path : PathLike
+        Base path all files should start with
+    suffixes : list[str], optional
+        List of file suffixes to filter by.
+    recursive : bool, default False
+        Search recursively in sub-folders.
+
+    Yields
+    ------
+    pathlib.Path
+        Path to file matching filter.
+    """
+    path = pathlib.Path(path)
+
+    path_iter = path.rglob("*") if recursive else path.glob("*")
+
+    for current in path_iter:
+        if not current.is_file():
+            continue
+
+        if suffixes is not None:
+            suffix = "".join(current.suffixes)
+            if suffix not in suffixes:
+                continue
+
+        yield current
+
+
+def parse_filename(filename: str) -> dict[str, Union[str, int]]:
+    """Extract segmentation parameters from filename.
+
+    Parameters
+    ----------
+    filename : str
+        Name of file following the segmentation naming conventions.
+
+    Returns
+    -------
+    dict[str, Union[str, int]]
+        Dictionary of segment name and value.
+    """
+    sep = r"(?:\b|[_.])"
+    int_values = {"yr", "m", "p", "ca", "soc", "ns", "g"}
+    naming_formats = {
+        "trip_origin": r"(n?hb)",
+        "matrix_type": r"(pa|od_from|od_to)",
+        "uc": r"(business|commute|other)",
+        "yr": r"yr(\d{4})",
+        "m": r"m(\d)",
+        "p": r"p(\d{1,2})",
+        "ca": r"ca(\d)",
+        "soc": r"soc(\d)",
+        "ns": r"ns(\d)",
+        "g": r"g(\d)",
+        "tp": r"tp(\d)",
+    }
+
+    data: dict[str, Union[str, int]] = {}
+    for nm, pat in naming_formats.items():
+        match = re.search(f"{sep}{pat}{sep}", filename, re.I)
+        if match is not None:
+            if nm in int_values:
+                data[nm] = int(match.group(1))
+            else:
+                data[nm] = match.group(1).lower()
+
+    return data
+
+
+def parse_folder_files(
+    folder: pathlib.Path,
+    extension_filter: Collection[str] = None,
+    required_data: Collection[str] = None,
+) -> Iterator[dict[str, Union[str, int, pathlib.Path]]]:
+    """Iterate through files in a folder and return their segmentation parameters.
+
+    Parameters
+    ----------
+    folder : pathlib.Path
+        Folder to iterate through files within.
+    extension_filter : Collection[str], optional
+        Suffixes to filter files by.
+    required_data : Collection[str], optional
+        Segments the filenames should contain, files with some missing
+        segments will be excluded.
+
+    Yields
+    ------
+    Iterator[dict[str, Union[str, int, pathlib.Path]]]
+        Dictionary containing the file path, with the key 'path' and
+        all the segment names and values.
+    """
+    for file in folder.iterdir():
+        if not file.is_file():
+            continue
+
+        if extension_filter is not None:
+            suffix = "".join(file.suffixes)
+            if not suffix in {s.lower() for s in extension_filter}:
+                continue
+        data = parse_filename(file.name)
+
+        if required_data is not None:
+            if any(i not in data for i in required_data):
+                continue
+
+        yield {"path": file, **data}
+
+
+def read_matrix(
+    path: os.PathLike,
+    format_: Optional[str] = None,
+    find_similar: bool = False,
+) -> pd.DataFrame:
+    """Read matrix CSV in the square or long format.
+
+    Sorts the index and column names and makes sure they're
+    the same, doesn't infill any NaNs created when reindexing.
+
+    Parameters
+    ----------
+    path : os.PathLike
+        Path to CSV file
+    format_ : str, optional
+        Expected format of the matrix 'square' or 'long', if
+        not given attempts to figure out the format by reading
+        the top few lines of the file.
+    find_similar : bool, default False
+        If True and the given file at path cannot be found, files with the
+        same name but different extensions will be looked for and read in
+        instead. Will check for: '.csv', '.pbz2'
+
+    Returns
+    -------
+    pd.DataFrame
+        Matrix file in square format with sorted columns and indices
+
+    Raises
+    ------
+    ValueError
+        If the `format` cannot be determined by reading the file
+        or an invalid `format` is given.
+    """
+    if format_ is None:
+        # Determine format by reading top few lines of file
+        matrix = read_df(path, nrows=3, find_similar=find_similar)
+
+        if len(matrix.columns) == 3:
+            format_ = "long"
+
+            # Check if columns have a header
+            if matrix.columns[0].strip().lower() in ("o", "origin", "p", "productions"):
+                header = 0
+            else:
+                header = None
+
+        elif len(matrix.columns) > 3:
+            format_ = "square"
+            header = 0
+        else:
+            raise ValueError(f"cannot determine format of matrix {path}")
+
+    format_ = format_.strip().lower()
+    if format_ == "square":
+        matrix = read_df(path, index_col=0, find_similar=find_similar, header=header)
+    elif format_ == "long":
+        matrix = read_df(path, index_col=[0, 1], find_similar=True, header=header)
+
+        matrix = matrix.unstack()
+        matrix.columns = matrix.columns.droplevel(0)
+    else:
+        raise ValueError(f"unknown format {format_}")
+
+    # Attempt to convert to integers
+    matrix.columns = pd.to_numeric(matrix.columns, errors="ignore", downcast="integer")
+    matrix.index = pd.to_numeric(matrix.index, errors="ignore", downcast="integer")
+
+    matrix = matrix.sort_index(axis=0).sort_index(axis=1)
+    if (matrix.index != matrix.columns).any():
+        # Reindex index to match columns then columns to match index
+        matrix = matrix.reindex(matrix.columns, axis=0)
+        matrix = matrix.reindex(matrix.index, axis=1)
+
+    return matrix
