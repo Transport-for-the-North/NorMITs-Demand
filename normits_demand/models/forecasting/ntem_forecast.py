@@ -5,19 +5,23 @@
 # Standard imports
 import dataclasses
 from pathlib import Path
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Optional, Union
 
 # Third party imports
 import numpy as np
 import pandas as pd
 
 # Local imports
+import normits_demand as nd
 from normits_demand.utils import file_ops, vehicle_occupancy
 from normits_demand import logging as nd_log
 from normits_demand import core as nd_core
-from normits_demand import efs_constants as efs_consts
 from normits_demand.distribution import furness
-from normits_demand.models.tempro_trip_ends import NTEMForecastError, TEMProTripEnds
+from normits_demand.models.forecasting.tempro_trip_ends import (
+    NTEMForecastError,
+    TEMProData,
+    TEMProTripEnds,
+)
 from normits_demand.matrices import pa_to_od, matrix_processing
 
 ##### CONSTANTS #####
@@ -49,32 +53,23 @@ class NTEMImportMatrices:
         one mode per model.
     """
 
-    MATRIX_FOLDER = "{name}/post_me/tms_seg_pa"
     SEGMENTATION = {"hb": "hb_p_m", "nhb": "nhb_p_m"}
 
-    def __init__(self, import_folder: Path, year: int, model_name: str) -> None:
-        file_ops.check_path_exists(import_folder)
+    def __init__(self, matrix_folder: Path, year: int, model: nd.AssignmentModel) -> None:
         self.year = int(year)
-        self.model_name = model_name.lower().strip()
-        if self.model_name != "noham":
+        self.model = model
+        if self.model not in (nd.AssignmentModel.NOHAM, nd.AssignmentModel.MIHAM):
             raise NotImplementedError(
-                "this class currently only works for 'noham' model"
+                f"NTEM forecasting not yet implemented for {model.get_name()}"
             )
-        self.matrix_folder = import_folder / self.MATRIX_FOLDER.format(
-            name=self.model_name
-        )
+
+        self.matrix_folder = Path(matrix_folder)
         file_ops.check_path_exists(self.matrix_folder)
-        mode = efs_consts.MODEL_MODES[self.model_name]
-        if len(mode) == 1:
-            self.mode: int = mode[0]
-        else:
-            raise NotImplementedError(
-                "cannot handle models with more than one mode, "
-                f"this model ({self.model_name}) has {len(mode)} modes"
-            )
+
+        self.mode = self.model.get_mode().get_mode_num()
+
         self.segmentation = {
-            k: nd_core.get_segmentation_level(s)
-            for k, s in self.SEGMENTATION.items()
+            k: nd_core.get_segmentation_level(s) for k, s in self.SEGMENTATION.items()
         }
         self._hb_paths = None
         self._nhb_paths = None
@@ -82,7 +77,7 @@ class NTEMImportMatrices:
     def __str__(self) -> str:
         return (
             f"{self.__class__.__name__}(matrix_folder={self.matrix_folder}, "
-            f"year={self.year}, model_name={self.model_name})"
+            f"year={self.year}, model_name={self.model.get_name()})"
         )
 
     def __repr__(self) -> str:
@@ -168,7 +163,7 @@ class NTEMImportMatrices:
     @property
     def od_matrix_folder(self) -> Path:
         """PostME OD matrices folder, assumed to be in
-            the parent folder of the PA matrices.
+        the parent folder of the PA matrices.
         """
         return self.matrix_folder.parent
 
@@ -205,14 +200,11 @@ class NTEMImportMatrices:
             seg = self.segmentation[trip_origin]
         except KeyError as err:
             raise NTEMForecastError(
-                "hb should be one of %s not %r" %
-                (tuple(self.segmentation.keys()), trip_origin)
+                "hb should be one of %s not %r"
+                % (tuple(self.segmentation.keys()), trip_origin)
             ) from err
         return seg.generate_file_name(
-            {
-                "p": purpose,
-                "m": self.mode
-            },
+            {"p": purpose, "m": self.mode},
             file_desc="pa",
             trip_origin=trip_origin,
             year=str(year),
@@ -224,7 +216,7 @@ class NTEMImportMatrices:
 ##### FUNCTIONS #####
 def trip_end_growth(
     tempro_vectors: Dict[int, nd_core.DVector],
-    model_zone_system: str,
+    model_zoning: nd.ZoningSystem,
     zone_weighting: str,
     base_year: int,
 ) -> Dict[int, nd_core.DVector]:
@@ -242,8 +234,7 @@ def trip_end_growth(
         keys should be years and must include
         `normits_demand.efs_constants.BASE_YEAR`.
     model_zone_system : str
-        Name of the zone system to convert the
-        TEMPro growth factors to.
+        Zone system to convert the TEMPro growth factors to.
     zone_weighting : str
         Name of the weighting to use when translating
         to `model_zone_system`.
@@ -266,21 +257,17 @@ def trip_end_growth(
     if base_year not in tempro_vectors:
         raise NTEMForecastError(f"base year ({base_year}) data not given")
     growth_zone = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
-    model_zoning = nd_core.get_zoning_system(model_zone_system)
+
     # Split data into internal and external DVectors
     # for different growth calculations
     base = tempro_vectors[base_year]
     base_data = {
-        "internal":
-            base.translate_zoning(growth_zone),
-        "external":
-            base.translate_zoning(model_zoning, weighting=zone_weighting),
+        "internal": base.translate_zoning(growth_zone),
+        "external": base.translate_zoning(model_zoning, weighting=zone_weighting),
     }
     masks = {
-        "internal":
-            np.isin(model_zoning.unique_zones, model_zoning.internal_zones),
-        "external":
-            np.isin(model_zoning.unique_zones, model_zoning.external_zones),
+        "internal": np.isin(model_zoning.unique_zones, model_zoning.internal_zones),
+        "external": np.isin(model_zoning.unique_zones, model_zoning.external_zones),
     }
 
     growth = {}
@@ -307,9 +294,7 @@ def trip_end_growth(
                         model_zoning, weighting="average"
                     )
                 # Set all zones not in the area to 0
-                forecast[area] = forecast[area].segment_apply(
-                    set_zero, masks[area]
-                )
+                forecast[area] = forecast[area].segment_apply(set_zero, masks[area])
             # Add the internal and external areas back together
             growth[yr] = forecast["internal"] + forecast["external"]
     return growth
@@ -317,7 +302,7 @@ def trip_end_growth(
 
 def tempro_growth(
     tempro_data: TEMProTripEnds,
-    model_zone_system: str,
+    model_zone_system: nd.ZoningSystem,
     base_year: int,
 ) -> TEMProTripEnds:
     """Calculate LAD growth factors and return at original zone system.
@@ -329,9 +314,8 @@ def tempro_growth(
     ----------
     tempro_data : TEMProTripEnds
         TEMPro trip end data for all study years.
-    model_zone_system : str
-        Name of the zone system to convert the
-        TEMPro growth factors to.
+    model_zone_system : ZoningSystem
+        Zone system to convert the TEMPro growth factors to.
     base_year : int
         Model base year.
 
@@ -361,7 +345,7 @@ def tempro_growth(
             getattr(tempro_data, segment.name),
             model_zone_system,
             zone_translation_weights[segment.name],
-            base_year,
+            base_year=base_year,
         )
     return TEMProTripEnds(**grown)
 
@@ -445,10 +429,7 @@ def _check_matrix(
     nans = np.sum(matrix.isna().values)
     infs = np.sum(np.isinf(matrix.values))
     if nans > 0 or infs > 0:
-        err = (
-            f"{name} matrix contains {nans:,} "
-            f"NaN and {infs:,} infinite values"
-        )
+        err = f"{name} matrix contains {nans:,} " f"NaN and {infs:,} infinite values"
         if raise_nan_errors:
             raise NTEMForecastError(err)
         LOG.error(err)
@@ -497,9 +478,7 @@ def grow_matrix(
     growth = {}
     dvectors = (("row_targets", productions), ("col_targets", attractions))
     for nm, dvec in dvectors:
-        mat_te = matrix.loc[internals, internals].sum(
-            axis=1 if nm == "row_targets" else 0
-        )
+        mat_te = matrix.loc[internals, internals].sum(axis=1 if nm == "row_targets" else 0)
         mat_te.name = "base_trips"
         mat_te.index.name = "model_zone_id"
         growth[nm] = pd.Series(
@@ -539,19 +518,15 @@ def grow_matrix(
     ext_future.loc[internals, internals] = 0
     combined_future = pd.concat([int_future, ext_future], axis=0)
     combined_future = combined_future.groupby(level=0).sum()
+    combined_future.rename(columns={i: int(i) for i in combined_future.columns}, inplace=True)
+    combined_future.sort_index(axis=1, inplace=True)
     _check_matrix(combined_future, output_path.stem)
     # Write future to file
     file_ops.write_df(combined_future, output_path)
     LOG.info("Written: %s", output_path)
     _pa_growth_comparison(
-        {
-            "base": matrix,
-            "forecast": combined_future
-        },
-        {
-            "attractions": growth["col_targets"],
-            "productions": growth["row_targets"]
-        },
+        {"base": matrix, "forecast": combined_future},
+        {"attractions": growth["col_targets"], "productions": growth["row_targets"]},
         internals,
         output_path.with_name(
             file_ops.remove_suffixes(output_path).stem + "-growth_comparison.xlsx"
@@ -599,45 +574,28 @@ def _pa_growth_comparison(
     # Check dictionary keys and DataFrame/Series indices
     missing = [k for k in ("base", "forecast") if k not in matrices]
     if missing:
-        raise NTEMForecastError(
-            f"matrices dictionary is missing key(s): {missing}"
-        )
-    missing = [
-        k for k in ("attractions", "productions") if k not in growth_data
-    ]
+        raise NTEMForecastError(f"matrices dictionary is missing key(s): {missing}")
+    missing = [k for k in ("attractions", "productions") if k not in growth_data]
     if missing:
-        raise NTEMForecastError(
-            f"growth_data dictionary is missing key(s): {missing}"
-        )
+        raise NTEMForecastError(f"growth_data dictionary is missing key(s): {missing}")
     for nm, mat in matrices.items():
         if (mat.index != mat.columns).any():
-            raise NTEMForecastError(
-                f"{nm} matrix index and columns are not identical"
-            )
+            raise NTEMForecastError(f"{nm} matrix index and columns are not identical")
     if (matrices["base"].index != matrices["forecast"].index).any():
-        raise NTEMForecastError(
-            "base and forecast matrices don't have indentical indices"
-        )
+        raise NTEMForecastError("base and forecast matrices don't have indentical indices")
     for nm, g in growth_data.items():
         if (g.index != matrices["base"].index).any():
-            raise NTEMForecastError(
-                f"{nm} growth does not have the same index as the matrix"
-            )
+            raise NTEMForecastError(f"{nm} growth does not have the same index as the matrix")
 
     # Calculate aggregated growths
     growth_comparisons = {
-        "Matrix Total Growth":
-            (
-                np.sum(matrices["forecast"].values) /
-                np.sum(matrices["base"].values)
-            ),
-        "Matrix Mean Growth":
-            np.nanmean((matrices["forecast"] / matrices["base"]).values),
+        "Matrix Total Growth": (
+            np.sum(matrices["forecast"].values) / np.sum(matrices["base"].values)
+        ),
+        "Matrix Mean Growth": np.nanmean((matrices["forecast"] / matrices["base"]).values),
     }
     for nm, g in growth_data.items():
-        growth_comparisons[f"TEMPro Mean Growth - {nm.title()}"] = np.mean(
-            g.values
-        )
+        growth_comparisons[f"TEMPro Mean Growth - {nm.title()}"] = np.mean(g.values)
 
     # Reindex with internals/externals
     new_index = np.where(matrices["base"].index.isin(internals), "I", "E")
@@ -660,21 +618,15 @@ def _pa_growth_comparison(
         g.index = new_index
         growth_data[nm] = g.groupby(level=0).mean()
 
-    growth_comparisons["Matrix Trip End Growth"] = (
-        matrix_te["forecast"] / matrix_te["base"]
-    )
-    growth_comparisons["Matrix IE Growth"] = (
-        matrices["forecast"] / matrices["base"]
-    )
+    growth_comparisons["Matrix Trip End Growth"] = matrix_te["forecast"] / matrix_te["base"]
+    growth_comparisons["Matrix IE Growth"] = matrices["forecast"] / matrices["base"]
     growth_comparisons["TEMPro Trip End Growth"] = pd.DataFrame(growth_data)
 
     out = output_path.with_suffix(".xlsx")
     with pd.ExcelWriter(out, engine="openpyxl") as excel:
         pandas_types = (pd.DataFrame, pd.Series)
         single_values = {
-            k: v
-            for k, v in growth_comparisons.items()
-            if not isinstance(v, pandas_types)
+            k: v for k, v in growth_comparisons.items() if not isinstance(v, pandas_types)
         }
         single_values = pd.Series(single_values)
         single_values.to_excel(excel, sheet_name="Summary", header=False)
@@ -722,12 +674,11 @@ def grow_all_matrices(
             growth.hb_attractions,
             growth.hb_productions,
         ),
-        "nhb":
-            (
-                matrices.nhb_paths,
-                growth.nhb_attractions,
-                growth.nhb_productions,
-            ),
+        "nhb": (
+            matrices.nhb_paths,
+            growth.nhb_attractions,
+            growth.nhb_productions,
+        ),
     }
     output_folder.mkdir(exist_ok=True, parents=True)
     for hb, (paths, attractions, productions) in iterator.items():
@@ -755,11 +706,12 @@ def grow_all_matrices(
 def convert_to_od(
     pa_folder: Path,
     od_folder: Path,
-    years: List[int],
+    base_year: int,
+    future_years: List[int],
     modes: List[int],
     purposes: Dict[str, List[int]],
-    model_name: str,
     pa_to_od_factors: Dict[str, Path],
+    export_path: Path,
 ) -> None:
     """Converts PA matrices from folder to OD.
 
@@ -794,28 +746,26 @@ def convert_to_od(
         pa_import=pa_folder,
         od_export=od_folder,
         fh_th_factors_dir=pa_to_od_factors["post_me_fh_th_factors"],
-        years_needed=years,
+        base_year=base_year,
+        years_needed=future_years,
         seg_level="tms",
-        seg_params={
-            "p_needed": purposes["hb"],
-            "m_needed": modes
-        },
+        seg_params={"p_needed": purposes["hb"], "m_needed": modes},
     )
+
     matrix_processing.nhb_tp_split_via_factors(
-        import_dir=pa_folder,
         export_dir=od_folder,
         import_matrix_format="pa",
         export_matrix_format="od",
         tour_proportions_dir=pa_to_od_factors["post_me_tours"],
-        model_name=model_name,
-        years_needed=years,
+        future_years_needed=future_years,
         p_needed=purposes["nhb"],
         m_needed=modes,
+        export_path=export_path,
         compress_out=True,
     )
 
 
-def compile_noham_for_norms(pa_folder: Path, years: List[int]) -> Path:
+def compile_highway_for_rail(pa_folder: Path, years: list[int], mode: list[int]) -> Path:
     """Compile the PA matrices into the 24hr VDM PA matrices format.
 
     The outputs are saved in a new folder called
@@ -825,8 +775,10 @@ def compile_noham_for_norms(pa_folder: Path, years: List[int]) -> Path:
     ----------
     pa_folder : Path
         Folder containing PA matrices.
-    years : List[int]
+    years : list[int]
         List of the years to convert.
+    mode : list[int]
+        List of mode numbers.
 
     Returns
     -------
@@ -841,7 +793,7 @@ def compile_noham_for_norms(pa_folder: Path, years: List[int]) -> Path:
         export_dir=vdm_folder,
         matrix_format="pa",
         years_needed=years,
-        m_needed=[3],
+        m_needed=mode,
         split_hb_nhb=True,
     )
     for path in paths:
@@ -854,7 +806,7 @@ def compile_noham_for_norms(pa_folder: Path, years: List[int]) -> Path:
     return vdm_folder
 
 
-def compile_noham(
+def compile_highway(
     import_od_path: Path, years: List[int], car_occupancies_path: Path
 ) -> Path:
     """Compile OD matrices into the formats required for NoHAM.
@@ -908,3 +860,88 @@ def compile_noham(
     )
     LOG.info("Written Compiled OD PCU matrices: %s", compiled_od_pcu_path)
     return compiled_od_path
+
+
+def get_tempro_data(
+    data_path: Path,
+    years: list[int],
+    ntem_version: Optional[float] = None,
+    ntem_scenario: Optional[str] = None,
+) -> TEMProTripEnds:
+    """Read TEMPro data and convert it to DVectors.
+
+    Parameters
+    ----------
+    data_path : Path
+        Path to TEMPro data CSV or to the folder containing
+        the TEMPro databases.
+    years : list[int]
+        List of year columns to read from input file,
+        should include base and forecast years.
+    ntem_version : float, optional
+        Version of NTEM data to use.
+    ntem_scenario : str, optional
+        NTEM scenario to use, required if `ntem_version` > 7.2.
+
+    Returns
+    -------
+    tempro_trip_ends.TEMProTripEnds
+        TEMPro trip end data as DVectors stored in class
+        attributes for base and all future years.
+    """
+    tempro_data = TEMProData(
+        data_path, years, ntem_version=ntem_version, ntem_scenario=ntem_scenario
+    )
+    # Read data and convert to DVectors
+    trip_ends = tempro_data.produce_dvectors()
+    # Aggregate DVector to required segmentation
+    segmentation = NTEMImportMatrices.SEGMENTATION
+    return trip_ends.aggregate(
+        {
+            "hb_attractions": segmentation["hb"],
+            "hb_productions": segmentation["hb"],
+            "nhb_attractions": segmentation["nhb"],
+            "nhb_productions": segmentation["nhb"],
+        }
+    )
+
+
+def model_mode_subset(
+    trip_ends: TEMProTripEnds,
+    model_name: str,
+) -> TEMProTripEnds:
+    """Get subset of `trip_ends` segmentation for specific `model_name`.
+
+    Parameters
+    ----------
+    trip_ends : tempro_trip_ends.TEMProTripEnds
+        Trip end data, which has segmentation split by
+        mode.
+    model_name : str
+        Name of the model being ran, currently only
+        works for 'noham'.
+
+    Returns
+    -------
+    tempro_trip_ends.TEMProTripEnds
+        Trip end data at new segmentation.
+
+    Raises
+    ------
+    NotImplementedError
+        If any `model_name` other than 'noham' is
+        given.
+    """
+    model_name = model_name.lower().strip()
+    if model_name == "noham":
+        segmentation = {
+            "hb_attractions": "hb_p_m_car",
+            "hb_productions": "hb_p_m_car",
+            "nhb_attractions": "nhb_p_m_car",
+            "nhb_productions": "nhb_p_m_car",
+        }
+    else:
+        raise NotImplementedError(
+            f"NTEM forecasting only not implemented for model {model_name!r}"
+        )
+    return trip_ends.subset(segmentation)

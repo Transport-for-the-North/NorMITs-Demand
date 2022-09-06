@@ -47,7 +47,7 @@ TOUR_PROP_DIR = (
 TOUR_FACTOR_DIR = os.path.join(TOUR_PROP_DIR, 'fh_th_factors')
 
 # CONSTANTS
-BASE_YEAR = 2018
+BASE_YEAR = 2021
 TRIP_ORIGIN = 'hb'
 PURPOSES = [1, 2, 3, 4, 5, 6, 7, 8]
 TP_NEEDED = [1, 2, 3, 4]

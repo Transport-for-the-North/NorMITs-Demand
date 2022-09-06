@@ -32,7 +32,8 @@ class TemproParser:
     """
     """
     _access_driver = '{Microsoft Access Driver (*.mdb, *.accdb)}'
-    _data_source = 'Y:\Data Strategy\Data\TEMPRO'
+    _data_source = r'I:\Data\NTEM'
+    _ntem_version = 8.0
     _out_folder = r'I:\NorMITs Demand\import\ntem_constraints\ss'
     _region_list = [
         'EAST_',
@@ -46,6 +47,13 @@ class TemproParser:
         'WALES_',
         'WM_',
         'YH_'
+    ]
+    _scenario_list = [
+        'High',
+        'Low',
+        'Regional',
+        'Core',
+        'Behavioural'
     ]
     _output_years = [2011, 2018, 2033, 2035, 2040, 2050]
 
@@ -77,6 +85,8 @@ class TemproParser:
     def __init__(self,
                  access_driver: str = None,
                  data_source: str = None,
+                 ntem_version: float = None,
+                 scenario: str = None,
                  region_list: List[str] = None,
                  output_years: List[int] = None,
                  out_folder: str = None,
@@ -88,6 +98,7 @@ class TemproParser:
         # Set to default values if not passed in
         access_driver = self._access_driver if access_driver is None else access_driver
         data_source = self._data_source if data_source is None else data_source
+        ntem_version = self._ntem_version if ntem_version is None else ntem_version
         out_folder = self._out_folder if out_folder is None else out_folder
         region_list = self._region_list if region_list is None else region_list
         output_years = self._output_years if output_years is None else output_years
@@ -97,7 +108,9 @@ class TemproParser:
 
         # Assign variables
         self.access_driver = access_driver
-        self.data_source = data_source
+        self.data_source = os.path.join(data_source, str(ntem_version))
+        self.ntem_version = ntem_version
+        self.scenario = scenario
         self.region_list = region_list
         self.output_years = output_years
         self.output_years_str = [str(x) for x in output_years]
@@ -114,6 +127,13 @@ class TemproParser:
         self.ntem_to_msoa_path = r"I:\NorMITs Demand\import\zone_translation\weighted\ntem_msoa_pop_weighted_lookup.csv"
 
     def get_available_dbs(self):
+        """
+        Returns
+        ----------
+        available_dbs: list
+            List of dbs available for import
+        """
+
         available_dbs = []
         db_list = [x for x in os.listdir(self.data_source) if '.mdb' in x]
         for db_fname in db_list:
@@ -121,6 +141,12 @@ class TemproParser:
                 if region in db_fname:
                     available_dbs.append(db_fname)
                     break
+
+        if self.ntem_version > 7.2:
+            if self.scenario is None:
+                raise IOError('NTEM later than 7.2 requires scenario, none was passed')
+            else:
+                available_dbs = [x for x in available_dbs if self.scenario in x]
 
         if available_dbs == list():
             raise IOError("Couldn't find any dbs to load from.")

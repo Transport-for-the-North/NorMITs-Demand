@@ -20,6 +20,7 @@ import math
 import pathlib
 import itertools
 import collections
+import pathlib
 
 from os import PathLike
 
@@ -121,7 +122,7 @@ class SegmentationLevel:
 
     _subset_definitions_path = segment_definitions_path / "subset.csv"
     _segment_translation_dir = segment_definitions_path / "_translations"
-    _tfn_tt_expansion_path = segment_definitions_path / "tfn_tt_splits.pbz2"
+    _tfn_tt_expansion_path = _segment_translation_dir / "tfn_tt_splits.pbz2"
 
     # Separators for the files above
     _list_separator = ';'
@@ -420,6 +421,9 @@ class SegmentationLevel:
         Returns the return_seg_name and join cols for multiplying
         self and other
         """
+        if self == other:
+            return (self.name, self.naming_order)
+
         # Init
         mult_def = self._read_multiply_definitions()
 
@@ -1133,7 +1137,7 @@ class SegmentationLevel:
             target_len = len(other.segment_names)
             ach_len = len(set(agg_dict.keys()))
             raise SegmentationError(
-                "Some segment names seem to have gone missing during "
+                "Some segment names seem to have gone missing "
                 "while aggregating %s into %s.\n"
                 "Expected %s segments.\n"
                 "Found %s segments."
@@ -2322,9 +2326,10 @@ def _determine_import_path(name: str) -> pathlib.Path:
             return try_path
 
     # If here, the name couldn't be found
+    error_fmt = "\n".join([f"\t{str(x)}" for x in import_dirs])
     raise nd.NormitsDemandError(
         f"We don't seem to have any data for the segmentation {name}.\n"
-        f"Tried looking for the data in the following places: {import_dirs}"
+        f"Tried looking for the data in the following places: {error_fmt}"
     )
 
 
@@ -2402,3 +2407,21 @@ def get_segmentation_level(name: str) -> SegmentationLevel:
         segment_types=segment_types,
         valid_segments=valid_segments,
     )
+
+def list_segmentations() -> List[str]:
+    """List names of all available segmentations.
+
+    Returns
+    -------
+    List[str]
+        Names of all segmentations found in NorMITs demand
+        segmentation folder.
+    """
+    seg_folder = pathlib.Path(SegmentationLevel._segment_definitions_path)
+
+    segmentations = []
+    for path in seg_folder.iterdir():
+        if path.is_dir() and not path.name.startswith("_"):
+            segmentations.append(path.name)
+
+    return segmentations

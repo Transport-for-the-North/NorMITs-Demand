@@ -18,6 +18,8 @@ import pathlib
 import operator
 import itertools
 
+from functools import reduce
+from pathlib import Path
 from typing import Any
 from typing import List
 from typing import Dict
@@ -56,11 +58,12 @@ from normits_demand.matrices.tms_matrix_processing import *
 LOG = nd_log.get_logger(__name__)
 
 
-def _aggregate(import_dir: str,
-               in_fnames: List[str],
-               export_path: str,
-               round_dp: int = consts.DEFAULT_ROUNDING,
-               ) -> str:
+def _aggregate(
+    import_dir: str,
+    in_fnames: List[str],
+    export_path: str,
+    round_dp: int = consts.DEFAULT_ROUNDING,
+) -> str:
     """
     Loads the given files, aggregates together and saves in given location
 
@@ -74,8 +77,7 @@ def _aggregate(import_dir: str,
     if in_fnames == list():
         raise nd.NormitsDemandError(
             "Couldn't find any matrices to aggregate up to create %s!\n"
-            "Looking in %s"
-            % (os.path.basename(export_path), import_dir)
+            "Looking in %s" % (os.path.basename(export_path), import_dir)
         )
 
     for fname in in_fnames:
@@ -83,10 +85,7 @@ def _aggregate(import_dir: str,
 
         # Build a matching df of 0s if not done yet
         if aggregated_mat is None:
-            aggregated_mat = pd.DataFrame(0,
-                                          index=mat.index,
-                                          columns=mat.columns
-                                          )
+            aggregated_mat = pd.DataFrame(0, index=mat.index, columns=mat.columns)
         aggregated_mat += mat
 
     # Write new matrix out
@@ -94,14 +93,15 @@ def _aggregate(import_dir: str,
     print("Aggregated matrix written: %s" % os.path.basename(export_path))
 
 
-def _recursive_aggregate(candidates: List[str],
-                         segmentations: List[List[int]],
-                         segmentation_strs: List[List[str]],
-                         import_dir: str,
-                         export_path: str,
-                         compress_out: bool = False,
-                         round_dp: int = consts.DEFAULT_ROUNDING,
-                         ) -> None:
+def _recursive_aggregate(
+    candidates: List[str],
+    segmentations: List[List[int]],
+    segmentation_strs: List[List[str]],
+    import_dir: str,
+    export_path: str,
+    compress_out: bool = False,
+    round_dp: int = consts.DEFAULT_ROUNDING,
+) -> None:
     """
     The internal function of aggregate_matrices(). Recursively steps through
     the segmentations given, aggregating as it goes.
@@ -144,7 +144,7 @@ def _recursive_aggregate(candidates: List[str],
         segmentation_strs = segmentation_strs[0]
 
         # Determine the ftype
-        ftype = '.csv'
+        ftype = ".csv"
         if compress_out:
             ftype = consts.COMPRESSION_SUFFIX
 
@@ -197,32 +197,33 @@ def _recursive_aggregate(candidates: List[str],
             )
 
 
-def _aggregate_matrices_internal(year,
-                                 p,
-                                 m,
-                                 all_matrices,
-                                 import_dir,
-                                 export_dir,
-                                 trip_origin,
-                                 matrix_format,
-                                 segment_needed,
-                                 ca_needed,
-                                 tp_needed,
-                                 segment_str,
-                                 ca_strs,
-                                 tp_strs,
-                                 compress_out,
-                                 round_dp,
-                                 ):
+def _aggregate_matrices_internal(
+    year,
+    p,
+    m,
+    all_matrices,
+    import_dir,
+    export_dir,
+    trip_origin,
+    matrix_format,
+    segment_needed,
+    ca_needed,
+    tp_needed,
+    segment_str,
+    ca_strs,
+    tp_strs,
+    compress_out,
+    round_dp,
+):
     """
     The internal function of aggregate_matrices(). Used for multiprocessing.
     """
     # ## NARROW DOWN TO RELEVANT MATRICES ## #
     # Create segmentation strings
     compile_mats = all_matrices.copy()
-    p_str = '_p' + str(p) + '_'
-    m_str = '_m' + str(m) + '_'
-    year_str = '_yr' + str(year) + '_'
+    p_str = "_p" + str(p) + "_"
+    m_str = "_m" + str(m) + "_"
+    year_str = "_yr" + str(year) + "_"
 
     # Narrow down to matrices in this category
     compile_mats = [x for x in compile_mats if p_str in x]
@@ -235,7 +236,7 @@ def _aggregate_matrices_internal(year,
         matrix_format=matrix_format,
         year=str(year),
         purpose=str(p),
-        mode=str(m)
+        mode=str(m),
     )
     out_path = os.path.join(export_dir, base_fname)
 
@@ -250,21 +251,22 @@ def _aggregate_matrices_internal(year,
     )
 
 
-def aggregate_matrices(import_dir: str,
-                       export_dir: str,
-                       trip_origin: str,
-                       matrix_format: str,
-                       years_needed: List[int],
-                       p_needed: List[int],
-                       m_needed: List[int],
-                       soc_needed: List[int] = None,
-                       ns_needed: List[int] = None,
-                       ca_needed: List[int] = None,
-                       tp_needed: List[int] = None,
-                       compress_out: bool = False,
-                       round_dp: int = consts.DEFAULT_ROUNDING,
-                       process_count: int = consts.PROCESS_COUNT,
-                       ):
+def aggregate_matrices(
+    import_dir: str,
+    export_dir: str,
+    trip_origin: str,
+    matrix_format: str,
+    years_needed: List[int],
+    p_needed: List[int],
+    m_needed: List[int],
+    soc_needed: List[int] = None,
+    ns_needed: List[int] = None,
+    ca_needed: List[int] = None,
+    tp_needed: List[int] = None,
+    compress_out: bool = False,
+    round_dp: int = consts.DEFAULT_ROUNDING,
+    process_count: int = consts.PROCESS_COUNT,
+):
     """
     Aggregates the matrices in import_dir up to the given level and writes
     the new matrices out to export_dir
@@ -324,19 +326,22 @@ def aggregate_matrices(import_dir: str,
     -------
     """
     # Init
-    if((ns_needed is not None and soc_needed is None)
-       or (soc_needed is not None and ns_needed is None)):
-        raise ValueError("Both keep_soc and keep_ns need to be set at the same "
-                         "time. Cannot set one and not the other.")
+    if (ns_needed is not None and soc_needed is None) or (
+        soc_needed is not None and ns_needed is None
+    ):
+        raise ValueError(
+            "Both keep_soc and keep_ns need to be set at the same "
+            "time. Cannot set one and not the other."
+        )
 
     # Build strings if needed
-    soc_strs = list() if soc_needed is None else ['_soc' + str(x) for x in soc_needed]
-    ns_strs = list() if ns_needed is None else ['_ns' + str(x) for x in ns_needed]
-    ca_strs = list() if ca_needed is None else ['_ca' + str(x) for x in ca_needed]
-    tp_strs = list() if tp_needed is None else ['_tp' + str(x) for x in tp_needed]
+    soc_strs = list() if soc_needed is None else ["_soc" + str(x) for x in soc_needed]
+    ns_strs = list() if ns_needed is None else ["_ns" + str(x) for x in ns_needed]
+    ca_strs = list() if ca_needed is None else ["_ca" + str(x) for x in ca_needed]
+    tp_strs = list() if tp_needed is None else ["_tp" + str(x) for x in tp_needed]
 
     # Load in all the candidate matrices and narrow down
-    mat_format_str = '_' + matrix_format + '_'
+    mat_format_str = "_" + matrix_format + "_"
     all_matrices = du.list_files(import_dir)
     all_matrices = [x for x in all_matrices if mat_format_str in x]
     all_matrices = [x for x in all_matrices if du.starts_with(x, trip_origin)]
@@ -345,17 +350,17 @@ def aggregate_matrices(import_dir: str,
     print("Writing files to: %s" % export_dir)
     # ## MULTIPROCESS ## #
     unchanging_kwargs = {
-        'all_matrices': all_matrices,
-        'import_dir': import_dir,
-        'export_dir': export_dir,
-        'trip_origin': trip_origin,
-        'matrix_format': matrix_format,
-        'ca_needed': ca_needed,
-        'tp_needed': tp_needed,
-        'ca_strs': ca_strs,
-        'tp_strs': tp_strs,
-        'compress_out': compress_out,
-        'round_dp': round_dp,
+        "all_matrices": all_matrices,
+        "import_dir": import_dir,
+        "export_dir": export_dir,
+        "trip_origin": trip_origin,
+        "matrix_format": matrix_format,
+        "ca_needed": ca_needed,
+        "tp_needed": tp_needed,
+        "ca_strs": ca_strs,
+        "tp_strs": tp_strs,
+        "compress_out": compress_out,
+        "round_dp": round_dp,
     }
 
     # Build the kwarg list
@@ -372,17 +377,20 @@ def aggregate_matrices(import_dir: str,
             segment_needed = None
             segment_str = list()
         else:
-            raise ValueError("Purpose '%s' is neither a soc, ns or nhb "
-                             "segmentation somehow?" % str(p))
+            raise ValueError(
+                "Purpose '%s' is neither a soc, ns or nhb " "segmentation somehow?" % str(p)
+            )
 
         kwargs = unchanging_kwargs.copy()
-        kwargs.update({
-            'year': year,
-            'p': p,
-            'm': m,
-            'segment_needed': segment_needed,
-            'segment_str': segment_str,
-        })
+        kwargs.update(
+            {
+                "year": year,
+                "p": p,
+                "m": m,
+                "segment_needed": segment_needed,
+                "segment_str": segment_str,
+            }
+        )
         kwarg_list.append(kwargs)
 
     # Run
@@ -390,18 +398,18 @@ def aggregate_matrices(import_dir: str,
         fn=_aggregate_matrices_internal,
         kwargs=kwarg_list,
         process_count=process_count,
-
     )
 
 
-def get_tour_proportion_seed_values(m: int,
-                                    p: int,
-                                    tp_split_path: str = None,
-                                    phi_lookup_folder: str = None,
-                                    phi_type: str = 'fhp_tp',
-                                    aggregate_to_wday: bool = True,
-                                    infill: float = 0.001
-                                    ) -> np.ndarray:
+def get_tour_proportion_seed_values(
+    m: int,
+    p: int,
+    tp_split_path: str = None,
+    phi_lookup_folder: str = None,
+    phi_type: str = "fhp_tp",
+    aggregate_to_wday: bool = True,
+    infill: float = 0.001,
+) -> np.ndarray:
     """
     TODO: write get_seed_values doc
 
@@ -422,35 +430,31 @@ def get_tour_proportion_seed_values(m: int,
     # Init
     # TODO: Hardcoding this is bad!
     if phi_lookup_folder is None:
-        phi_lookup_folder = 'I:/NorMITs Demand/import/phi_factors'
+        phi_lookup_folder = "I:/NorMITs Demand/import/phi_factors"
 
-    tp_split_path = r"I:\NorMITs Demand\import\tfn_segment_production_params\hb_ave_time_split.csv"
+    tp_split_path = (
+        r"I:\NorMITs Demand\import\tfn_segment_production_params\hb_ave_time_split.csv"
+    )
 
     # Get appropriate phis and filter to purpose
     phi_factors = pa2od.get_time_period_splits(
-        m,
-        phi_type,
-        aggregate_to_wday=aggregate_to_wday,
-        lookup_folder=phi_lookup_folder
+        m, phi_type, aggregate_to_wday=aggregate_to_wday, lookup_folder=phi_lookup_folder
     )
     phi_factors = pa2od.simplify_phi_factors(phi_factors)
-    phi_factors = phi_factors[phi_factors['purpose_from_home'] == p]
+    phi_factors = phi_factors[phi_factors["purpose_from_home"] == p]
 
     # Get the time period splits
     tp_splits = du.get_mean_tp_splits(
-        tp_split_path=tp_split_path,
-        p=p,
-        aggregate_to_weekday=aggregate_to_wday,
-        tp_as='int'
+        tp_split_path=tp_split_path, p=p, aggregate_to_weekday=aggregate_to_wday, tp_as="int"
     )
 
     # Create the seed values
-    valid_tps = phi_factors['time_from_home'].unique()
+    valid_tps = phi_factors["time_from_home"].unique()
     seed_values = np.zeros((len(valid_tps), len(valid_tps)))
 
     for fh_idx, fh_tp in enumerate(valid_tps):
         # Extract the from home phi values
-        fh_phi = phi_factors[phi_factors['time_from_home'] == fh_tp].copy()
+        fh_phi = phi_factors[phi_factors["time_from_home"] == fh_tp].copy()
 
         # Extract the from home time split
         time_split = tp_splits[fh_tp].values
@@ -458,17 +462,19 @@ def get_tour_proportion_seed_values(m: int,
         # Multiply phi factors by time splits
         for th_idx, th_tp in enumerate(valid_tps):
             # Extract the to home phi value
-            th_phi = fh_phi[fh_phi['time_to_home'] == th_tp].copy()
-            th_phi = th_phi['direction_factor'].values
+            th_phi = fh_phi[fh_phi["time_to_home"] == th_tp].copy()
+            th_phi = th_phi["direction_factor"].values
 
             seed_values[fh_idx, th_idx] = th_phi * time_split
 
     # Check for really bad cases
     total_seed = seed_values.sum()
     if total_seed > 1.1 or total_seed < 0.9:
-        raise ValueError("Something has gone wrong while generating tour "
-                         "proportion seed values. The total seed value should "
-                         "be 1, but we got %.2f." % total_seed)
+        raise ValueError(
+            "Something has gone wrong while generating tour "
+            "proportion seed values. The total seed value should "
+            "be 1, but we got %.2f." % total_seed
+        )
 
     # infill as needed
     seed_values = np.where(seed_values <= 0, infill, seed_values)
@@ -476,14 +482,15 @@ def get_tour_proportion_seed_values(m: int,
     return seed_values
 
 
-def get_vdm_tour_proportion_seed_values(m: int,
-                                        uc: str,
-                                        tp_split_path: str = None,
-                                        phi_lookup_folder: str = None,
-                                        phi_type: str = 'fhp_tp',
-                                        aggregate_to_wday: bool = True,
-                                        infill: float = 0.001
-                                        ) -> np.ndarray:
+def get_vdm_tour_proportion_seed_values(
+    m: int,
+    uc: str,
+    tp_split_path: str = None,
+    phi_lookup_folder: str = None,
+    phi_type: str = "fhp_tp",
+    aggregate_to_wday: bool = True,
+    infill: float = 0.001,
+) -> np.ndarray:
     # TODO: Write get_vdm_tour_proportion_seed_values() docs
     # Init
     uc = du.validate_user_class(uc)
@@ -491,15 +498,17 @@ def get_vdm_tour_proportion_seed_values(m: int,
     # Get seed values
     seed_values_list = list()
     for p in consts.HB_USER_CLASS_PURPOSES[uc]:
-        seed_values_list.append(get_tour_proportion_seed_values(
-            m=m,
-            p=p,
-            tp_split_path=tp_split_path,
-            phi_lookup_folder=phi_lookup_folder,
-            phi_type=phi_type,
-            aggregate_to_wday=aggregate_to_wday,
-            infill=infill
-        ))
+        seed_values_list.append(
+            get_tour_proportion_seed_values(
+                m=m,
+                p=p,
+                tp_split_path=tp_split_path,
+                phi_lookup_folder=phi_lookup_folder,
+                phi_type=phi_type,
+                aggregate_to_wday=aggregate_to_wday,
+                infill=infill,
+            )
+        )
 
     # No need to average
     n_purposes = len(seed_values_list)
@@ -516,47 +525,44 @@ def get_vdm_tour_proportion_seed_values(m: int,
     # Check for really bad cases
     total_seed = seed_values.sum()
     if total_seed > 1.1 or total_seed < 0.9:
-        raise ValueError("Something has gone wrong while generating tour "
-                         "proportion seed values. The total seed value should "
-                         "be 1, but we got %.2f." % total_seed)
+        raise ValueError(
+            "Something has gone wrong while generating tour "
+            "proportion seed values. The total seed value should "
+            "be 1, but we got %.2f." % total_seed
+        )
 
     # infill as needed
     return np.where(seed_values <= 0, infill, seed_values)
 
 
-def furness_tour_proportions(orig_vals,
-                             dest_vals,
-                             fh_mats,
-                             th_mats,
-                             seed_values,
-                             tour_prop_name,
-                             zone_translate_dir,
-                             model_name,
-                             tp_needed,
-                             tour_prop_tol,
-                             furness_tol,
-                             furness_max_iters,
-                             generate_tour_props=True
-                             ):
+def furness_tour_proportions(
+    orig_vals,
+    dest_vals,
+    fh_mats,
+    th_mats,
+    seed_values,
+    tour_prop_name,
+    zone_translate_dir,
+    model_name,
+    tp_needed,
+    tour_prop_tol,
+    furness_tol,
+    furness_max_iters,
+    generate_tour_props=True,
+):
     # TODO: Write furness_tour_proportions() docs()
     # ## INIT LOOP ## #
     # Create empty matrices for PA outputs
     pa_out_mats = dict()
     for tp in tp_needed:
-        pa_out_mats[tp] = pd.DataFrame(0.0,
-                                       index=orig_vals,
-                                       columns=dest_vals)
+        pa_out_mats[tp] = pd.DataFrame(0.0, index=orig_vals, columns=dest_vals)
 
     # Load the zone aggregation dictionaries for this model
     model2lad = du.get_zone_translation(
-        import_dir=zone_translate_dir,
-        from_zone=model_name,
-        to_zone='lad'
+        import_dir=zone_translate_dir, from_zone=model_name, to_zone="lad"
     )
     model2tfn = du.get_zone_translation(
-        import_dir=zone_translate_dir,
-        from_zone=model_name,
-        to_zone='tfn_sectors'
+        import_dir=zone_translate_dir, from_zone=model_name, to_zone="tfn_sectors"
     )
 
     # Define the default value for the nested defaultdict
@@ -622,14 +628,13 @@ def furness_tour_proportions(orig_vals,
 
         # If tp4 is greater than the tolerance, this usually means the original
         # to_home and from_home targets were not balanced
-        if(temp_th_target[-1] > tour_prop_tol
-           or temp_fh_target[-1] > tour_prop_tol):
-            report['tour_prop_fname'].append(tour_prop_name)
-            report['OD_pair'].append((orig, dest))
-            report['fh_before'].append(pre_bal_fh)
-            report['fh_after'].append(fh_target)
-            report['th_before'].append(pre_bal_th)
-            report['th_after'].append(th_target)
+        if temp_th_target[-1] > tour_prop_tol or temp_fh_target[-1] > tour_prop_tol:
+            report["tour_prop_fname"].append(tour_prop_name)
+            report["OD_pair"].append((orig, dest))
+            report["fh_before"].append(pre_bal_fh)
+            report["fh_after"].append(fh_target)
+            report["th_before"].append(pre_bal_th)
+            report["th_after"].append(th_target)
 
         # ## FURNESS ## #
         if not generate_tour_props:
@@ -646,7 +651,7 @@ def furness_tour_proportions(orig_vals,
                 row_targets=fh_target,
                 col_targets=th_target,
                 tol=furness_tol,
-                max_iters=furness_max_iters
+                max_iters=furness_max_iters,
             )
 
         # Store the tour proportions
@@ -669,46 +674,40 @@ def furness_tour_proportions(orig_vals,
         tfn_dest = model2tfn.get(dest, -1)
         tfn_tour_props[tfn_orig][tfn_dest] += furnessed_mat
 
-    return (
-        tour_proportions,
-        lad_tour_props,
-        tfn_tour_props,
-        pa_out_mats,
-        report,
-        zero_count
-    )
+    return (tour_proportions, lad_tour_props, tfn_tour_props, pa_out_mats, report, zero_count)
 
 
-def _tms_seg_tour_props_internal(od_import: str,
-                                 tour_proportions_export: str,
-                                 pa_export: str,
-                                 model_name: str,
-                                 trip_origin: str,
-                                 year: int,
-                                 p: int,
-                                 m: int,
-                                 seg: int,
-                                 ca: int,
-                                 tp_needed: List[int],
-                                 tour_prop_tol: float,
-                                 furness_tol: float,
-                                 furness_max_iters: int,
-                                 phi_lookup_folder: str,
-                                 phi_type: str,
-                                 aggregate_to_wday: bool,
-                                 zone_translate_dir: str,
-                                 generate_tour_props: bool,
-                                 ) -> Tuple[str, int, float]:
+def _tms_seg_tour_props_internal(
+    od_import: str,
+    tour_proportions_export: str,
+    pa_export: str,
+    model_name: str,
+    trip_origin: str,
+    year: int,
+    p: int,
+    m: int,
+    seg: int,
+    ca: int,
+    tp_needed: List[int],
+    tour_prop_tol: float,
+    furness_tol: float,
+    furness_max_iters: int,
+    phi_lookup_folder: str,
+    phi_type: str,
+    aggregate_to_wday: bool,
+    zone_translate_dir: str,
+    generate_tour_props: bool,
+) -> Tuple[str, int, float]:
     # TODO: Write _tms_seg_tour_props_internal() docs
     out_fname = du.get_dist_name(
         trip_origin=trip_origin,
-        matrix_format='tms_tour_proportions',
+        matrix_format="tms_tour_proportions",
         year=str(year),
         purpose=str(p),
         mode=str(m),
         segment=str(seg),
         car_availability=str(ca),
-        suffix='.pkl'
+        suffix=".pkl",
     )
 
     # Load the from_home matrices
@@ -716,17 +715,16 @@ def _tms_seg_tour_props_internal(od_import: str,
     for tp in tp_needed:
         dist_name = du.get_dist_name(
             trip_origin=trip_origin,
-            matrix_format='od_from',
+            matrix_format="od_from",
             year=str(year),
             purpose=str(p),
             mode=str(m),
             segment=str(seg),
             car_availability=str(ca),
             tp=str(tp),
-            csv=True
+            csv=True,
         )
-        fh_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name),
-                                  index_col=0)
+        fh_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name), index_col=0)
         fh_mats[tp].columns = fh_mats[tp].columns.astype(int)
         fh_mats[tp].index = fh_mats[tp].index.astype(int)
 
@@ -735,17 +733,16 @@ def _tms_seg_tour_props_internal(od_import: str,
     for tp in tp_needed:
         dist_name = du.get_dist_name(
             trip_origin=trip_origin,
-            matrix_format='od_to',
+            matrix_format="od_to",
             year=str(year),
             purpose=str(p),
             mode=str(m),
             segment=str(seg),
             car_availability=str(ca),
             tp=str(tp),
-            csv=True
+            csv=True,
         )
-        th_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name),
-                                  index_col=0).T
+        th_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name), index_col=0).T
         th_mats[tp].columns = th_mats[tp].columns.astype(int)
         th_mats[tp].index = th_mats[tp].index.astype(int)
 
@@ -792,7 +789,7 @@ def _tms_seg_tour_props_internal(od_import: str,
         tour_prop_tol=tour_prop_tol,
         furness_tol=furness_tol,
         furness_max_iters=furness_max_iters,
-        generate_tour_props=generate_tour_props
+        generate_tour_props=generate_tour_props,
     )
 
     # Split out the return values
@@ -816,26 +813,26 @@ def _tms_seg_tour_props_internal(od_import: str,
 
     if generate_tour_props:
         # Save the tour proportions for this segment (model_zone level)
-        print('Writing outputs to disk for %s' % out_fname)
+        print("Writing outputs to disk for %s" % out_fname)
         out_path = os.path.join(tour_proportions_export, out_fname)
-        with open(out_path, 'wb') as f:
+        with open(out_path, "wb") as f:
             pickle.dump(model_tour_props, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         # Write the LAD tour proportions
-        lad_out_fname = out_fname.replace('tour_proportions', 'lad_tour_proportions')
+        lad_out_fname = out_fname.replace("tour_proportions", "lad_tour_proportions")
         out_path = os.path.join(tour_proportions_export, lad_out_fname)
-        with open(out_path, 'wb') as f:
+        with open(out_path, "wb") as f:
             pickle.dump(lad_tour_props, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         # Write the TfN Sector tour proportions
-        tfn_out_fname = out_fname.replace('tour_proportions', 'tfn_tour_proportions')
+        tfn_out_fname = out_fname.replace("tour_proportions", "tfn_tour_proportions")
         out_path = os.path.join(tour_proportions_export, tfn_out_fname)
-        with open(out_path, 'wb') as f:
+        with open(out_path, "wb") as f:
             pickle.dump(tfn_tour_props, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         # Write the error report to disk
-        error_fname = out_fname.replace('tour_proportions', 'error_report')
-        error_fname = error_fname.replace('.pkl', '.csv')
+        error_fname = out_fname.replace("tour_proportions", "error_report")
+        error_fname = error_fname.replace(".pkl", ".csv")
         out_path = os.path.join(tour_proportions_export, error_fname)
         pd.DataFrame(report).to_csv(out_path, index=False)
 
@@ -843,14 +840,14 @@ def _tms_seg_tour_props_internal(od_import: str,
     for tp, mat in pa_out_mats.items():
         dist_name = du.get_dist_name(
             trip_origin=trip_origin,
-            matrix_format='pa',
+            matrix_format="pa",
             year=str(year),
             purpose=str(p),
             mode=str(m),
             segment=str(seg),
             car_availability=str(ca),
             tp=str(tp),
-            csv=True
+            csv=True,
         )
         mat.to_csv(os.path.join(pa_export, dist_name))
 
@@ -858,27 +855,28 @@ def _tms_seg_tour_props_internal(od_import: str,
     return out_fname, zero_count, zero_percentage
 
 
-def _tms_seg_tour_props(od_import: str,
-                        tour_proportions_export: str,
-                        zone_translate_dir: str,
-                        pa_export: str,
-                        model_name: str,
-                        year: int = efs_consts.BASE_YEAR,
-                        p_needed: List[int] = consts.ALL_HB_P,
-                        m_needed: List[int] = efs_consts.MODES_NEEDED,
-                        soc_needed: List[int] = None,
-                        ns_needed: List[int] = None,
-                        ca_needed: List[int] = None,
-                        tp_needed: List[int] = efs_consts.TIME_PERIODS,
-                        tour_prop_tol: float = 0.5,
-                        furness_tol: float = 1e-9,
-                        furness_max_iters: int = 5000,
-                        phi_lookup_folder: str = None,
-                        phi_type: str = 'fhp',
-                        aggregate_to_wday: bool = True,
-                        generate_tour_props: bool = True,
-                        process_count: int = consts.PROCESS_COUNT,
-                        ) -> None:
+def _tms_seg_tour_props(
+    od_import: str,
+    tour_proportions_export: str,
+    zone_translate_dir: str,
+    pa_export: str,
+    model_name: str,
+    year: int = efs_consts.BASE_YEAR,
+    p_needed: List[int] = consts.ALL_HB_P,
+    m_needed: List[int] = efs_consts.MODES_NEEDED,
+    soc_needed: List[int] = None,
+    ns_needed: List[int] = None,
+    ca_needed: List[int] = None,
+    tp_needed: List[int] = efs_consts.TIME_PERIODS,
+    tour_prop_tol: float = 0.5,
+    furness_tol: float = 1e-9,
+    furness_max_iters: int = 5000,
+    phi_lookup_folder: str = None,
+    phi_type: str = "fhp",
+    aggregate_to_wday: bool = True,
+    generate_tour_props: bool = True,
+    process_count: int = consts.PROCESS_COUNT,
+) -> None:
     """
     TODO: Write _tms_seg_tour_props() docs
     """
@@ -896,61 +894,51 @@ def _tms_seg_tour_props(od_import: str,
         elif p in consts.ALL_NHB_P:
             nhb_p_needed.append(p)
         else:
-            raise ValueError(
-                "Got purpose '%s' which is not a valid purpose."
-                % str(p)
-            )
+            raise ValueError("Got purpose '%s' which is not a valid purpose." % str(p))
 
     # Build our loop generator
-    trip_origin = 'hb'
+    trip_origin = "hb"
     loop_generator = du.segmentation_loop_generator(
         p_list=hb_p_needed,
         m_list=m_needed,
         soc_list=soc_needed,
         ns_list=ns_needed,
-        ca_list=ca_needed
+        ca_list=ca_needed,
     )
 
     # ## MULTIPROCESS ## #
     unchanging_kwargs = {
-        'od_import': od_import,
-        'tour_proportions_export': tour_proportions_export,
-        'zone_translate_dir': zone_translate_dir,
-        'pa_export': pa_export,
-        'model_name': model_name,
-        'year': year,
-        'trip_origin': trip_origin,
-        'tp_needed': tp_needed,
-        'tour_prop_tol': tour_prop_tol,
-        'furness_tol': furness_tol,
-        'furness_max_iters': furness_max_iters,
-        'phi_lookup_folder': phi_lookup_folder,
-        'phi_type': phi_type,
-        'aggregate_to_wday': aggregate_to_wday,
-        'generate_tour_props': generate_tour_props,
+        "od_import": od_import,
+        "tour_proportions_export": tour_proportions_export,
+        "zone_translate_dir": zone_translate_dir,
+        "pa_export": pa_export,
+        "model_name": model_name,
+        "year": year,
+        "trip_origin": trip_origin,
+        "tp_needed": tp_needed,
+        "tour_prop_tol": tour_prop_tol,
+        "furness_tol": furness_tol,
+        "furness_max_iters": furness_max_iters,
+        "phi_lookup_folder": phi_lookup_folder,
+        "phi_type": phi_type,
+        "aggregate_to_wday": aggregate_to_wday,
+        "generate_tour_props": generate_tour_props,
     }
 
     # Build a list of the changing arguments
     kwargs_list = list()
     for p, m, seg, ca in loop_generator:
         kwargs = unchanging_kwargs.copy()
-        kwargs.update({
-            'p': p,
-            'm': m,
-            'seg': seg,
-            'ca': ca
-        })
+        kwargs.update({"p": p, "m": m, "seg": seg, "ca": ca})
         kwargs_list.append(kwargs)
 
     # Multiprocess and write final matrices to disk
     zero_counts = multiprocessing.multiprocess(
-        _tms_seg_tour_props_internal,
-        kwargs=kwargs_list,
-        process_count=process_count
+        _tms_seg_tour_props_internal, kwargs=kwargs_list, process_count=process_count
     )
 
     # Output a log of the zero counts found
-    header = ['tour_file', 'zero_count', 'percentage']
+    header = ["tour_file", "zero_count", "percentage"]
     out_name = "yr%d_tms_tour_proportions_log.csv" % year
     out_path = os.path.join(tour_proportions_export, out_name)
     du.write_csv(header, zero_counts, out_path)
@@ -958,39 +946,39 @@ def _tms_seg_tour_props(od_import: str,
     # ## COPY OVER NHB MATRICES ## #
     if pa_export is not None:
         mat_list = du.list_files(od_import)
-        nhb_mats = [x for x in mat_list if du.starts_with(x, 'nhb')]
+        nhb_mats = [x for x in mat_list if du.starts_with(x, "nhb")]
 
         # Filter down to nhb purposes
-        ps = ['_p%s_' % x for x in nhb_p_needed]
+        ps = ["_p%s_" % x for x in nhb_p_needed]
         nhb_mats = [x for x in nhb_mats if du.is_in_string(ps, x)]
 
         for fname in nhb_mats:
-            pa_name = fname.replace('od', 'pa')
+            pa_name = fname.replace("od", "pa")
             du.copy_and_rename(
-                src=os.path.join(od_import, fname),
-                dst=os.path.join(pa_export, pa_name)
+                src=os.path.join(od_import, fname), dst=os.path.join(pa_export, pa_name)
             )
 
 
-def _vdm_seg_tour_props_internal(od_import: str,
-                                 tour_proportions_export: str,
-                                 pa_export: str,
-                                 model_name: str,
-                                 trip_origin: str,
-                                 year: int,
-                                 uc: str,
-                                 m: int,
-                                 ca: int,
-                                 tp_needed: List[int],
-                                 tour_prop_tol: float,
-                                 furness_tol: float,
-                                 furness_max_iters: int,
-                                 phi_lookup_folder: str,
-                                 phi_type: str,
-                                 aggregate_to_wday: bool,
-                                 zone_translate_dir: str,
-                                 generate_tour_props: bool,
-                                 ) -> Tuple[str, int, float]:
+def _vdm_seg_tour_props_internal(
+    od_import: str,
+    tour_proportions_export: str,
+    pa_export: str,
+    model_name: str,
+    trip_origin: str,
+    year: int,
+    uc: str,
+    m: int,
+    ca: int,
+    tp_needed: List[int],
+    tour_prop_tol: float,
+    furness_tol: float,
+    furness_max_iters: int,
+    phi_lookup_folder: str,
+    phi_type: str,
+    aggregate_to_wday: bool,
+    zone_translate_dir: str,
+    generate_tour_props: bool,
+) -> Tuple[str, int, float]:
     """
     The internals of generate_tour_proportions().
     Used to implement multiprocessing.
@@ -1010,12 +998,12 @@ def _vdm_seg_tour_props_internal(od_import: str,
     # Figure out the output filename
     out_fname = du.get_vdm_dist_name(
         trip_origin=trip_origin,
-        matrix_format='vdm_tour_proportions',
+        matrix_format="vdm_tour_proportions",
         year=str(year),
         user_class=str(uc),
         mode=str(m),
         ca=ca,
-        suffix='.pkl'
+        suffix=".pkl",
     )
 
     # Load the from_home matrices
@@ -1023,16 +1011,15 @@ def _vdm_seg_tour_props_internal(od_import: str,
     for tp in tp_needed:
         dist_name = du.get_vdm_dist_name(
             trip_origin=trip_origin,
-            matrix_format='od_from',
+            matrix_format="od_from",
             year=str(year),
             user_class=str(uc),
             mode=str(m),
             ca=ca,
             tp=str(tp),
-            csv=True
+            csv=True,
         )
-        fh_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name),
-                                  index_col=0)
+        fh_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name), index_col=0)
         fh_mats[tp].columns = fh_mats[tp].columns.astype(int)
         fh_mats[tp].index = fh_mats[tp].index.astype(int)
 
@@ -1041,16 +1028,15 @@ def _vdm_seg_tour_props_internal(od_import: str,
     for tp in tp_needed:
         dist_name = du.get_vdm_dist_name(
             trip_origin=trip_origin,
-            matrix_format='od_to',
+            matrix_format="od_to",
             year=str(year),
             user_class=str(uc),
             mode=str(m),
             ca=ca,
             tp=str(tp),
-            csv=True
+            csv=True,
         )
-        th_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name),
-                                  index_col=0).T
+        th_mats[tp] = pd.read_csv(os.path.join(od_import, dist_name), index_col=0).T
         th_mats[tp].columns = th_mats[tp].columns.astype(int)
         th_mats[tp].index = th_mats[tp].index.astype(int)
 
@@ -1097,7 +1083,7 @@ def _vdm_seg_tour_props_internal(od_import: str,
         tour_prop_tol=tour_prop_tol,
         furness_tol=furness_tol,
         furness_max_iters=furness_max_iters,
-        generate_tour_props=generate_tour_props
+        generate_tour_props=generate_tour_props,
     )
 
     # Split out the return values
@@ -1121,28 +1107,26 @@ def _vdm_seg_tour_props_internal(od_import: str,
 
     if generate_tour_props:
         # Save the tour proportions for this segment (model_zone level)
-        print('Writing outputs to disk for %s' % out_fname)
+        print("Writing outputs to disk for %s" % out_fname)
         out_path = os.path.join(tour_proportions_export, out_fname)
-        with open(out_path, 'wb') as f:
+        with open(out_path, "wb") as f:
             pickle.dump(model_tour_props, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         # Write the LAD tour proportions
-        lad_out_fname = out_fname.replace('tour_proportions',
-                                          'lad_tour_proportions')
+        lad_out_fname = out_fname.replace("tour_proportions", "lad_tour_proportions")
         out_path = os.path.join(tour_proportions_export, lad_out_fname)
-        with open(out_path, 'wb') as f:
+        with open(out_path, "wb") as f:
             pickle.dump(lad_tour_props, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         # Write the TfN Sector tour proportions
-        tfn_out_fname = out_fname.replace('tour_proportions',
-                                          'tfn_tour_proportions')
+        tfn_out_fname = out_fname.replace("tour_proportions", "tfn_tour_proportions")
         out_path = os.path.join(tour_proportions_export, tfn_out_fname)
-        with open(out_path, 'wb') as f:
+        with open(out_path, "wb") as f:
             pickle.dump(tfn_tour_props, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         # Write the error report to disk
-        error_fname = out_fname.replace('tour_proportions', 'error_report')
-        error_fname = error_fname.replace('.pkl', '.csv')
+        error_fname = out_fname.replace("tour_proportions", "error_report")
+        error_fname = error_fname.replace(".pkl", ".csv")
         out_path = os.path.join(tour_proportions_export, error_fname)
         pd.DataFrame(report).to_csv(out_path, index=False)
 
@@ -1150,13 +1134,13 @@ def _vdm_seg_tour_props_internal(od_import: str,
     for tp, mat in pa_out_mats.items():
         dist_name = du.get_vdm_dist_name(
             trip_origin=trip_origin,
-            matrix_format='pa',
+            matrix_format="pa",
             year=str(year),
             user_class=str(uc),
             mode=str(m),
             ca=ca,
             tp=str(tp),
-            csv=True
+            csv=True,
         )
         mat.to_csv(os.path.join(pa_export, dist_name))
 
@@ -1164,26 +1148,27 @@ def _vdm_seg_tour_props_internal(od_import: str,
     return out_fname, zero_count, zero_percentage
 
 
-def _vdm_seg_tour_props(od_import: str,
-                        tour_proportions_export: str,
-                        zone_translate_dir: str,
-                        pa_export: str,
-                        model_name: str,
-                        year: int = efs_consts.BASE_YEAR,
-                        to_needed: List[str] = efs_consts.VDM_TRIP_ORIGINS,
-                        uc_needed: List[str] = efs_consts.USER_CLASSES,
-                        m_needed: List[int] = efs_consts.MODES_NEEDED,
-                        ca_needed: List[int] = None,
-                        tp_needed: List[int] = efs_consts.TIME_PERIODS,
-                        tour_prop_tol: float = 0.5,
-                        furness_tol: float = 1e-9,
-                        furness_max_iters: int = 5000,
-                        phi_lookup_folder: str = None,
-                        phi_type: str = 'fhp',
-                        aggregate_to_wday: bool = True,
-                        generate_tour_props: bool = True,
-                        process_count: int = consts.PROCESS_COUNT,
-                        ) -> None:
+def _vdm_seg_tour_props(
+    od_import: str,
+    tour_proportions_export: str,
+    zone_translate_dir: str,
+    pa_export: str,
+    model_name: str,
+    year: int = efs_consts.BASE_YEAR,
+    to_needed: List[str] = efs_consts.VDM_TRIP_ORIGINS,
+    uc_needed: List[str] = efs_consts.USER_CLASSES,
+    m_needed: List[int] = efs_consts.MODES_NEEDED,
+    ca_needed: List[int] = None,
+    tp_needed: List[int] = efs_consts.TIME_PERIODS,
+    tour_prop_tol: float = 0.5,
+    furness_tol: float = 1e-9,
+    furness_max_iters: int = 5000,
+    phi_lookup_folder: str = None,
+    phi_type: str = "fhp",
+    aggregate_to_wday: bool = True,
+    generate_tour_props: bool = True,
+    process_count: int = consts.PROCESS_COUNT,
+) -> None:
     """
     TODO: Write _vdm_seg_tour_props() docs
     """
@@ -1192,78 +1177,72 @@ def _vdm_seg_tour_props(od_import: str,
 
     # ## MULTIPROCESS ## #
     unchanging_kwargs = {
-        'od_import': od_import,
-        'tour_proportions_export': tour_proportions_export,
-        'zone_translate_dir': zone_translate_dir,
-        'pa_export': pa_export,
-        'model_name': model_name,
-        'year': year,
-        'trip_origin': 'hb',
-        'tp_needed': tp_needed,
-        'tour_prop_tol': tour_prop_tol,
-        'furness_tol': furness_tol,
-        'furness_max_iters': furness_max_iters,
-        'phi_lookup_folder': phi_lookup_folder,
-        'phi_type': phi_type,
-        'aggregate_to_wday': aggregate_to_wday,
-        'generate_tour_props': generate_tour_props
+        "od_import": od_import,
+        "tour_proportions_export": tour_proportions_export,
+        "zone_translate_dir": zone_translate_dir,
+        "pa_export": pa_export,
+        "model_name": model_name,
+        "year": year,
+        "trip_origin": "hb",
+        "tp_needed": tp_needed,
+        "tour_prop_tol": tour_prop_tol,
+        "furness_tol": furness_tol,
+        "furness_max_iters": furness_max_iters,
+        "phi_lookup_folder": phi_lookup_folder,
+        "phi_type": phi_type,
+        "aggregate_to_wday": aggregate_to_wday,
+        "generate_tour_props": generate_tour_props,
     }
 
     # Build a list of the changing arguments
     kwargs_list = list()
     for uc, m, ca in product(uc_needed, m_needed, ca_needed):
         kwargs = unchanging_kwargs.copy()
-        kwargs.update({
-            'uc': uc,
-            'm': m,
-            'ca': ca
-        })
+        kwargs.update({"uc": uc, "m": m, "ca": ca})
         kwargs_list.append(kwargs)
 
     # Multiprocess and write final matrices to disk
     zero_counts = multiprocessing.multiprocess(
-        _vdm_seg_tour_props_internal,
-        kwargs=kwargs_list,
-        process_count=process_count
+        _vdm_seg_tour_props_internal, kwargs=kwargs_list, process_count=process_count
     )
 
     # Output a log of the zero counts found
-    header = ['tour_file', 'zero_count', 'percentage']
+    header = ["tour_file", "zero_count", "percentage"]
     out_name = "yr%s_vdm_tour_proportions_log.csv" % year
     out_path = os.path.join(tour_proportions_export, out_name)
     du.write_csv(header, zero_counts, out_path)
 
-    if 'nhb' not in to_needed:
+    if "nhb" not in to_needed:
         return
 
     # ## COPY OVER NHB MATRICES ## #
     if pa_export is not None:
-        nhb_mats = [x for x in du.list_files(od_import) if du.starts_with(x, 'nhb')]
+        nhb_mats = [x for x in du.list_files(od_import) if du.starts_with(x, "nhb")]
         for fname in nhb_mats:
-            pa_name = fname.replace('od', 'pa')
+            pa_name = fname.replace("od", "pa")
             du.copy_and_rename(
-                src=os.path.join(od_import, fname),
-                dst=os.path.join(pa_export, pa_name)
+                src=os.path.join(od_import, fname), dst=os.path.join(pa_export, pa_name)
             )
 
 
-def generate_tour_proportions(od_import: str,
-                              tour_proportions_export: str,
-                              zone_translate_dir: str,
-                              pa_export: str,
-                              model_name: str,
-                              seg_level: str,
-                              seg_params: Dict[str, Any],
-                              year: int = efs_consts.BASE_YEAR,
-                              tour_prop_tol: float = 0.5,
-                              furness_tol: float = 1e-9,
-                              furness_max_iters: int = 5000,
-                              phi_lookup_folder: str = None,
-                              phi_type: str = 'fhp',
-                              aggregate_to_wday: bool = True,
-                              generate_tour_props: bool = True,
-                              process_count: int = consts.PROCESS_COUNT,
-                              ) -> None:
+def generate_tour_proportions(
+    od_import: str,
+    tour_proportions_export: str,
+    zone_translate_dir: str,
+    pa_export: str,
+    model_name: str,
+    seg_level: str,
+    seg_params: Dict[str, Any],
+    year: int = efs_consts.BASE_YEAR,
+    tour_prop_tol: float = 0.5,
+    furness_tol: float = 1e-9,
+    furness_max_iters: int = 5000,
+    phi_lookup_folder: str = None,
+    phi_type: str = "fhp",
+    aggregate_to_wday: bool = True,
+    generate_tour_props: bool = True,
+    process_count: int = consts.PROCESS_COUNT,
+) -> None:
     """
     Generates the 4x4 matrix of tour proportions for every OD pair for all
     given segmentations.
@@ -1357,15 +1336,14 @@ def generate_tour_proportions(od_import: str,
     seg_level = du.validate_seg_level(seg_level)
 
     # Call the correct mid-level function to deal with the segmentation
-    if seg_level == 'tms':
+    if seg_level == "tms":
         segmentation_fn = _tms_seg_tour_props
-    elif seg_level == 'vdm':
+    elif seg_level == "vdm":
         segmentation_fn = _vdm_seg_tour_props
     else:
         raise NotImplementedError(
             "'%s' is a valid segmentation level, however, we do not have a "
-            "mid-level function to deal with it at the moment."
-            % seg_level
+            "mid-level function to deal with it at the moment." % seg_level
         )
 
     segmentation_fn(
@@ -1383,24 +1361,25 @@ def generate_tour_proportions(od_import: str,
         aggregate_to_wday=aggregate_to_wday,
         generate_tour_props=generate_tour_props,
         process_count=process_count,
-        **seg_params
+        **seg_params,
     )
 
 
-def build_norms_vdm_compile_params(import_dir: str,
-                                   export_dir: str,
-                                   matrix_format: str,
-                                   segmentation_aggregation: nd.SegmentAggregationDict,
-                                   years_needed: Iterable[int],
-                                   m_needed: List[int],
-                                   tp_needed: Iterable[int] = None,
-                                   tp_filter: Iterable[int] = None,
-                                   output_headers: List[str] = None,
-                                   output_format: str = 'wide',
-                                   params_suffix: str = None,
-                                   csv_out: bool = True,
-                                   compress_out: bool = False,
-                                   ) -> List[str]:
+def build_norms_vdm_compile_params(
+    import_dir: str,
+    export_dir: str,
+    matrix_format: str,
+    segmentation_aggregation: nd.SegmentAggregationDict,
+    years_needed: Iterable[int],
+    m_needed: List[int],
+    tp_needed: Iterable[int] = None,
+    tp_filter: Iterable[int] = None,
+    output_headers: List[str] = None,
+    output_format: str = "wide",
+    params_suffix: str = None,
+    csv_out: bool = True,
+    compress_out: bool = False,
+) -> List[str]:
     # TODO: Write build_norms_vdm_compile_params() docs
     # Error checking
     if len(m_needed) > 1:
@@ -1415,7 +1394,7 @@ def build_norms_vdm_compile_params(import_dir: str,
     all_matrices = du.list_files(import_dir)
 
     if output_headers is None:
-        output_headers = ['distribution_name', 'compilation', 'format']
+        output_headers = ["distribution_name", "compilation", "format"]
 
     # Generate a different compilation dict for each year
     out_paths = list()
@@ -1423,16 +1402,13 @@ def build_norms_vdm_compile_params(import_dir: str,
         out_lines = list()
 
         # Build the iterator
-        iterator = itertools.product(
-            segmentation_aggregation.items(),
-            tp_needed
-        )
+        iterator = itertools.product(segmentation_aggregation.items(), tp_needed)
 
         # Find all the mats to aggregate into vdm_mat
         for (vdm_mat_name, seg_dict), tp in iterator:
             # Init
             compile_mats = all_matrices.copy()
-            purposes = consts.USER_CLASS_PURPOSES[seg_dict['uc']]
+            purposes = consts.USER_CLASS_PURPOSES[seg_dict["uc"]]
 
             # ## FILTER DOWN TO USER CLASS ## #
             # include _ before and after to avoid clashes
@@ -1459,27 +1435,27 @@ def build_norms_vdm_compile_params(import_dir: str,
             # We're keeping the mats which contain any item in the list
             if "to" in seg_dict:
                 filtered = list()
-                for to in seg_dict['to']:
+                for to in seg_dict["to"]:
                     filtered += [x for x in compile_mats if du.starts_with(x, to)]
                 compile_mats = list(set(filtered))
 
             if "ca" in seg_dict:
                 filtered = list()
-                for ca in seg_dict['ca']:
-                    ca_str = f'_ca{str(ca)}'
+                for ca in seg_dict["ca"]:
+                    ca_str = f"_ca{str(ca)}"
                     filtered += [x for x in compile_mats if ca_str in x]
                 compile_mats = list(set(filtered))
 
             # Figure out what format of matrices to keep
             if "fmt" in seg_dict:
                 filtered = list()
-                for fmt in seg_dict['fmt']:
+                for fmt in seg_dict["fmt"]:
                     filtered += [x for x in compile_mats if fmt in x]
                 compile_mats = list(set(filtered))
 
             if "no_fmt" in seg_dict:
                 filtered = list()
-                for fmt in seg_dict['no_fmt']:
+                for fmt in seg_dict["no_fmt"]:
                     filtered += [x for x in compile_mats if fmt in x]
                 compile_mats = du.list_safe_remove(compile_mats, filtered)
 
@@ -1487,13 +1463,13 @@ def build_norms_vdm_compile_params(import_dir: str,
             # Build the final output name
             compiled_mat_name = du.get_compiled_matrix_name(
                 matrix_format,
-                seg_dict['uc'],
+                seg_dict["uc"],
                 str(year),
                 trip_origin=None,
                 mode=str(mode),
                 ca=None,
                 tp=str(tp),
-                suffix=f'_{vdm_mat_name}',
+                suffix=f"_{vdm_mat_name}",
                 csv=csv_out,
                 compress=compress_out,
             )
@@ -1516,21 +1492,24 @@ def build_norms_vdm_compile_params(import_dir: str,
     return out_paths
 
 
-def build_norms_compile_params(import_dir: str,
-                               export_dir: str,
-                               matrix_format: str,
-                               years_needed: Iterable[int],
-                               m_needed: List[int] = efs_consts.MODES_NEEDED,
-                               tp_needed: Iterable[int] = None,
-                               output_headers: List[str] = None,
-                               output_format: str = 'wide',
-                               output_fname: str = None
-                               ) -> List[str]:
+def build_norms_compile_params(
+    import_dir: str,
+    export_dir: str,
+    matrix_format: str,
+    years_needed: Iterable[int],
+    m_needed: List[int] = efs_consts.MODES_NEEDED,
+    tp_needed: Iterable[int] = None,
+    output_headers: List[str] = None,
+    output_format: str = "wide",
+    output_fname: str = None,
+) -> List[str]:
     # TODO: Write build_norms_compile_params() docs
     # Error checking
     if len(m_needed) > 1:
-        raise ValueError("Matrix compilation can only handle one mode at a "
-                         "time. Received %d modes" % len(m_needed))
+        raise ValueError(
+            "Matrix compilation can only handle one mode at a "
+            "time. Received %d modes" % len(m_needed)
+        )
     mode = m_needed[0]
 
     # Init
@@ -1539,16 +1518,13 @@ def build_norms_compile_params(import_dir: str,
     out_paths = list()
 
     if output_headers is None:
-        output_headers = ['distribution_name', 'compilation', 'format']
+        output_headers = ["distribution_name", "compilation", "format"]
 
     for year in years_needed:
         out_lines = list()
 
         # Build the iterator
-        iterator = itertools.product(
-            consts.USER_CLASS_PURPOSES.items(),
-            tp_needed
-        )
+        iterator = itertools.product(consts.USER_CLASS_PURPOSES.items(), tp_needed)
 
         for (user_class, purposes), tp in iterator:
             for sub_uc, seg_dict in efs_consts.NORMS_SUB_USER_CLASS_SEG.items():
@@ -1557,9 +1533,9 @@ def build_norms_compile_params(import_dir: str,
 
                 # ## FILTER DOWN TO USER CLASS ## #
                 # include _ before and after to avoid clashes
-                ps = ['_p' + str(x) + '_' for x in purposes]
-                mode_str = '_m' + str(mode) + '_'
-                year_str = '_yr' + str(year) + '_'
+                ps = ["_p" + str(x) + "_" for x in purposes]
+                mode_str = "_m" + str(mode) + "_"
+                year_str = "_yr" + str(year) + "_"
 
                 # Narrow down to matrices for this compilation
                 compile_mats = [x for x in compile_mats if year_str in x]
@@ -1568,27 +1544,27 @@ def build_norms_compile_params(import_dir: str,
 
                 # Filter by time period if needed
                 if tp is not None:
-                    tp_str = '_tp' + str(tp)
+                    tp_str = "_tp" + str(tp)
                     compile_mats = [x for x in compile_mats if tp_str in x]
 
                 # ## FILTER DOWN TO SUB USER CLASS ## #
                 # We're keeping the mats which contain any item in the list
                 filtered = list()
-                for to in seg_dict['to']:
+                for to in seg_dict["to"]:
                     filtered += [x for x in compile_mats if du.starts_with(x, to)]
                 compile_mats = filtered.copy()
 
                 filtered = list()
-                for ca in seg_dict['ca']:
-                    ca_str = '_ca%s' % str(ca)
+                for ca in seg_dict["ca"]:
+                    ca_str = "_ca%s" % str(ca)
                     filtered += [x for x in compile_mats if ca_str in x]
                 compile_mats = filtered.copy()
 
                 filtered = list()
                 # Split into trip origins, we can only do this for hb mats
-                hb_mats = [x for x in compile_mats if du.starts_with(x, 'hb')]
-                nhb_mats = [x for x in compile_mats if du.starts_with(x, 'nhb')]
-                for od_ft in seg_dict['od_ft']:
+                hb_mats = [x for x in compile_mats if du.starts_with(x, "hb")]
+                nhb_mats = [x for x in compile_mats if du.starts_with(x, "nhb")]
+                for od_ft in seg_dict["od_ft"]:
                     # Filter to just the from/to we need
                     od_ft_str = "_%s" % od_ft
                     filtered += [x for x in hb_mats if od_ft_str in x]
@@ -1605,8 +1581,8 @@ def build_norms_compile_params(import_dir: str,
                     mode=str(mode),
                     ca=None,
                     tp=str(tp),
-                    suffix='_%s' % sub_uc,
-                    csv=True
+                    suffix="_%s" % sub_uc,
+                    csv=True,
                 )
 
                 # Add lines to output
@@ -1624,19 +1600,20 @@ def build_norms_compile_params(import_dir: str,
     return out_paths
 
 
-def build_compile_params(import_dir: nd.PathLike,
-                         export_dir: nd.PathLike,
-                         matrix_format: str,
-                         years_needed: Iterable[int],
-                         m_needed: List[int] = efs_consts.MODES_NEEDED,
-                         ca_needed: Iterable[int] = None,
-                         tp_needed: Iterable[int] = None,
-                         split_hb_nhb: bool = False,
-                         split_od_from_to: bool = False,
-                         output_headers: List[str] = None,
-                         output_format: str = 'wide',
-                         output_fname: str = None
-                         ) -> List[str]:
+def build_compile_params(
+    import_dir: nd.PathLike,
+    export_dir: nd.PathLike,
+    matrix_format: str,
+    years_needed: Iterable[int],
+    m_needed: List[int] = efs_consts.MODES_NEEDED,
+    ca_needed: Iterable[int] = None,
+    tp_needed: Iterable[int] = None,
+    split_hb_nhb: bool = False,
+    split_od_from_to: bool = False,
+    output_headers: List[str] = None,
+    output_format: str = "wide",
+    output_fname: str = None,
+) -> List[str]:
 
     """
     Create a compile_params file to be used with compile_od().
@@ -1696,24 +1673,27 @@ def build_compile_params(import_dir: nd.PathLike,
     """
     # Error checking
     if len(m_needed) > 1:
-        raise ValueError("Matrix compilation can only handle one mode at a "
-                         "time. Received %d modes" % len(m_needed))
+        raise ValueError(
+            "Matrix compilation can only handle one mode at a "
+            "time. Received %d modes" % len(m_needed)
+        )
     mode = m_needed[0]
 
-    if split_od_from_to and matrix_format != 'od':
-        raise ValueError("Can only split od_from and od_to matrices if the "
-                         "matrix format is 'od'.")
+    if split_od_from_to and matrix_format != "od":
+        raise ValueError(
+            "Can only split od_from and od_to matrices if the " "matrix format is 'od'."
+        )
 
     # Init
     ca_needed = [None] if ca_needed is None else ca_needed
     tp_needed = [None] if tp_needed is None else tp_needed
-    to_needed = [None] if not split_hb_nhb else ['hb', 'nhb']
-    od_from_to = [None] if not split_od_from_to else ['od_from', 'od_to']
+    to_needed = [None] if not split_hb_nhb else ["hb", "nhb"]
+    od_from_to = [None] if not split_od_from_to else ["od_from", "od_to"]
     all_od_matrices = du.list_files(import_dir, consts.VALID_MAT_FTYPES)
     out_paths = list()
 
     if output_headers is None:
-        output_headers = ['distribution_name', 'compilation', 'format']
+        output_headers = ["distribution_name", "compilation", "format"]
 
     for year in years_needed:
         out_lines = list()
@@ -1723,9 +1703,9 @@ def build_compile_params(import_dir: nd.PathLike,
                 compile_mats = all_od_matrices.copy()
 
                 # include _ or . before and after to avoid clashes
-                ps = ['_p' + str(x) + '_' for x in purposes]
-                mode_strs = ['_m' + str(mode) + x for x in ['_', '.']]
-                year_strs = ['_yr' + str(year) + x for x in ['_', '.']]
+                ps = ["_p" + str(x) + "_" for x in purposes]
+                mode_strs = ["_m" + str(mode) + x for x in ["_", "."]]
+                year_strs = ["_yr" + str(year) + x for x in ["_", "."]]
 
                 # Narrow down to matrices for this compilation
                 compile_mats = [x for x in compile_mats if du.is_in_string(year_strs, x)]
@@ -1734,12 +1714,12 @@ def build_compile_params(import_dir: nd.PathLike,
 
                 # Narrow down further if we're using ca
                 if ca is not None:
-                    ca_strs = [f'_ca{ca}{x}' for x in "_."]
+                    ca_strs = [f"_ca{ca}{x}" for x in "_."]
                     compile_mats = [x for x in compile_mats if du.is_in_string(ca_strs, x)]
 
                 # Narrow down again if we're using tp
                 if tp is not None:
-                    tp_str = '_tp' + str(tp)
+                    tp_str = "_tp" + str(tp)
                     compile_mats = [x for x in compile_mats if tp_str in x]
 
                 # Narrow down again if we're using hb/nhb separation
@@ -1750,16 +1730,16 @@ def build_compile_params(import_dir: nd.PathLike,
                 # From/To splits are a bit more complicated :(
                 if od_ft is not None:
                     # Don't split for nhb trips
-                    if to == 'nhb':
-                        matrix_format = 'od'
+                    if to == "nhb":
+                        matrix_format = "od"
 
                         # Avoid repeats by skipping od_from
-                        if od_ft == 'od_from':
+                        if od_ft == "od_from":
                             continue
 
                     else:
                         # If we get here, it is safe to filter for hb trips
-                        od_ft_str = '_' + str(od_ft) + '_'
+                        od_ft_str = "_" + str(od_ft) + "_"
                         compile_mats = [x for x in compile_mats if od_ft_str in x]
                         matrix_format = str(od_ft)
 
@@ -1772,7 +1752,7 @@ def build_compile_params(import_dir: nd.PathLike,
                     mode=str(mode),
                     ca=ca,
                     tp=str(tp),
-                    csv=True
+                    csv=True,
                 )
 
                 # Add lines to output
@@ -1792,17 +1772,18 @@ def build_compile_params(import_dir: nd.PathLike,
     return out_paths
 
 
-def build_24hr_vdm_mats(import_dir: str,
-                        export_dir: str,
-                        matrix_format: str,
-                        to_needed: str,
-                        years_needed: List[str],
-                        uc_needed: List[str] = efs_consts.USER_CLASSES,
-                        m_needed: List[int] = efs_consts.MODES_NEEDED,
-                        ca_needed: List[int] = None,
-                        tp_needed: List[int] = efs_consts.TIME_PERIODS,
-                        split_factors_path: str = None,
-                        ) -> None:
+def build_24hr_vdm_mats(
+    import_dir: str,
+    export_dir: str,
+    matrix_format: str,
+    to_needed: str,
+    years_needed: List[str],
+    uc_needed: List[str] = efs_consts.USER_CLASSES,
+    m_needed: List[int] = efs_consts.MODES_NEEDED,
+    ca_needed: List[int] = None,
+    tp_needed: List[int] = efs_consts.TIME_PERIODS,
+    split_factors_path: str = None,
+) -> None:
     # TODO: Write build_24hr_vdm_mats() docs
     # Init
     ca_needed = [None] if ca_needed is None else ca_needed
@@ -1810,10 +1791,7 @@ def build_24hr_vdm_mats(import_dir: str,
     # Go through all segmentations, for all years
     for year in years_needed:
         loop_generator = du.vdm_segment_loop_generator(
-            to_list=to_needed,
-            uc_list=uc_needed,
-            m_list=m_needed,
-            ca_list=ca_needed
+            to_list=to_needed, uc_list=uc_needed, m_list=m_needed, ca_list=ca_needed
         )
 
         for to, uc, m, ca in loop_generator:
@@ -1825,7 +1803,7 @@ def build_24hr_vdm_mats(import_dir: str,
                 user_class=str(uc),
                 mode=str(m),
                 ca=ca,
-                csv=True
+                csv=True,
             )
             print("Generating output matrix %s..." % output_dist_name)
 
@@ -1840,7 +1818,7 @@ def build_24hr_vdm_mats(import_dir: str,
                     mode=str(m),
                     ca=ca,
                     tp=str(tp),
-                    csv=True
+                    csv=True,
                 )
                 dist_path = os.path.join(import_dir, dist_name)
                 tp_mats.append(pd.read_csv(dist_path, index_col=0))
@@ -1851,13 +1829,13 @@ def build_24hr_vdm_mats(import_dir: str,
             for i, mat in enumerate(tp_mats):
                 if len(mat.columns.difference(col_ref)) > 0:
                     raise ValueError(
-                        "tp matrix %s columns do not match the "
-                        "others." % str(tp_needed[i]))
+                        "tp matrix %s columns do not match the " "others." % str(tp_needed[i])
+                    )
 
                 if len(mat.index.difference(idx_ref)) > 0:
                     raise ValueError(
-                        "tp matrix %s index does not match the "
-                        "others." % str(tp_needed[i]))
+                        "tp matrix %s index does not match the " "others." % str(tp_needed[i])
+                    )
 
             # Combine all matrices together
             full_mat = functools.reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
@@ -1880,7 +1858,7 @@ def build_24hr_vdm_mats(import_dir: str,
 
             orig_vals = [int(x) for x in tp_mats[0].index.values]
             dest_vals = [int(x) for x in list(tp_mats[0])]
-            desc = 'Generating splitting factors'
+            desc = "Generating splitting factors"
             for tp, tp_mat in enumerate(tqdm(tp_mats, desc=desc), 1):
                 # Make sure rows and columns are ints
                 tp_mat.columns = tp_mat.columns.astype(int)
@@ -1892,29 +1870,30 @@ def build_24hr_vdm_mats(import_dir: str,
                     else:
                         tp_split = tp_mat.loc[orig, dest] / full_mat.loc[orig, dest]
 
-                    splitting_factors['Origin'].append(orig)
-                    splitting_factors['Destination'].append(dest)
-                    splitting_factors['TimePeriod'].append(tp)
-                    splitting_factors['Factor'].append(tp_split)
+                    splitting_factors["Origin"].append(orig)
+                    splitting_factors["Destination"].append(dest)
+                    splitting_factors["TimePeriod"].append(tp)
+                    splitting_factors["Factor"].append(tp_split)
 
             # Write to disk
-            out_name = output_dist_name.replace('od', 'split_factors')
+            out_name = output_dist_name.replace("od", "split_factors")
             out_path = os.path.join(split_factors_path, out_name)
             pd.DataFrame(splitting_factors).to_csv(out_path, index=False)
 
 
-def build_24hr_mats(import_dir: str,
-                    export_dir: str,
-                    matrix_format: str,
-                    year_needed: List[str],
-                    p_needed: List[int],
-                    m_needed: List[int],
-                    soc_needed: List[int] = None,
-                    ns_needed: List[int] = None,
-                    ca_needed: List[int] = None,
-                    tp_needed: List[int] = efs_consts.TIME_PERIODS,
-                    splitting_factors_export: nd.PathLike = None,
-                    ) -> None:
+def build_24hr_mats(
+    import_dir: str,
+    export_dir: str,
+    matrix_format: str,
+    year_needed: List[str],
+    p_needed: List[int],
+    m_needed: List[int],
+    soc_needed: List[int] = None,
+    ns_needed: List[int] = None,
+    ca_needed: List[int] = None,
+    tp_needed: List[int] = efs_consts.TIME_PERIODS,
+    splitting_factors_export: nd.PathLike = None,
+) -> None:
     """
     Compiles time period split matrices int import_dir into 24hr Matrices,
     saving them back to export dir
@@ -1970,7 +1949,7 @@ def build_24hr_mats(import_dir: str,
     ca_needed = [None] if ca_needed is None else ca_needed
 
     # Need to get the size of the output matrices
-    check_to = 'hb' if p_needed[0] in consts.ALL_HB_P else 'nhb'
+    check_to = "hb" if p_needed[0] in consts.ALL_HB_P else "nhb"
     check_mat_name = du.get_dist_name(
         trip_origin=check_to,
         matrix_format=matrix_format,
@@ -1980,7 +1959,7 @@ def build_24hr_mats(import_dir: str,
         segment=str(soc_needed[0]),
         car_availability=str(ca_needed[0]),
         tp=str(tp_needed[0]),
-        csv=True
+        csv=True,
     )
     check_mat = file_ops.read_df(os.path.join(import_dir, check_mat_name), index_col=0)
     n_rows = len(check_mat.index)
@@ -1998,18 +1977,20 @@ def build_24hr_mats(import_dir: str,
         m_list=m_needed,
         soc_list=soc_needed,
         ns_list=ns_needed,
-        ca_list=ca_needed
+        ca_list=ca_needed,
     )
 
     for p, m, seg, ca in loop_generator:
         # Figure out trip origin
         if p in consts.ALL_HB_P:
-            trip_origin = 'hb'
+            trip_origin = "hb"
         elif p in consts.ALL_NHB_P:
-            trip_origin = 'nhb'
+            trip_origin = "nhb"
         else:
-            raise ValueError("'%s' is not a valid purpose. Don't know if it "
-                             "is home based or non-home based.")
+            raise ValueError(
+                "'%s' is not a valid purpose. Don't know if it "
+                "is home based or non-home based."
+            )
 
         # Figure out output name to tell user
         output_dist_name = du.get_dist_name(
@@ -2020,7 +2001,7 @@ def build_24hr_mats(import_dir: str,
             mode=str(m),
             segment=str(seg),
             car_availability=str(ca),
-            csv=True
+            csv=True,
         )
         print("Generating output matrix %s..." % output_dist_name)
 
@@ -2037,7 +2018,7 @@ def build_24hr_mats(import_dir: str,
                 segment=str(seg),
                 car_availability=str(ca),
                 tp=str(tp),
-                csv=True
+                csv=True,
             )
             dist_path = os.path.join(import_dir, dist_name)
             tp_mats.append(pd.read_csv(dist_path, index_col=0))
@@ -2048,12 +2029,14 @@ def build_24hr_mats(import_dir: str,
         idx_ref = tp_mats[0].index
         for i, mat in enumerate(tp_mats):
             if len(mat.columns.difference(col_ref)) > 0:
-                raise ValueError("tp matrix %s columns do not match the "
-                                 "others." % str(tp_needed[i]))
+                raise ValueError(
+                    "tp matrix %s columns do not match the " "others." % str(tp_needed[i])
+                )
 
             if len(mat.index.difference(idx_ref)) > 0:
-                raise ValueError("tp matrix %s index does not match the "
-                                 "others." % str(tp_needed[i]))
+                raise ValueError(
+                    "tp matrix %s index does not match the " "others." % str(tp_needed[i])
+                )
 
         # Combine all matrices together
         full_mat = functools.reduce(lambda x, y: x.add(y, fill_value=0), tp_mats)
@@ -2072,28 +2055,29 @@ def build_24hr_mats(import_dir: str,
 
     # Write factors to disk if we made them
     if splitting_factors_export:
-        print('Writing tp splitting factors to disk - might take a while...')
+        print("Writing tp splitting factors to disk - might take a while...")
         decompile_factors = du.defaultdict_to_regular(decompile_factors)
         return compress.write_out(decompile_factors, splitting_factors_export)
 
 
-def match_distribution_params(candidate_dist_params: Dict[Any, Dict[str, int]],
-                              in_dist_params: Dict[str, int],
-                              match_seg_params: List[str],
-                              ) -> List[Any]:
+def match_distribution_params(
+    candidate_dist_params: Dict[Any, Dict[str, int]],
+    in_dist_params: Dict[str, int],
+    match_seg_params: List[str],
+) -> List[Any]:
     """
     Tries to match the distribution parameters of dict_a and dict_b.
 
     Parameters
     ----------
     candidate_dist_params:
-        A dictionary of candidates to match to dist_params. The keys should 
+        A dictionary of candidates to match to dist_params. The keys should
         be the values to return if the value matches dist_params.
-    
+
     in_dist_params:
         A dictionary of distribution parameters to try and match to.
         THe keys are segmentation names, the values thier values.
-    
+
     match_seg_params:
         The segmentation parameters (keys of in_dist_params) that need to match
         in the candidate_dist_params to be called a match
@@ -2101,7 +2085,7 @@ def match_distribution_params(candidate_dist_params: Dict[Any, Dict[str, int]],
     Returns
     -------
     matching_keys:
-        Returns a list of the keys in candidate_dist_params where the 
+        Returns a list of the keys in candidate_dist_params where the
         distribution parameters match to dist_params on match_seg_params.
 
     """
@@ -2120,18 +2104,19 @@ def match_distribution_params(candidate_dist_params: Dict[Any, Dict[str, int]],
                 break
         if matching_keys:
             candidate_factor_keys.append(factor_key)
-            
+
     return candidate_factor_keys
 
 
-def _nhb_tp_split_via_factors_internal(import_dir,
-                                       export_dir,
-                                       mat_24hr_fname,
-                                       tp_dict,
-                                       trip_origin,
-                                       export_matrix_format,
-                                       compress_out,
-                                       ):
+def _nhb_tp_split_via_factors_internal(
+    import_dir,
+    export_dir,
+    mat_24hr_fname,
+    tp_dict,
+    trip_origin,
+    export_matrix_format,
+    compress_out,
+):
     print("Splitting %s..." % mat_24hr_fname)
     # Read in the matrix
     mat_path = os.path.join(import_dir, mat_24hr_fname)
@@ -2147,7 +2132,7 @@ def _nhb_tp_split_via_factors_internal(import_dir,
 
         # Figure out the output_fname
         in_params = du.fname_to_calib_params(mat_24hr_fname)
-        in_params['tp'] = tp
+        in_params["tp"] = tp
         tp_mat_fname = du.calib_params_to_dist_name(
             trip_origin=trip_origin,
             matrix_format=export_matrix_format,
@@ -2159,25 +2144,25 @@ def _nhb_tp_split_via_factors_internal(import_dir,
         file_ops.write_df(tp_mat, out_path)
 
 
-def nhb_tp_split_via_factors(import_dir: nd.PathLike,
-                             export_dir: nd.PathLike,
-                             import_matrix_format: str,
-                             export_matrix_format: str,
-                             tour_proportions_dir: nd.PathLike,
-                             model_name: str,
-                             years_needed: List[str],
-                             p_needed: List[int],
-                             m_needed: List[int],
-                             soc_needed: List[int] = None,
-                             ns_needed: List[int] = None,
-                             ca_needed: List[int] = None,
-                             process_count: int = consts.PROCESS_COUNT,
-                             compress_out: bool = False,
-                             verbose: bool = True,
-                             ) -> None:
+def nhb_tp_split_via_factors(
+    export_dir: nd.PathLike,
+    import_matrix_format: str,
+    export_matrix_format: str,
+    tour_proportions_dir: nd.PathLike,
+    future_years_needed: List[str],
+    p_needed: List[int],
+    m_needed: List[int],
+    export_path: Path,
+    soc_needed: List[int] = None,
+    ns_needed: List[int] = None,
+    ca_needed: List[int] = None,
+    process_count: int = consts.PROCESS_COUNT,
+    compress_out: bool = False,
+    verbose: bool = True,
+) -> None:
     # TODO(BT): Write nhb_tp_split_via_factors() docs
     # Init
-    trip_origin = 'nhb'
+    trip_origin = "nhb"
 
     # Make sure we only have NHB purposes
     for p in p_needed:
@@ -2214,10 +2199,10 @@ def nhb_tp_split_via_factors(import_dir: nd.PathLike,
         factor_params[key] = dist_params
 
     # Remove the year key, as we are year independent
-    split_factor_seg_keys = du.list_safe_remove(split_factor_seg_keys, ['yr'])
+    split_factor_seg_keys = du.list_safe_remove(split_factor_seg_keys, ["yr"])
 
     # Split year by year
-    for year in years_needed:
+    for year in future_years_needed:
         matrix_to_split_factors = dict()
 
         # ## BUILD DICTIONARY OF MATRICES TO TP SPLITTING FACTORS ## #
@@ -2227,12 +2212,12 @@ def nhb_tp_split_via_factors(import_dir: nd.PathLike,
             m_list=m_needed,
             soc_list=soc_needed,
             ns_list=ns_needed,
-            ca_list=ca_needed
+            ca_list=ca_needed,
         )
 
         # Find the splitting factors that are best for each matrix
         for in_dist_params in loop_generator:
-            in_dist_params['yr'] = year
+            in_dist_params["yr"] = year
 
             # Figure out input matrix name
             input_dist_name = du.calib_params_to_dist_name(
@@ -2254,15 +2239,14 @@ def nhb_tp_split_via_factors(import_dir: nd.PathLike,
                 raise nd.NormitsDemandError(
                     "More than one candidate splitting factor found when "
                     "trying to split %s. Found candidate splitting factors "
-                    "from: %s"
-                    % (input_dist_name, candidate_factor_keys)
+                    "from: %s" % (input_dist_name, candidate_factor_keys)
                 )
             factor_key = candidate_factor_keys[0]
 
             # Build a dictionary of time periods to splitting factors
             tp_dict = dict()
             for tp_mat_name, tp_factors in splitting_factors[factor_key].items():
-                tp = du.fname_to_calib_params(tp_mat_name)['tp']
+                tp = du.fname_to_calib_params(tp_mat_name)["tp"]
                 tp_dict[tp] = tp_factors
 
             # Finally, assign splitting factors to matrix
@@ -2270,18 +2254,18 @@ def nhb_tp_split_via_factors(import_dir: nd.PathLike,
 
         # ## APPLY SPLITTING FACTORS, WRITE TO DISK ## #
         unchanging_kwargs = {
-            'import_dir': import_dir,
-            'export_dir': export_dir,
-            'trip_origin': trip_origin,
-            'export_matrix_format': export_matrix_format,
-            'compress_out': compress_out,
+            "import_dir": export_path / "Matrices" / "PA",
+            "export_dir": export_dir,
+            "trip_origin": trip_origin,
+            "export_matrix_format": export_matrix_format,
+            "compress_out": compress_out,
         }
 
         kwarg_list = list()
         for mat_24hr_fname, tp_dict in matrix_to_split_factors.items():
             kwargs = unchanging_kwargs.copy()
-            kwargs['mat_24hr_fname'] = mat_24hr_fname
-            kwargs['tp_dict'] = tp_dict
+            kwargs["mat_24hr_fname"] = mat_24hr_fname
+            kwargs["tp_dict"] = tp_dict
             kwarg_list.append(kwargs)
 
         multiprocessing.multiprocess(
@@ -2291,13 +2275,14 @@ def nhb_tp_split_via_factors(import_dir: nd.PathLike,
         )
 
 
-def copy_nhb_matrices(import_dir: str,
-                      export_dir: str,
-                      replace_pa_with_od: bool = False,
-                      replace_od_with_pa: bool = False,
-                      pa_matrix_desc: str = 'pa',
-                      od_matrix_desc: str = 'od',
-                      ) -> None:
+def copy_nhb_matrices(
+    import_dir: str,
+    export_dir: str,
+    replace_pa_with_od: bool = False,
+    replace_od_with_pa: bool = False,
+    pa_matrix_desc: str = "pa",
+    od_matrix_desc: str = "od",
+) -> None:
     """
     Copies NHB matrices from import dir to export dir.
 
@@ -2308,10 +2293,10 @@ def copy_nhb_matrices(import_dir: str,
     ----------
     import_dir:
         Path to the directory where the nhb matrices to copy exist.
-    
+
     export_dir:
         Path to the directory to copy the nhb matrices to.
-    
+
     replace_pa_with_od:
         Whether to replace pa_matrix_desc in the matrix names with od_matrix_desc.
 
@@ -2334,10 +2319,10 @@ def copy_nhb_matrices(import_dir: str,
     """
     # Find the .csv nhb mats
     mats = du.list_files(import_dir)
-    nhb_mats = [x for x in mats if du.starts_with(x, 'nhb')]
+    nhb_mats = [x for x in mats if du.starts_with(x, "nhb")]
 
-    pa_nm = '_%s_' % pa_matrix_desc
-    od_nm = '_%s_' % od_matrix_desc
+    pa_nm = "_%s_" % pa_matrix_desc
+    od_nm = "_%s_" % od_matrix_desc
 
     # Copy them over without a rename
     for mat_fname in nhb_mats:
@@ -2348,18 +2333,12 @@ def copy_nhb_matrices(import_dir: str,
         # Try to rename if needed
         elif replace_pa_with_od:
             if pa_nm not in mat_fname:
-                raise ValueError(
-                    "Cannot find '%s' in '%s' to replace."
-                    % (pa_nm, mat_fname)
-                )
+                raise ValueError("Cannot find '%s' in '%s' to replace." % (pa_nm, mat_fname))
             out_mat_fname = mat_fname.replace(pa_nm, od_nm)
 
         elif replace_od_with_pa:
             if od_nm not in mat_fname:
-                raise ValueError(
-                    "Cannot find '%s' in '%s' to replace."
-                    % (od_nm, mat_fname)
-                )
+                raise ValueError("Cannot find '%s' in '%s' to replace." % (od_nm, mat_fname))
             out_mat_fname = mat_fname.replace(od_nm, pa_nm)
         else:
             raise ValueError(
@@ -2374,22 +2353,23 @@ def copy_nhb_matrices(import_dir: str,
         )
 
 
-def _compile_matrices_internal(mat_import,
-                               mat_export,
-                               compile_params,
-                               comp_name,
-                               round_dp,
-                               factor_pickle_path,
-                               avoid_zero_splits,
-                               ) -> None:
+def _compile_matrices_internal(
+    mat_import,
+    mat_export,
+    compile_params,
+    comp_name,
+    round_dp,
+    factor_pickle_path,
+    avoid_zero_splits,
+) -> None:
     """
     The internal function of compile_matrices
     """
     # ## COMPILE THE MATRICES ## #
     # Get the input matrices
-    mask = (compile_params['compilation'] == comp_name)
+    mask = compile_params["compilation"] == comp_name
     subset = compile_params[mask].copy()
-    input_mat_names = subset['distribution_name'].unique()
+    input_mat_names = subset["distribution_name"].unique()
 
     # Read in all the matrices
     in_mats = list()
@@ -2427,16 +2407,17 @@ def _compile_matrices_internal(mat_import,
     return decompile_factors
 
 
-def compile_matrices(mat_import: nd.PathLike,
-                     mat_export: nd.PathLike,
-                     compile_params_path: nd.PathLike,
-                     factor_pickle_path: str = None,
-                     round_dp: int = consts.DEFAULT_ROUNDING,
-                     factors_fname: str = 'od_compilation_factors.pickle',
-                     avoid_zero_splits: bool = False,
-                     process_count: int = consts.PROCESS_COUNT,
-                     overwrite: bool = True,
-                     ) -> nd.PathLike:
+def compile_matrices(
+    mat_import: nd.PathLike,
+    mat_export: nd.PathLike,
+    compile_params_path: nd.PathLike,
+    factor_pickle_path: str = None,
+    round_dp: int = consts.DEFAULT_ROUNDING,
+    factors_fname: str = "od_compilation_factors.pickle",
+    avoid_zero_splits: bool = False,
+    process_count: int = consts.PROCESS_COUNT,
+    overwrite: bool = True,
+) -> nd.PathLike:
     """
     Compiles the matrices in mat_import, writes to mat_export
 
@@ -2486,7 +2467,7 @@ def compile_matrices(mat_import: nd.PathLike,
         raise IOError("Matrix export path '%s' does not exist." % mat_export)
 
     if factor_pickle_path is not None:
-        if pathlib.Path(factor_pickle_path).suffix == '':
+        if pathlib.Path(factor_pickle_path).suffix == "":
             print(
                 "WARNING: No filename was given for the pickle factors. "
                 "Defaulting to od_compilation_factors.pickle, but this is "
@@ -2496,7 +2477,7 @@ def compile_matrices(mat_import: nd.PathLike,
 
     # Init
     compile_params = pd.read_csv(compile_params_path)
-    compiled_names = compile_params['compilation'].unique()
+    compiled_names = compile_params["compilation"].unique()
 
     if not overwrite:
         # Don't bother recreating any outputs that already exist
@@ -2521,7 +2502,7 @@ def compile_matrices(mat_import: nd.PathLike,
         del exists
 
     # Need to get the size of the output matrices
-    check_mat_name = compile_params.loc[0, 'distribution_name']
+    check_mat_name = compile_params.loc[0, "distribution_name"]
     check_mat = file_ops.read_df(os.path.join(mat_import, check_mat_name), index_col=0)
     n_rows = len(check_mat.index)
     n_cols = len(check_mat.columns)
@@ -2535,24 +2516,24 @@ def compile_matrices(mat_import: nd.PathLike,
 
     # ## MP Matrix compilation ## #
     unchanging_kwargs = {
-        'mat_import': mat_import,
-        'mat_export': mat_export,
-        'compile_params': compile_params,
-        'round_dp': round_dp,
-        'factor_pickle_path': factor_pickle_path,
-        'avoid_zero_splits': avoid_zero_splits,
+        "mat_import": mat_import,
+        "mat_export": mat_export,
+        "compile_params": compile_params,
+        "round_dp": round_dp,
+        "factor_pickle_path": factor_pickle_path,
+        "avoid_zero_splits": avoid_zero_splits,
     }
 
     pbar_kwargs = {
-        'desc': 'Compiling Matrices',
-        'unit': 'matrices',
-        'colour': 'cyan',
+        "desc": "Compiling Matrices",
+        "unit": "matrices",
+        "colour": "cyan",
     }
 
     kwarg_list = list()
     for comp_name in compiled_names:
         kwargs = unchanging_kwargs.copy()
-        kwargs['comp_name'] = comp_name
+        kwargs["comp_name"] = comp_name
         kwarg_list.append(kwargs)
 
     # Compile all the matrices and get the decompile factors back
@@ -2569,15 +2550,16 @@ def compile_matrices(mat_import: nd.PathLike,
 
     # Write factors to disk if we made them
     if factor_pickle_path is not None:
-        print('Writing decompile factors to disk - might take a while...')
+        print("Writing decompile factors to disk - might take a while...")
         decompile_factors = du.defaultdict_to_regular(decompile_factors)
         return compress.write_out(decompile_factors, factor_pickle_path)
 
 
-def load_matrix_from_disk(mat_import_dir: pathlib.Path,
-                          segment_dict: Dict[str, Any],
-                          completed_segments: List[Dict[str, Any]] = None,
-                          ) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
+def load_matrix_from_disk(
+    mat_import_dir: pathlib.Path,
+    segment_dict: Dict[str, Any],
+    completed_segments: List[Dict[str, Any]] = None,
+) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
     """
     Returns a full OD or PA matrix loaded from disk
 
@@ -2610,13 +2592,13 @@ def load_matrix_from_disk(mat_import_dir: pathlib.Path,
         safely ignored if only loading PA or OD matrices
     """
     # Init
-    trip_origin = checks.validate_trip_origin(segment_dict['trip_origin'])
-    matrix_format = checks.validate_matrix_format(segment_dict['matrix_format'])
+    trip_origin = checks.validate_trip_origin(segment_dict["trip_origin"])
+    matrix_format = checks.validate_matrix_format(segment_dict["matrix_format"])
 
     completed_segments = list() if completed_segments is None else completed_segments
 
     # Simple case - we have full PA or OD matrix. Read in and return
-    if segment_dict['matrix_format'] in ['pa', 'od']:
+    if segment_dict["matrix_format"] in ["pa", "od"]:
         mat_fname = du.calib_params_to_dist_name(
             trip_origin=trip_origin,
             matrix_format=matrix_format,
@@ -2627,17 +2609,17 @@ def load_matrix_from_disk(mat_import_dir: pathlib.Path,
         return pd.read_csv(mat_path, index_col=0), completed_segments
 
     # Lets make sure we only carry on with the right formats
-    if segment_dict['matrix_format'] not in ['od_from', 'od_to']:
+    if segment_dict["matrix_format"] not in ["od_from", "od_to"]:
         raise ValueError(
             "%s Seems to be a valid matrix format, but I don't know how to "
-            "deal with it." % str(segment_dict['matrix_format'])
+            "deal with it." % str(segment_dict["matrix_format"])
         )
 
     # Can only get here if we have od_to or od_from
 
     # Need to remove the matrix format so od_to and od_from will match
     temp_seg_dict = segment_dict.copy()
-    del temp_seg_dict['matrix_format']
+    del temp_seg_dict["matrix_format"]
 
     # Don't carry on if we've already done this segment
     if temp_seg_dict in completed_segments:
@@ -2649,7 +2631,7 @@ def load_matrix_from_disk(mat_import_dir: pathlib.Path,
     # Load in both matrices and stick together
     od_to_fname = du.calib_params_to_dist_name(
         trip_origin=trip_origin,
-        matrix_format='od_to',
+        matrix_format="od_to",
         calib_params=segment_dict,
         csv=True,
     )
@@ -2658,7 +2640,7 @@ def load_matrix_from_disk(mat_import_dir: pathlib.Path,
 
     od_from_fname = du.calib_params_to_dist_name(
         trip_origin=trip_origin,
-        matrix_format='od_to',
+        matrix_format="od_to",
         calib_params=segment_dict,
         csv=True,
     )
@@ -2670,16 +2652,23 @@ def load_matrix_from_disk(mat_import_dir: pathlib.Path,
     return od_mat, completed_segments
 
 
-def matrices_to_vector(mat_import_dir: pathlib.Path,
-                       years_needed: List[str],
-                       model_zone_col: str,
-                       internal_zones: List[int] = None,
-                       external_zones: List[int] = None,
-                       verbose: bool = True,
-                       ) -> Tuple[pd.DataFrame, pd.DataFrame,
-                                  pd.DataFrame, pd.DataFrame,
-                                  pd.DataFrame, pd.DataFrame,
-                                  pd.DataFrame, pd.DataFrame]:
+def matrices_to_vector(
+    mat_import_dir: pathlib.Path,
+    years_needed: List[str],
+    model_zone_col: str,
+    internal_zones: List[int] = None,
+    external_zones: List[int] = None,
+    verbose: bool = True,
+) -> Tuple[
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+]:
     """
     Returns either P/A or O/D vectors based on the matrices in mat_import_dir
 
@@ -2747,7 +2736,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
     # Try to figure out what all the zones are
     check_path = os.path.join(mat_import_dir, mat_names[0])
     check_mat = file_ops.read_df(check_path, index_col=0)
-    all_zones = list(check_mat.index)    # Assume square
+    all_zones = list(check_mat.index)  # Assume square
 
     # If no internal or external zones are given, use internal for everything
     if internal_zones is None and external_zones is None:
@@ -2763,7 +2752,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
             get_matrix_format=True,
         )
 
-        mat_year = str(segment_dict['yr'])
+        mat_year = str(segment_dict["yr"])
         year_to_segment_dicts[mat_year].append(segment_dict)
 
     # Make sure all the years we need exist
@@ -2777,7 +2766,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
 
     # Build the progress bar
     total = sum([len(year_to_segment_dicts[year]) for year in years_needed])
-    desc = 'Building vectors'
+    desc = "Building vectors"
     p_bar = tqdm(total=total, desc=desc, disable=(not verbose))
 
     # Build a vector for each year
@@ -2790,20 +2779,19 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
 
         # This shouldn't change across matrices
         temp_seg_dict = year_to_segment_dicts[year][0]
-        matrix_format = checks.validate_matrix_format(temp_seg_dict['matrix_format'])
+        matrix_format = checks.validate_matrix_format(temp_seg_dict["matrix_format"])
 
         # Figure out which column names we should use
         if matrix_format in efs_consts.PA_MATRIX_FORMATS:
-            p_or_o_val_name = 'productions'
-            a_or_d_val_name = 'attractions'
+            p_or_o_val_name = "productions"
+            a_or_d_val_name = "attractions"
         elif matrix_format in efs_consts.OD_MATRIX_FORMATS:
-            p_or_o_val_name = 'origin'
-            a_or_d_val_name = 'destination'
+            p_or_o_val_name = "origin"
+            a_or_d_val_name = "destination"
         else:
             raise ValueError(
                 "%s seems to be a valid matrix format, but I don't know "
-                "how to handle it!"
-                % str(matrix_format)
+                "how to handle it!" % str(matrix_format)
             )
 
         # Build an efficient_df for each matrix
@@ -2866,9 +2854,9 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
                 # ## COMPILE INTO AN EFFICIENT DF ## #
                 # Remove the info we no longer need
                 eff_df = segment_dict.copy()
-                del eff_df['yr']
-                del eff_df['trip_origin']
-                del eff_df['matrix_format']
+                del eff_df["yr"]
+                del eff_df["trip_origin"]
+                del eff_df["matrix_format"]
 
                 # Keep track of the column names we're keeping
                 vector_columns = [zone_col_name] + list(eff_df.keys())
@@ -2878,11 +2866,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
                 # After this the df value is a df of either cols:
                 # zone_col, productions, attractions
                 # zone_col, origin, destination
-                eff_df['df'] = pd.merge(
-                    p_or_o,
-                    a_or_d,
-                    on=zone_col_name
-                )
+                eff_df["df"] = pd.merge(p_or_o, a_or_d, on=zone_col_name)
                 year_eff_dfs.append(eff_df)
 
             # Update the progress bar
@@ -2907,11 +2891,11 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
             year_pa = year_pa.sort_values(by=segment_col_names)
 
             # Tidy up soc/ns columns
-            for col_name in ['soc', 'ns']:
+            for col_name in ["soc", "ns"]:
                 if col_name in list(year_pa):
                     # Need to make sure soc/ns are int and not float
                     year_pa[col_name] = year_pa[col_name].fillna(-1).astype(int)
-                    year_pa[col_name] = year_pa[col_name].replace(-1, 'none').astype(str)
+                    year_pa[col_name] = year_pa[col_name].replace(-1, "none").astype(str)
 
             # ## STORE DATAFRAMES FOR CONCAT LATER ## #
             # Remove the other column from each
@@ -2929,7 +2913,7 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
         int_yearly_p_or_o,
         int_yearly_a_or_d,
         ext_yearly_p_or_o,
-        ext_yearly_a_or_d
+        ext_yearly_a_or_d,
     ]
     return_values = list()
     for yearly_vec in yearly_vectors:
@@ -2942,23 +2926,24 @@ def matrices_to_vector(mat_import_dir: pathlib.Path,
         vector = du.merge_df_list(yearly_vec, on=segment_col_names)
 
         # Split out the HB and NHB, add to return
-        hb_mask = vector['p'].isin(consts.ALL_HB_P)
+        hb_mask = vector["p"].isin(consts.ALL_HB_P)
         return_values.append(vector[hb_mask].copy())
         return_values.append(vector[~hb_mask].copy())
 
     return return_values
 
 
-def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
-                                     years_needed: List[str],
-                                     cache_path: pathlib.Path,
-                                     matrix_format: str,
-                                     model_zone_col: str,
-                                     internal_zones: List[int] = None,
-                                     external_zones: List[int] = None,
-                                     overwrite_cache: bool = False,
-                                     verbose: bool = True,
-                                     ) -> pd.DataFrame:
+def maybe_convert_matrices_to_vector(
+    mat_import_dir: pathlib.Path,
+    years_needed: List[str],
+    cache_path: pathlib.Path,
+    matrix_format: str,
+    model_zone_col: str,
+    internal_zones: List[int] = None,
+    external_zones: List[int] = None,
+    overwrite_cache: bool = False,
+    verbose: bool = True,
+) -> pd.DataFrame:
     """
     A cache wrapper around matrices_to_vector().
 
@@ -3031,16 +3016,16 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
     matrix_format = checks.validate_matrix_format(matrix_format)
 
     # Figure out the file paths we should be using
-    if matrix_format == 'pa':
-        hb_p_or_o_fname = efs_consts.PRODS_FNAME % ('cache', 'hb')
-        nhb_p_or_o_fname = efs_consts.PRODS_FNAME % ('cache', 'nhb')
-        hb_a_or_o_fname = efs_consts.ATTRS_FNAME % ('cache', 'hb')
-        nhb_a_or_o_fname = efs_consts.ATTRS_FNAME % ('cache', 'nhb')
-    elif matrix_format == 'od':
-        hb_p_or_o_fname = efs_consts.ORIGS_FNAME % ('cache', 'hb')
-        nhb_p_or_o_fname = efs_consts.ORIGS_FNAME % ('cache', 'nhb')
-        hb_a_or_o_fname = efs_consts.DESTS_FNAME % ('cache', 'hb')
-        nhb_a_or_o_fname = efs_consts.DESTS_FNAME % ('cache', 'nhb')
+    if matrix_format == "pa":
+        hb_p_or_o_fname = efs_consts.PRODS_FNAME % ("cache", "hb")
+        nhb_p_or_o_fname = efs_consts.PRODS_FNAME % ("cache", "nhb")
+        hb_a_or_o_fname = efs_consts.ATTRS_FNAME % ("cache", "hb")
+        nhb_a_or_o_fname = efs_consts.ATTRS_FNAME % ("cache", "nhb")
+    elif matrix_format == "od":
+        hb_p_or_o_fname = efs_consts.ORIGS_FNAME % ("cache", "hb")
+        nhb_p_or_o_fname = efs_consts.ORIGS_FNAME % ("cache", "nhb")
+        hb_a_or_o_fname = efs_consts.DESTS_FNAME % ("cache", "hb")
+        nhb_a_or_o_fname = efs_consts.DESTS_FNAME % ("cache", "nhb")
     else:
         raise ValueError(
             "%s seems to be a valid matrix format, but I don't know what to "
@@ -3059,7 +3044,7 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
         cache_paths = list()
         if internal_zones is not None:
             # Make sure the dir exists
-            int_dir = os.path.join(cache_path, 'internal')
+            int_dir = os.path.join(cache_path, "internal")
             du.create_folder(int_dir, verbose=False)
 
             # Add all files to the cache paths
@@ -3067,7 +3052,7 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
 
         if external_zones is not None:
             # Make sure the dir exists
-            ext_dir = os.path.join(cache_path, 'internal')
+            ext_dir = os.path.join(cache_path, "internal")
             du.create_folder(ext_dir, verbose=False)
 
             # Add all files to the cache paths
@@ -3079,7 +3064,7 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
 
     # Read from disk if files already exist
     if all([file_ops.file_exists(f) for f in cache_paths]) and not overwrite_cache:
-        dtypes = {'soc': str, 'ns': str}
+        dtypes = {"soc": str, "ns": str}
         return [pd.read_csv(f, dtype=dtypes) for f in cache_paths]
 
     # ## CREATE AND CACHE IF FILES DON'T EXIST YET ## #
@@ -3091,7 +3076,7 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
         model_zone_col=model_zone_col,
         internal_zones=internal_zones,
         external_zones=external_zones,
-        verbose=verbose
+        verbose=verbose,
     )
 
     # Save to disk, and return copies
@@ -3102,15 +3087,16 @@ def maybe_convert_matrices_to_vector(mat_import_dir: pathlib.Path,
     return vectors
 
 
-def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
-                                  mat_export: nd.PathLike,
-                                  params_export: nd.PathLike,
-                                  years_needed: List[str],
-                                  m_needed: List[int],
-                                  matrix_format: str,
-                                  tp_filter: Iterable[int] = None,
-                                  avoid_zero_splits: bool = False,
-                                  ) -> List[str]:
+def compile_norms_to_vdm_internal(
+    mat_import: nd.PathLike,
+    mat_export: nd.PathLike,
+    params_export: nd.PathLike,
+    years_needed: List[str],
+    m_needed: List[int],
+    matrix_format: str,
+    tp_filter: Iterable[int] = None,
+    avoid_zero_splits: bool = False,
+) -> List[str]:
     """
     Generates the compile params and compiles norms internal matrices.
 
@@ -3154,7 +3140,7 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
         Returns a list of paths to all the generated splitting factors
     """
     # Init
-    fname_suffix = 'internal'
+    fname_suffix = "internal"
 
     # Build compile params
     params_paths = build_norms_vdm_compile_params(
@@ -3192,15 +3178,16 @@ def compile_norms_to_vdm_internal(mat_import: nd.PathLike,
     return sf_paths
 
 
-def compile_norms_to_vdm_external(mat_import: nd.PathLike,
-                                  mat_export: nd.PathLike,
-                                  params_export: nd.PathLike,
-                                  years_needed: List[str],
-                                  m_needed: List[int],
-                                  matrix_format: str,
-                                  tp_filter: Iterable[int] = None,
-                                  avoid_zero_splits: bool = False,
-                                  ) -> List[str]:
+def compile_norms_to_vdm_external(
+    mat_import: nd.PathLike,
+    mat_export: nd.PathLike,
+    params_export: nd.PathLike,
+    years_needed: List[str],
+    m_needed: List[int],
+    matrix_format: str,
+    tp_filter: Iterable[int] = None,
+    avoid_zero_splits: bool = False,
+) -> List[str]:
     """
     Generates the compile params and compiles norms external matrices.
 
@@ -3244,7 +3231,7 @@ def compile_norms_to_vdm_external(mat_import: nd.PathLike,
         Returns a list of paths to all the generated splitting factors
     """
     # Init
-    fname_suffix = 'external'
+    fname_suffix = "external"
 
     # Build compile params
     params_paths = build_norms_vdm_compile_params(
@@ -3282,22 +3269,23 @@ def compile_norms_to_vdm_external(mat_import: nd.PathLike,
     return sf_paths
 
 
-def _split_int_ext(mat_import,
-                   seg_vals,
-                   internal_export,
-                   external_export,
-                   internal_zones,
-                   external_zones,
-                   csv_out,
-                   compress_out,
-                   ):
+def _split_int_ext(
+    mat_import,
+    seg_vals,
+    internal_export,
+    external_export,
+    internal_zones,
+    external_zones,
+    csv_out,
+    compress_out,
+):
     """
     Internal loop function for split_internal_external()
     """
     # Build the input file path
     fname = du.calib_params_to_dist_name(
-        trip_origin=seg_vals['trip_origin'],
-        matrix_format=seg_vals['matrix_format'],
+        trip_origin=seg_vals["trip_origin"],
+        matrix_format=seg_vals["matrix_format"],
         calib_params=seg_vals,
         csv=True,
     )
@@ -3306,7 +3294,7 @@ def _split_int_ext(mat_import,
 
     # Build an iterator to go through internal and external
     iterator = zip(
-        ['int', 'ext'],
+        ["int", "ext"],
         [internal_export, external_export],
         [internal_zones, external_zones],
         [operator.and_, operator.or_],
@@ -3323,10 +3311,10 @@ def _split_int_ext(mat_import,
         sub_mat = full_mat.where(mask, 0)
 
         fname = du.calib_params_to_dist_name(
-            trip_origin=seg_vals['trip_origin'],
-            matrix_format=seg_vals['matrix_format'],
+            trip_origin=seg_vals["trip_origin"],
+            matrix_format=seg_vals["matrix_format"],
             calib_params=seg_vals,
-            suffix='_%s' % name,
+            suffix="_%s" % name,
             csv=csv_out,
             compressed=compress_out,
         )
@@ -3334,21 +3322,22 @@ def _split_int_ext(mat_import,
         file_ops.write_df(sub_mat, out_path)
 
 
-def split_internal_external(mat_import: nd.PathLike,
-                            year: Union[int, str],
-                            matrix_format: str,
-                            internal_zones: List[int] = None,
-                            external_zones: List[int] = None,
-                            internal_export: nd.PathLike = None,
-                            external_export: nd.PathLike = None,
-                            csv_out: bool = False,
-                            compress_out: bool = True,
-                            ) -> None:
+def split_internal_external(
+    mat_import: nd.PathLike,
+    year: Union[int, str],
+    matrix_format: str,
+    internal_zones: List[int] = None,
+    external_zones: List[int] = None,
+    internal_export: nd.PathLike = None,
+    external_export: nd.PathLike = None,
+    csv_out: bool = False,
+    compress_out: bool = True,
+) -> None:
     # TODO(BT): Write split_internal_external() docs
     # Init
     if not isinstance(year, int):
         year = int(year)
-    ftypes = ['.csv', consts.COMPRESSION_SUFFIX]
+    ftypes = [".csv", consts.COMPRESSION_SUFFIX]
     mat_paths = file_ops.list_files(mat_import, ftypes=ftypes)
 
     # Validate input values
@@ -3356,10 +3345,10 @@ def split_internal_external(mat_import: nd.PathLike,
         "Both  %s_zones and %s_export need to be either set or not set. "
         "If only one is set, both are ignored."
     )
-    msg = base_msg % ('internal', 'internal')
+    msg = base_msg % ("internal", "internal")
     checks.all_values_set([internal_zones, internal_export], msg, warn=True)
 
-    msg = base_msg % ('external', 'external')
+    msg = base_msg % ("external", "external")
     checks.all_values_set([external_zones, external_export], msg, warn=True)
 
     internal_export = None if internal_zones is None else internal_export
@@ -3375,33 +3364,33 @@ def split_internal_external(mat_import: nd.PathLike,
         seg_vals = du.fname_to_calib_params(
             path,
             get_trip_origin=True,
-            get_matrix_format=True
+            get_matrix_format=True,
         )
-        if seg_vals['matrix_format'] != matrix_format:
+        if seg_vals["matrix_format"] != matrix_format:
             continue
 
         # Skip over any file which is not the wanted year
-        if seg_vals['yr'] != year:
+        if seg_vals["yr"] != year:
             continue
 
         mat_seg_vals.append(seg_vals)
 
     # ## MULTIPROCESS THE SPLITTING ##
     unchanging_kwargs = {
-        'mat_import': mat_import,
-        'internal_export': internal_export,
-        'external_export': external_export,
-        'internal_zones': internal_zones,
-        'external_zones': external_zones,
-        'csv_out': csv_out,
-        'compress_out': compress_out,
+        "mat_import": mat_import,
+        "internal_export": internal_export,
+        "external_export": external_export,
+        "internal_zones": internal_zones,
+        "external_zones": external_zones,
+        "csv_out": csv_out,
+        "compress_out": compress_out,
     }
 
     # Build a list of the kwargs
     kwarg_list = list()
     for seg_vals in mat_seg_vals:
         kwargs = unchanging_kwargs.copy()
-        kwargs['seg_vals'] = seg_vals
+        kwargs["seg_vals"] = seg_vals
         kwarg_list.append(kwargs)
 
     # Call
@@ -3412,28 +3401,29 @@ def split_internal_external(mat_import: nd.PathLike,
     )
 
 
-def compile_norms_to_vdm(mat_pa_import: nd.PathLike,
-                         mat_od_import: nd.PathLike,
-                         mat_export: nd.PathLike,
-                         params_export: nd.PathLike,
-                         year: str,
-                         m_needed: List[int],
-                         pa_matrix_format: str,
-                         od_to_matrix_format: str,
-                         od_from_matrix_format: str,
-                         nhb_od_matrix_format: str,
-                         internal_zones: List[int],
-                         external_zones: List[int],
-                         tp_filter: Iterable[int] = None,
-                         avoid_zero_splits: bool = False,
-                         ) -> str:
+def compile_norms_to_vdm(
+    mat_pa_import: nd.PathLike,
+    mat_od_import: nd.PathLike,
+    mat_export: nd.PathLike,
+    params_export: nd.PathLike,
+    year: str,
+    m_needed: List[int],
+    pa_matrix_format: str,
+    od_to_matrix_format: str,
+    od_from_matrix_format: str,
+    nhb_od_matrix_format: str,
+    internal_zones: List[int],
+    external_zones: List[int],
+    tp_filter: Iterable[int] = None,
+    avoid_zero_splits: bool = False,
+) -> str:
     # TODO(BT) Write compile_norms_to_vdm() docs
     # Init
     # matrix_format = checks.validate_matrix_format(matrix_format)
 
     # Build temporary paths
-    int_dir = os.path.join(mat_export, 'internal')
-    ext_dir = os.path.join(mat_export, 'external')
+    int_dir = os.path.join(mat_export, "internal")
+    ext_dir = os.path.join(mat_export, "external")
 
     for path in [int_dir, ext_dir]:
         file_ops.create_folder(path)
@@ -3441,22 +3431,22 @@ def compile_norms_to_vdm(mat_pa_import: nd.PathLike,
     # Grab internal PA, external OD
     # Split internal and external
     print("Splitting into internal and external matrices...")
-    # split_internal_external(
-    #     mat_import=mat_pa_import,
-    #     matrix_format=pa_matrix_format,
-    #     internal_export=int_dir,
-    #     year=year,
-    #     internal_zones=internal_zones,
-    # )
-    #
-    # for mtx_fmt in [od_from_matrix_format, od_to_matrix_format, nhb_od_matrix_format]:
-    #     split_internal_external(
-    #         mat_import=mat_od_import,
-    #         matrix_format=mtx_fmt,
-    #         external_export=ext_dir,
-    #         year=year,
-    #         external_zones=external_zones,
-    #     )
+    split_internal_external(
+        mat_import=mat_pa_import,
+        matrix_format=pa_matrix_format,
+        internal_export=int_dir,
+        year=year,
+        internal_zones=internal_zones,
+    )
+
+    for mtx_fmt in [od_from_matrix_format, od_to_matrix_format, nhb_od_matrix_format]:
+        split_internal_external(
+            mat_import=mat_od_import,
+            matrix_format=mtx_fmt,
+            external_export=ext_dir,
+            year=year,
+            external_zones=external_zones,
+        )
 
     # Compile and get the splitting factors for internal mats
     print("Generating internal splitting factors...")
@@ -3490,11 +3480,12 @@ def compile_norms_to_vdm(mat_pa_import: nd.PathLike,
     return int_split_factors, ext_split_factors
 
 
-def _recombine_internal_external_internal(in_paths,
-                                          output_path,
-                                          output_suffix,
-                                          rounding: int = None,
-                                          ) -> None:
+def _recombine_internal_external_internal(
+    in_paths,
+    output_path,
+    output_suffix,
+    rounding: int = None,
+) -> None:
     # Read in the matrices and compile
     partial_mats = [file_ops.read_df(x, index_col=0, find_similar=True) for x in in_paths]
     full_mat = functools.reduce(lambda x, y: x.values + y.values, partial_mats)
@@ -3515,18 +3506,19 @@ def _recombine_internal_external_internal(in_paths,
 
     # Write the complete matrix to disk
     file_ops.write_df(full_mat, output_path)
-    
-    
-def combine_partial_matrices(import_dirs: List[nd.PathLike],
-                             export_dir: List[nd.PathLike],
-                             segmentation: nd.SegmentationLevel,
-                             import_suffixes: List[str] = None,
-                             rounding: int = None,
-                             csv_out: bool = False,
-                             process_count: int = consts.PROCESS_COUNT,
-                             pbar_kwargs: Dict[str, Any] = None,
-                             **file_kwargs,
-                             ) -> None:
+
+
+def combine_partial_matrices(
+    import_dirs: List[nd.PathLike],
+    export_dir: List[nd.PathLike],
+    segmentation: nd.SegmentationLevel,
+    import_suffixes: List[str] = None,
+    rounding: int = None,
+    csv_out: bool = False,
+    process_count: int = consts.PROCESS_COUNT,
+    pbar_kwargs: Dict[str, Any] = None,
+    **file_kwargs,
+) -> None:
     """Combines the matrices in import_dirs and writes out to export_dir
 
     Parameters
@@ -3557,9 +3549,9 @@ def combine_partial_matrices(import_dirs: List[nd.PathLike],
         The number of processes to use when combining matrices.
 
     pbar_kwargs:
-        A dictionary of keyword arguments to pass into tqdm.tqdm to make a 
+        A dictionary of keyword arguments to pass into tqdm.tqdm to make a
         progress bar. If left as None, not progress bar will be shown.
-    
+
     file_kwargs:
         Any additional arguments to pass to segmentation.generate_file_name().
     """
@@ -3570,15 +3562,13 @@ def combine_partial_matrices(import_dirs: List[nd.PathLike],
     # Check paths exist
     if not os.path.exists(export_dir):
         raise FileExistsError(
-            "No directory exists for exporting files. Looking here:\n%s"
-            % export_dir
+            "No directory exists for exporting files. Looking here:\n%s" % export_dir
         )
 
     for in_dir in import_dirs:
         if not os.path.exists(in_dir):
             raise FileExistsError(
-                "One of the import directories does not exist. Looking here:\n%s"
-                % in_dir
+                "One of the import directories does not exist. Looking here:\n%s" % in_dir
             )
 
     # ## BUILD DICTIONARY OF MATRICES TO COMBINE ## #
@@ -3612,12 +3602,14 @@ def combine_partial_matrices(import_dirs: List[nd.PathLike],
     # ## COMPILE THE MATRICES ## #
     kwarg_list = list()
     for output_path, in_paths in combine_dict.items():
-        kwarg_list.append({
-            'output_path': output_path,
-            'in_paths': in_paths,
-            'output_suffix': output_suffix,
-            "rounding": rounding,
-        })
+        kwarg_list.append(
+            {
+                "output_path": output_path,
+                "in_paths": in_paths,
+                "output_suffix": output_suffix,
+                "rounding": rounding,
+            }
+        )
 
     multiprocessing.multiprocess(
         fn=_recombine_internal_external_internal,
@@ -3628,15 +3620,16 @@ def combine_partial_matrices(import_dirs: List[nd.PathLike],
     )
 
 
-def recombine_internal_external(internal_import: nd.PathLike,
-                                external_import: nd.PathLike,
-                                full_export: nd.PathLike,
-                                years: List[int],
-                                force_csv_out: bool = False,
-                                force_compress_out: bool = False,
-                                process_count: int = consts.PROCESS_COUNT,
-                                pbar_kwargs: Dict[str, Any] = None,
-                                ) -> None:
+def recombine_internal_external(
+    internal_import: nd.PathLike,
+    external_import: nd.PathLike,
+    full_export: nd.PathLike,
+    years: List[int],
+    force_csv_out: bool = False,
+    force_compress_out: bool = False,
+    process_count: int = consts.PROCESS_COUNT,
+    pbar_kwargs: Dict[str, Any] = None,
+) -> None:
     """
     Combines the internal and external split matrices and write out to full_export
 
@@ -3666,7 +3659,7 @@ def recombine_internal_external(internal_import: nd.PathLike,
     internal_fnames = list()
     external_fnames = list()
     for year in years:
-        yr_str = '_yr%s_' % year
+        yr_str = "_yr%s_" % year
         internal_fnames += [x for x in all_internal_fnames if yr_str in x]
         external_fnames += [x for x in all_external_fnames if yr_str in x]
 
@@ -3685,7 +3678,7 @@ def recombine_internal_external(internal_import: nd.PathLike,
         try:
             file_ops.find_filename(
                 path=os.path.join(external_import, ext_fname),
-                alt_types=['.csv', consts.COMPRESSION_SUFFIX]
+                alt_types=[".csv", consts.COMPRESSION_SUFFIX],
             )
         except FileNotFoundError as e:
             print(e)
@@ -3693,8 +3686,10 @@ def recombine_internal_external(internal_import: nd.PathLike,
                 "No external file exists to match the internal file.\n"
                 "Internal file location: %s\n"
                 "Expected external file location: %s"
-                % (os.path.join(internal_import, int_fname),
-                   os.path.join(external_import, ext_fname))
+                % (
+                    os.path.join(internal_import, int_fname),
+                    os.path.join(external_import, ext_fname),
+                )
             )
 
         # Make a note of the external files we've used
@@ -3715,24 +3710,27 @@ def recombine_internal_external(internal_import: nd.PathLike,
                 "No internal file exists to match the external file.\n"
                 "External file location: %s\n"
                 "Expected internal file location: %s"
-                % (os.path.join(external_import, ext_fname),
-                   os.path.join(internal_import, int_fname))
+                % (
+                    os.path.join(external_import, ext_fname),
+                    os.path.join(internal_import, int_fname),
+                )
             )
 
     # ## COMPILE THE MATRICES ## #
     kwarg_list = list()
     for output_path, in_paths in comp_dict.items():
-        kwarg_list.append({
-            'output_path': output_path,
-            'in_paths': in_paths,
-            'force_csv_out': force_csv_out,
-            'force_compress_out': force_compress_out,
-        })
-        
+        kwarg_list.append(
+            {
+                "output_path": output_path,
+                "in_paths": in_paths,
+                "force_csv_out": force_csv_out,
+                "force_compress_out": force_compress_out,
+            }
+        )
+
     multiprocessing.multiprocess(
         fn=_recombine_internal_external_internal,
         kwargs=kwarg_list,
         process_count=process_count,
         pbar_kwargs=pbar_kwargs,
     )
-

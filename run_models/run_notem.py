@@ -26,7 +26,7 @@ from normits_demand.pathing import NoTEMImportPaths
 # years = [2018, 2033, 2040, 2050]
 YEARS = [2018]
 SCENARIO = nd_core.Scenario.SC01_JAM
-NOTEM_ITER = '9.9'
+NOTEM_ITER = '9.10'
 LU_DRIVE = "I:/"
 LU_BY_ITER = "iter3e"
 LU_FY_ITER = "iter3e"
@@ -35,9 +35,9 @@ NOTEM_EXPORT_HOME = r"F:\NorMITs Demand\NoTEM"
 
 
 def main():
-    hb_production_import_version = '2.10'
+    hb_production_import_version = '3.0'
     hb_attraction_import_version = '2.3'
-    nhb_production_import_version = '2.1'
+    nhb_production_import_version = '3.0'
 
     # Define different balancing zones for each mode
     mode_balancing_zones = {5: nd.get_zoning_system("ca_sector_2020")}
