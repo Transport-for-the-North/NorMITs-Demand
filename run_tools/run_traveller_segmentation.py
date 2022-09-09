@@ -38,6 +38,93 @@ MODEL_SEGMENTATIONS = {
 
 
 ##### CLASSES #####
+class TSMatrixParameters(pydantic.BaseModel):
+    """Parameters for defining the Travaller segmentation tool input matrices.
+
+    Attributes
+    ----------
+    folder: pathlib.Path
+        Folder containing the input matrices.
+    zoning_system_name: str
+        Name of the zone system the matrices are in.
+    segmentation_name: str
+        Name of the segmentation that the matrices are in.
+    aggregate_segmentation_name: str, optional
+        Optional segmentation to aggregate the matrices to before
+        dissaggregating.
+    zoning_system : ZoningSystem
+        Zone system the input matrices are in.
+    segmentation : SegmentationLevel
+        Segmentation the input matrices are.
+    aggregate_segmentation : SegmentationLevel, optional
+        Optional segmentation to aggregate the matrices to before
+        dissaggregating.
+    """
+
+    folder: pathlib.Path
+    zoning_system_name: str
+    segmentation_name: str
+    aggregate_segmentation_name: Optional[str] = None
+
+    # Define private variables for the actual zone system and segmentation instances
+    _zoning_system = pydantic.PrivateAttr(None)
+    _segmentation = pydantic.PrivateAttr(None)
+    _aggregate_segmentation = pydantic.PrivateAttr(None)
+
+    @pydantic.validator("folder", allow_reuse=True)
+    def _folder_exists(  # pylint: disable=no-self-argument
+        cls, value: pathlib.Path
+    ) -> pathlib.Path:
+        try:
+            return file_ops.folder_exists(value)
+        except NotADirectoryError as err:
+            raise ValueError(err) from err
+
+    @pydantic.validator("zoning_system_name")
+    def _get_zone_system(cls, value: str) -> str:  # pylint: disable=no-self-argument
+        try:
+            nd.get_zoning_system(value)
+        except (FileNotFoundError, nd.NormitsDemandError) as err:
+            raise ValueError(err) from err
+
+        return value
+
+    @pydantic.validator("segmentation_name", "aggregate_segmentation_name")
+    def _get_segmentation(cls, value: str) -> str:  # pylint: disable=no-self-argument
+        try:
+            nd.get_segmentation_level(value)
+        except (FileNotFoundError, nd.NormitsDemandError) as err:
+            raise ValueError(err) from err
+
+        return value
+
+    @property
+    def zoning_system(self) -> nd.ZoningSystem:
+        """Zone system the input matrices are in."""
+        if self._zoning_system is None:
+            self._zoning_system = nd.get_zoning_system(self.zoning_system_name)
+        return self._zoning_system
+
+    @property
+    def segmentation(self) -> nd.SegmentationLevel:
+        """Segmentation the input matrices are."""
+        if self._segmentation is None:
+            self._segmentation = nd.get_segmentation_level(self.segmentation_name)
+        return self._segmentation
+
+    @property
+    def aggregate_segmentation(self) -> Optional[nd.SegmentationLevel]:
+        """Optional segmentation to aggregate the matrices to before dissaggregating."""
+        if self.aggregate_segmentation_name is None:
+            return None
+
+        if self._aggregate_segmentation is None:
+            self._aggregate_segmentation = nd.get_segmentation_level(
+                self.aggregate_segmentation_name
+            )
+        return self._aggregate_segmentation
+
+
 class TravellerSegmentationParameters(config_base.BaseConfig):
     """Parameters and config for the Traveller Segmentation tool.
 
@@ -55,15 +142,12 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         Iteration of the trip end model to use.
     scenario : nd.Scenario
         Trip end scenario to use.
-    matrix_folder : pathlib.Path
-        Folder containing the input matrices.
     model : nd.AssignmentModel
         Assignment model of the input matrices.
-    matrix_zoning : str
-        Zoning system that the matrices are in, usually `model` zone
-        system.
     year : int
         Year of trip ends and matrices to use.
+    matrix_parameters : TSMatrixParameters
+        Parameters for defining the input matrices.
     disaggregation_output_segment : DisaggregationOutputSegment
         Additional segment to disaggregate matrices to.
     cost_folder : pathlib.Path
@@ -74,35 +158,27 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         as the matrices are being disaggregated to.
     trip_length_distribution_units : nd.CostUnits, default KILOMETERS
         Units the trip length distributions and cost matrices are in.
-    aggregate_time_periods : list[int], optional
-        List of time periods to aggregate together for the input
-        matrices, if not given time periods aren't aggregated.
     disaggregation_settings : DisaggregationSettings, optional
         Custom settings for the disaggregation process.
     """
-
-    # TODO(MB) Add parameter for defining input matrix segmentation
 
     iteration: str
     base_output_folder: pathlib.Path
     notem_export_home: pathlib.Path
     notem_iteration: str
     scenario: nd.Scenario
-    matrix_folder: pathlib.Path
     model: nd.AssignmentModel
-    matrix_zoning: str
     year: int
+    matrix_parameters: TSMatrixParameters
     disaggregation_output_segment: segment_disaggregator.DisaggregationOutputSegment
     cost_folder: pathlib.Path
     trip_length_distribution_folder: pathlib.Path
     trip_length_distribution_units: nd.CostUnits = nd.CostUnits.KILOMETERS
-    aggregate_time_periods: Optional[list[int]] = None
     disaggregation_settings: segment_disaggregator.DisaggregationSettings = (
         segment_disaggregator.DisaggregationSettings()
     )
 
     @pydantic.validator(
-        "matrix_folder",
         "notem_export_home",
         "trip_length_distribution_folder",
         "base_output_folder",
@@ -114,27 +190,6 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
             return file_ops.folder_exists(value)
         except NotADirectoryError as err:
             raise ValueError(err) from err
-
-    @pydantic.validator("matrix_zoning")
-    def _check_zone_system(cls, value: str) -> str:  # pylint: disable=no-self-argument
-        value = value.lower()
-        try:
-            _ = nd.get_zoning_system(value)
-        except nd.NormitsDemandError as err:
-            raise ValueError(err) from err
-
-        return value
-
-    @pydantic.validator("aggregate_time_periods", pre=True)
-    def _check_time_periods(cls, value: str) -> Optional[str]:
-        """Convert empty or none / null strings to None."""
-        none_str = {"", "none", "null", "no"}
-        if isinstance(value, str) and value.strip().lower() in none_str:
-            return None
-        if isinstance(value, list) and value == []:
-            return None
-
-        return value
 
     @property
     def iteration_folder(self) -> pathlib.Path:
@@ -335,9 +390,6 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
     init_logger : bool, default True
         Whether or not to initialise a log file.
     """
-    # TODO For now use NoRMS syntheic Full PA aggregating to commute, business and other
-    # TODO In future use EFS decompile post ME function to convert from NORMS/NOHAM to TMS segmentation
-
     if init_logger:
         # Add log file output to main package logger
         nd_log.get_logger(
@@ -357,7 +409,7 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
     LOG.debug("Input parameters:\n%s", params.to_yaml())
 
     trip_end_converter = traveller_segmentation_trip_ends.NoTEMToTravellerSegmentation(
-        output_zoning=nd.get_zoning_system(params.matrix_zoning),
+        output_zoning=params.matrix_parameters.zoning_system,
         base_year=params.year,
         scenario=params.scenario,
         notem_iteration_name=params.notem_iteration,
@@ -383,12 +435,14 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
         params.trip_length_distribution_folder,
     )
 
-    # TODO(MB) Add function for handling future year NoRMS matrices
+    # TODO(MB) Add function to handle reading and aggregating the matrices
+    # to the segmentation parameters
+    raise NotImplementedError(
+        "Not yet implemented functionality for handling matrix segmentations"
+    )
     matrix_folder = aggregate_purposes(
         params.matrix_folder, params.model, params.year, params.aggregate_time_periods
     )
-
-    # TODO(MB) Add function for handling base NoHAM matrices (synthetic at NTEM purposes)
 
     for to in nd.TripOrigin:
         LOG.info(
@@ -426,7 +480,6 @@ def example_config(path: pathlib.Path) -> None:
         """New sub-class which turns off path validation for writing example config."""
 
         @pydantic.validator(
-            "matrix_folder",
             "notem_export_home",
             "trip_length_distribution_folder",
             "base_output_folder",
@@ -436,15 +489,26 @@ def example_config(path: pathlib.Path) -> None:
         def _folder_exists(cls, value) -> pathlib.Path:
             return value
 
+    class ExampleTSMP(TSMatrixParameters):
+        """New sub-class which turns off path validation for writing example config."""
+
+        @pydantic.validator("folder", allow_reuse=True)  # pylint: disable=no-self-argument
+        def _folder_exists(cls, value) -> pathlib.Path:
+            return value
+
     example = ExampleTSP(
         iteration="1",
         base_output_folder="path/to/output/folder",
         notem_export_home="path/to/NoTEM/base/export/folder",
         notem_iteration="1",
         scenario=nd.Scenario.SC01_JAM,
-        matrix_folder="path/to/folder/containing/matrices/for/segmentation",
+        matrix_parameters=ExampleTSMP(
+            folder="path/to/folder/containing/matrices/for/segmentation",
+            zoning_system_name="norms",
+            segmentation_name="hb_p_m",
+            aggregate_segmentation_name="hb_p_m",
+        ),
         model=nd.AssignmentModel.NORMS,
-        matrix_zoning="norms",
         cost_folder="path/to/folder/containing/cost/matrices",
         year=2018,
         disaggregation_output_segment=segment_disaggregator.DisaggregationOutputSegment.SOC,
@@ -466,12 +530,12 @@ if __name__ == "__main__":
 
     try:
         parameters = TravellerSegmentationParameters.load_yaml(args.config_path)
-    except (pydantic.ValidationError, NotADirectoryError) as err:
-        LOG.critical("Config file error: %s", err)
-        raise SystemExit(1) from err
+    except (pydantic.ValidationError, NotADirectoryError) as error:
+        LOG.critical("Config file error: %s", error)
+        raise SystemExit(1) from error
 
     try:
         main(parameters)
-    except Exception as err:
+    except Exception:
         LOG.critical("Traveller segmentation disaggregator error:", exc_info=True)
         raise
