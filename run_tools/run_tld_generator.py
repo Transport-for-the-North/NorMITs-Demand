@@ -211,41 +211,63 @@ def build_new_traveller_segment_tlds():
         "inter_smoothing": True,
     })
 
-    # ## GENERATE RAIL TLDS ## #
-    iterator = [
-        ("uc_m_g_m6", "traveller_segment_m6_g", "g"),
-        ("uc_m_soc_m6", "traveller_segment_m6_soc", "soc"),
-        ("uc_m_ns_m6", "traveller_segment_m6_ns", "ns"),
-    ]
+    # # ## GENERATE RAIL TLDS ## #
+    # bands_name = "dia_gb_rail_bands"
+    # iterator = [
+    #     ("uc_m_g_m6", "traveller_segment_m6_g", "g"),
+    #     ("uc_m_soc_m6", "traveller_segment_m6_soc", "soc"),
+    #     ("uc_m_ns_m6", "traveller_segment_m6_ns", "ns"),
+    # ]
+    #
+    # for segmentation_name, copy_def_name, exc_seg in iterator:
+    #     # Generate with CA combined and then split out
+    #     # Generate with HB and NHB combined and then split out
+    #     extract.tld_generator(
+    #         bands_name=bands_name,
+    #         segmentation=nd_core.get_segmentation_level(segmentation_name),
+    #         aggregated_exclude_segments=exc_seg,
+    #         **generate_kwargs,
+    #     )
+    #
+    #     # Copy back out!
+    #     extract.copy_tlds(
+    #         copy_definition_name=copy_def_name,
+    #         bands_name=bands_name,
+    #         segmentation=nd_core.get_segmentation_level(segmentation_name),
+    #         **path_kwargs,
+    #     )
 
+    # ## GENERATE CAR and PASSENGER TLDS ## #
+    bands_name = "dia_gb_car_and_passenger_bands"
+    iterator = [
+        ("uc_m_g_m3", "m3_g", "g"),
+        ("uc_m_soc_m3", "m3_soc", "soc"),
+        ("uc_m_ns_m3", "m3_ns", "ns"),
+    ]
     for segmentation_name, copy_def_name, exc_seg in iterator:
-        # Generate with CA combined and then split out
-        # Generate with HB and NHB combined and then split out
+        # Generate with HB and NHB combined
         extract.tld_generator(
-            bands_name="dia_gb_rail_bands",
+            bands_name=bands_name,
             segmentation=nd_core.get_segmentation_level(segmentation_name),
             aggregated_exclude_segments=exc_seg,
             **generate_kwargs,
         )
 
-        # Copy back out!
+        # Split HB and NHB for DIA
         extract.copy_tlds(
-            copy_definition_name=copy_def_name,
-            bands_name="dia_gb_rail_bands",
+            copy_definition_name=f"traveller_segment_{copy_def_name}",
+            bands_name=bands_name,
             segmentation=nd_core.get_segmentation_level(segmentation_name),
             **path_kwargs,
         )
 
-    # A full traveller segment run needs:
-    # ## run at GB, trip_OD ## #
-    #
-    #   dm_highway_bands
-    #       hb_business
-    #       hb_commute
-    #       hb_other
-    #       nhb_business
-    #       nhb_other
-    #
+        # Split into NTEM purposes for FTS
+        extract.copy_tlds(
+            copy_definition_name=f"ntem_purpose_{copy_def_name}",
+            bands_name=bands_name,
+            segmentation=nd_core.get_segmentation_level(segmentation_name),
+            **path_kwargs,
+        )
 
 
 if __name__ == "__main__":

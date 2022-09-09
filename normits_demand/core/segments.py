@@ -112,7 +112,7 @@ class SegmentationLevel:
         "segmentations",
     ))
     segment_group_dir = segment_definitions_path / "_segment_groups"
-    valid_segment_subdirs = ["notem", "tram", "dimo", "user_class", "custom"]
+    valid_segment_subdirs = ["notem", "tram", "dimo", "user_class", "custom", "single_mode"]
 
     # Paths to specific files
     _multiply_definitions_path = segment_definitions_path / "multiply.csv"
