@@ -1578,6 +1578,7 @@ def read_matrix(
         If the `format` cannot be determined by reading the file
         or an invalid `format` is given.
     """
+    header = 0
     if format_ is None:
         # Determine format by reading top few lines of file
         matrix = read_df(path, nrows=3, find_similar=find_similar)

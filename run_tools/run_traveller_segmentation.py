@@ -6,10 +6,10 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import datetime as dt
 import pathlib
-import re
 import sys
-from typing import Optional
+from typing import Iterator, Optional
 
 import pydantic
 
@@ -19,10 +19,9 @@ sys.path.append("..")
 sys.path.append(".")
 # pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
-from normits_demand import logging as nd_log, constants
+from normits_demand import logging as nd_log
 from normits_demand.converters import traveller_segmentation_trip_ends
 from normits_demand.distribution import segment_disaggregator
-from normits_demand.matrices import matrix_processing
 from normits_demand.utils import config_base, file_ops
 
 # pylint: enable=import-error,wrong-import-position
@@ -259,125 +258,131 @@ class TravellerSegmentationArguments:
 
 
 ##### FUNCTIONS #####
-def _compile_params_format(
-    compile_params_path: pathlib.Path, aggregate_time_periods: bool
-) -> None:
-    """Replace ca/nca in compiled matrix names with ca2/ca1, respectively.
-
-    Overwrites existing compilation parameters file with adjusted names.
-
-    Parameters
-    ----------
-    compile_params_path : pathlib.Path
-        Path to compilation parameters file created by
-        `matrix_processing.build_compile_params`.
-    aggregate_time_periods : bool
-        Whether to remote time period for compiled file name and
-        combine all time periods together.
-    """
-
-    def replace(match: re.Match) -> str:
-        for val, i in (("ca", 2), ("nca", 1)):
-            if match.group(1).lower() == val:
-                return f"_ca{i}{match.group(2)}"
-
-        # This should never occur
-        raise ValueError(f"unexpected match value: {match!r}")
-
-    compile_params = file_ops.read_df(compile_params_path)
-    compile_params.loc[:, "compilation"] = compile_params["compilation"].str.replace(
-        r"_(ca|nca)([_.])", replace, flags=re.I, regex=True
-    )
-
-    if aggregate_time_periods:
-        compile_params.loc[:, "compilation"] = compile_params["compilation"].str.replace(
-            r"_tp\d+", "", regex=True
-        )
-
-    file_ops.write_df(compile_params, compile_params_path, index=False)
-
-
-def aggregate_purposes(
-    matrix_folder: pathlib.Path,
-    model: nd.AssignmentModel,
+def iterate_matrix_files(
+    folder: pathlib.Path,
+    segmentation: nd.SegmentationLevel,
+    file_desc: str,
     year: int,
-    aggregate_time_periods: Optional[list[int]] = None,
-) -> pathlib.Path:  # TODO Update docstring with tp parameter
-    """Aggregate matrices in NTEM purposes to model user classes.
+) -> Iterator[tuple[pathlib.Path, dict]]:
+    """Interate through `segmentation` to find matrices.
 
     Parameters
     ----------
-    matrix_folder : pathlib.Path
-        Folder containing the matrices by NTEM purpose.
-    model : nd.AssignmentModel
-        Assignment model for the matrices.
+    folder : pathlib.Path
+        Folder to look for matrices in.
+    segmentation : nd.SegmentationLevel
+        Segmentation level of matrices to find.
+    file_desc : str
+        Expected description in the matrix filenames.
     year : int
-        Model year.
+        Year of the matrices to find
 
-    Returns
-    -------
+    Yields
+    ------
     pathlib.Path
-        Folder where the aggregated user class matrices are saved,
-        creates new sub-folder 'userclasses' inside `matrix_folder`.
+        Path to the matrix file
+    dict[str, Any]
+        Segmentation parameters dictionary.
 
     Raises
     ------
-    NotImplementedError
-        For any model other than NoRMS.
+    FileNotFoundError
+        If one of the matrix files don't exist.
     """
-    if model != nd.AssignmentModel.NORMS:
-        raise NotImplementedError(f"aggregate_purposes not implemented for {model.get_name()}")
+    for seg_params in segmentation:
+        name = segmentation.generate_file_name(
+            seg_params, year=year, file_desc=file_desc, compressed=True
+        )
 
-    LOG.info("Compiling %s matrices to userclasses", model.get_name())
-    LOG.debug("Input matrices: %s", matrix_folder)
+        path = folder / name
+        if not path.is_file():
+            raise FileNotFoundError(f"cannot find matrix: {path}")
 
-    output_folder = matrix_folder / "userclass"
+        yield path, seg_params
+
+
+def aggregate_matrices(
+    input_folder: pathlib.Path,
+    output_folder: pathlib.Path,
+    input_segmentation: nd.SegmentationLevel,
+    aggregate_segmentation: nd.SegmentationLevel,
+    year: int,
+    file_desc: str,
+) -> None:
+    """Aggregate matrices from one segmentation to another.
+
+    If all the output aggregated matrices exist in
+    `output_folder` then returns without reproducing them.
+
+    Parameters
+    ----------
+    input_folder : pathlib.Path
+        Folder containing input matrices.
+    output_folder : pathlib.Path
+        Folder to save aggregated matrices to.
+    input_segmentation : nd.SegmentationLevel
+        Segmentation for the input matrices.
+    aggregate_segmentation : nd.SegmentationLevel
+        Segmentation to aggregate to.
+    year : int
+        Year for the matrices to load.
+    file_desc : str
+        Expected description in the matrix filenames.
+    """
+    # Check if aggregated matrices have already been created and don't recreate
+    try:
+        list(iterate_matrix_files(output_folder, aggregate_segmentation, file_desc, year))
+        LOG.info("Using existing aggregated matrices in %s", output_folder)
+        return
+    except FileNotFoundError:
+        pass
+
+    LOG.info(
+        "Aggregating input matrices from '%s' to '%s'",
+        input_segmentation.name,
+        aggregate_segmentation.name,
+    )
+    input_matrices = {
+        input_segmentation.get_segment_name(s): p
+        for p, s in iterate_matrix_files(input_folder, input_segmentation, file_desc, year)
+    }
+
+    agg_trans = input_segmentation.aggregate(aggregate_segmentation)
+
     output_folder.mkdir(exist_ok=True)
+    with open(output_folder / "README.txt", "wt", encoding="utf-8") as file:
+        file.write(
+            f"Matrices aggregated from '{input_segmentation.name}' "
+            f"to '{aggregate_segmentation.name}'\non {dt.datetime.now():%c}\n"
+            f"Input matrices from: {input_folder}\n\n"
+            "Matrix Aggregations\n-------------------\n"
+            + "\n".join(f"{k}: {v}" for k, v in agg_trans.items())
+            + "\n"
+        )
 
-    required = None
-    if aggregate_time_periods is not None:
-        required = ["tp"]
+    for out_name, in_names in agg_trans.items():
+        out_file = output_folder / aggregate_segmentation.generate_file_name(
+            aggregate_segmentation.get_seg_dict(out_name),
+            year=year,
+            file_desc=file_desc,
+            compressed=True,
+        )
 
-    # Check whether matrices contain time period and car availability segmentation
-    ca_needed = set()
-    tp_needed = set()
-    for params in file_ops.parse_folder_files(
-        matrix_folder, constants.VALID_MAT_FTYPES, required
-    ):
-        if "tp" in params:
-            tp_needed.add(int(params["tp"]))
-        if "ca" in params:
-            ca_needed.add(int(params["ca"]))
-    ca_needed = list(ca_needed) if len(ca_needed) > 0 else None
-    tp_needed = list(tp_needed) if len(tp_needed) > 0 else None
+        agg_mat = file_ops.read_matrix(
+            input_matrices[in_names[0]], find_similar=True, format_="square"
+        )
 
-    if aggregate_time_periods is not None:
-        tp_needed = aggregate_time_periods
+        if len(in_names) > 1:
+            for nm in in_names[1:]:
+                mat = file_ops.read_matrix(
+                    input_matrices[nm], find_similar=True, format_="square"
+                )
+                agg_mat += mat
 
-    compile_params_path = pathlib.Path(
-        matrix_processing.build_compile_params(
-            import_dir=matrix_folder,
-            export_dir=output_folder,
-            matrix_format="pa",
-            years_needed=[year],
-            m_needed=model.get_mode().get_mode_values(),
-            ca_needed=ca_needed,
-            tp_needed=tp_needed,
-            split_hb_nhb=True,
-        )[0]
-    )
+        file_ops.write_df(agg_mat, out_file, index=True)
+        LOG.info("Aggregated to matrix: %s", out_file.name)
 
-    _compile_params_format(compile_params_path, aggregate_time_periods is not None)
-
-    matrix_processing.compile_matrices(
-        mat_import=matrix_folder,
-        mat_export=output_folder,
-        compile_params_path=compile_params_path,
-        overwrite=False,
-    )
-    LOG.info("Output user class matrices saved: %s", output_folder)
-
-    return output_folder
+    LOG.info("Aggregated matrices saved to %s", output_folder)
 
 
 def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> None:
@@ -435,13 +440,30 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
         params.trip_length_distribution_folder,
     )
 
-    # TODO(MB) Add function to handle reading and aggregating the matrices
-    # to the segmentation parameters
+    LOG.info("Checking input matrices: %s", params.matrix_parameters.folder)
+    # TODO(MB) Add matrix file description parameter
+    file_desc = "hb_synthetic_pa"
+    if params.matrix_parameters.aggregate_segmentation is not None:
+        matrix_folder = params.iteration_folder / "Aggregated Matrices"
+        matrix_segmentation = params.matrix_parameters.aggregate_segmentation
+        aggregate_matrices(
+            params.matrix_parameters.folder,
+            matrix_folder,
+            params.matrix_parameters.segmentation,
+            params.matrix_parameters.aggregate_segmentation,
+            params.year,
+            file_desc,
+        )
+    else:
+        matrix_folder = params.matrix_parameters.folder
+        matrix_segmentation = params.matrix_parameters.segmentation
+
+    matrices = list(
+        iterate_matrix_files(matrix_folder, matrix_segmentation, file_desc, params.year)
+    )
+
     raise NotImplementedError(
         "Not yet implemented functionality for handling matrix segmentations"
-    )
-    matrix_folder = aggregate_purposes(
-        params.matrix_folder, params.model, params.year, params.aggregate_time_periods
     )
 
     for to in nd.TripOrigin:
