@@ -2402,3 +2402,83 @@ def get_segmentation_level(name: str) -> SegmentationLevel:
         segment_types=segment_types,
         valid_segments=valid_segments,
     )
+
+
+def create_segmentation_level(
+    name: str,
+    naming_order: list[str],
+    valid_segments: pd.DataFrame,
+    segment_types: dict[str, type] = None,
+    default_type: type = int,
+) -> SegmentationLevel:
+    """Add new segmentation level definition.
+
+    New segmentation level files are added to the default
+    segmentations folder.
+
+    Parameters
+    ----------
+    name : str
+        The name of the segmentation. This will be the same as the name in
+        the definitions folder
+    naming_order : list[str]
+        A list of segment names, defining the order that the segments should
+        be named in when assigned a segment name. E.g. a naming order of
+        ['p', 'm'], and the segment where p=1, and m=3, would be named
+        '1_3'.
+    valid_segments : pd.DataFrame
+        A pandas.DataFrame listing all the valid segments of this
+        segmentation. The columns should be named after the segments
+        they represent, and should correspond to naming_order
+    segment_types : dict[str, type], optional
+        The types to assign to each segment. Should be a dictionary of
+        strings (matching naming_order) -> type
+    default_type : type, default int
+        Type to use for any segments not given in `segment_types`.
+
+    Returns
+    -------
+    SegmentationLevel
+        Instance of the new segmentation.
+
+    Raises
+    ------
+    SegmentationError
+        If segmentation already exists with `name`.
+    """
+    try:
+        get_segmentation_level(name)
+        exists = True
+    except nd.NormitsDemandError:
+        exists = False
+
+    if exists:
+        raise SegmentationError(f"segmentation {name} already exists, cannot overwrite")
+
+    if segment_types is None:
+        actual_seg_types = {n: default_type for n in naming_order}
+    else:
+        actual_seg_types = {n: segment_types.get(n, default_type) for n in naming_order}
+
+    seg_level = SegmentationLevel(
+        name=name,
+        naming_order=naming_order,
+        segment_types=actual_seg_types,
+        valid_segments=valid_segments,
+    )
+    folder = seg_level.segment_definitions_path / name
+    try:
+        folder.mkdir()
+    except FileExistsError as err:
+        raise SegmentationError(f"segmentation folder {name} already exists") from err
+
+    with open(folder / "naming_order.csv", "wt", encoding="utf-8") as file:
+        file.write("\n".join(seg_level.naming_order) + "\n")
+
+    file_ops.write_df(seg_level.segments, folder / "unique_segments.csv.bz2", index=False)
+
+    if segment_types is not None:
+        with open(folder / "types", "wt", encoding="utf-8") as file:
+            file.write("\n".join(f"{k},{v}" for k, v in segment_types.items()) + "\n")
+
+    return seg_level
