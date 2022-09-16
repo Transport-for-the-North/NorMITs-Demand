@@ -6,7 +6,17 @@ notem_hb_attractions_pure,hb_p_m,p,notem_hb_attractions_full
 notem_hb_tfnat_p_m_g_soc_ns_ca,notem_nhb_trip_rate,p;m,notem_hb_tfnat_p_m_g_soc_ns_ca_nhbp_nhbm
 notem_nhb_productions_pure,notem_nhb_tfnat_p_m_tp,nhb_p;nhb_m;tfn_at,notem_nhb_productions_full_tfnat
 hb_p_m_tp_wday,hb_p_m_tp_wday,p;m;tp,hb_p_m_tp_wday
+hb_p_m_tp_week,hb_p_m_tp_week,p;m;tp,hb_p_m_tp_week
 tms_nhb_p_m_tp_wday,tms_nhb_p_m_tp_wday,p;m;tp,tms_nhb_p_m_tp_wday
 hb_p_m_car,hb_p_m_car,p;m,hb_p_m_car
 nhb_p_m_car,nhb_p_m_car,p;m,nhb_p_m_car
 hb_p_m_sic,sic,sic,hb_p_m_sic
+hb_p_m,hb_p_m,p;m,hb_p_m
+notem_hb_output,hb_p_m_tp_week,p;m;tp,notem_hb_output
+notem_hb_output,m_tp_week,m;tp,notem_hb_output
+hb_p_tp_week,hb_p_tp_week,p;tp,hb_p_tp_week
+notem_hb_output,hb_p_tp_week,p;tp,notem_hb_output
+m_tp_week,m_tp_week,m;tp,m_tp_week
+notem_nhb_output,m_tp_week,m;tp,notem_nhb_output
+notem_nhb_output,nhb_p_tp_week,p;tp,notem_nhb_output
+nhb_p_tp_week,nhb_p_tp_week,p;tp,nhb_p_tp_week

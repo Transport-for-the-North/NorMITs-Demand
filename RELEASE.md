@@ -26,5 +26,21 @@ Below, a brief summary of patches made since the previous version can be found.
     - Output naming aligned with rest of framework
     - Front end run script finalised
     - Added summary reports
+  - Renamed the incorrectly named "TemproExtractor" to "NTEM Extractor"
+    - Updated tool to extract different versions of NTEM data
+    - Updated tool to extract different scenarios of NTEM data
+- Core
+  - Added Midlands Connect zoning systems as built-ins
+  - Added functionality to convert matrices into SATURN and CUBE formats
+  - Added functionality to extract matrices from SATURN and CUBE formats
+- Models
+  - Adapted NoTEM to optionally perform steps needed for Midlands Models
+    -  Including optional localised trip end adjustments
+  - Added a temporary front end script for `Midlands Distribution Model`
+  - Created a generic front end for all forecasting functionality
+    - Can run NTEM based forecasts, or synthetic trip end based forecasts from 
+      the same front end
+    - Updated the NTEM Forecasting model to select between different versions
+      of NTEM data and different scenarios.
 - Bug Fixes
-  - None
+  - Various errors to adapt code to work more flexibly with other zoning systems

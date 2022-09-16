@@ -1218,7 +1218,7 @@ class TripLengthDistributionBuilder:
 
         aggregated_exclude_segments:
             A list of the segment names to exclude from `segmentation` when
-            generated an aggregated segmentation.
+            generating an aggregated segmentation.
 
         geo_area:
             The geographical area to limit the generated TLD to

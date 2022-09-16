@@ -1,5 +1,6 @@
 # ## PACKAGE FILES ## #
 *config.py
+*.ipynb
 
 # ## PROJECT FILES ## #
 # Byte-compiled / optimized / DLL files

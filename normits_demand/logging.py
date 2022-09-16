@@ -12,7 +12,7 @@ Initialiser for all logging in normits_demand
 """
 # Builtins
 import logging
-from typing import Any
+from typing import Any, Dict
 
 # Third Party
 
@@ -297,19 +297,23 @@ def get_file_handler(log_file: nd.PathLike,
 
 def capture_warnings(
     stream_handler: bool = True,
-    stream_handler_args: dict[str, Any] = None,
-    file_handler_args: dict[str, Any] = None
+    stream_handler_args: Dict[str, Any] = None,
+    file_handler_args: Dict[str, Any] = None
 ) -> None:
     """Capture warnings using logging.
+
     Runs `logging.captureWarnings(True)` to capture warnings then
     sets up custom stream and file handlers if required.
+
     Parameters
     ----------
     stream_handler : bool, default True
         Add stream handler to warnings logger.
+
     stream_handler_args : Dict[str, Any], optional
         Custom arguments for the stream handler,
         passed to `get_console_handler`.
+
     file_handler_args : Dict[str, Any], optional
         Custom arguments for the file handler,
         passed to `get_file_handler`.
@@ -325,3 +329,4 @@ def capture_warnings(
 
     if file_handler_args is not None:
         warning_logger.addHandler(get_file_handler(**file_handler_args))
+

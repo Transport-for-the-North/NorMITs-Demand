@@ -13,7 +13,7 @@ NoTEM Class Frontend for calling all production and attraction models
 # Builtins
 import os
 
-from typing import List
+from typing import List, Optional
 
 # Third Party
 
@@ -25,12 +25,14 @@ from normits_demand.models.notem import HBProductionModel
 from normits_demand.models.notem import NHBProductionModel
 from normits_demand.models.notem import HBAttractionModel
 from normits_demand.models.notem import NHBAttractionModel
+from normits_demand.models.notem.production_models import TripEndAdjustmentFactors
 
 from normits_demand.pathing import NoTEMExportPaths
 from normits_demand.utils import timing
 
 
 class NoTEM(NoTEMExportPaths):
+    EXPORT_PATHS_CLASS = NoTEMExportPaths
     _running_report_fname = 'running_parameters.txt'
     _log_fname = "NoTEM_log.log"
 
@@ -42,6 +44,7 @@ class NoTEM(NoTEMExportPaths):
                  export_home: nd.PathLike,
                  hb_attraction_balance_zoning: nd.BalancingZones = None,
                  nhb_attraction_balance_zoning: nd.BalancingZones = None,
+                 trip_end_adjustments: Optional[List[TripEndAdjustmentFactors]] = None,
                  ):
         """
         Assigns the attributes needed for NoTEM model.
@@ -83,6 +86,10 @@ class NoTEM(NoTEMExportPaths):
             at, for each segment of the attractions segmentation. A translation must exist
             between this and the running zoning system, which is MSOA by default.
             If left as None, then no spatial balance is done, only a segmental balance.
+
+        trip_end_adjustments: List[TripEndAdjustmentFactors], optional
+            List of all adjustment factors to apply to the HB productions trip ends.
+            Adjustments are applied one after another at to the HB productions.
         """
         # Validate inputs
         if not isinstance(import_builder, nd.pathing.NoTEMImportPathsBase):
@@ -97,6 +104,7 @@ class NoTEM(NoTEMExportPaths):
         self.import_builder = import_builder
         self.hb_attraction_balance_zoning = hb_attraction_balance_zoning
         self.nhb_attraction_balance_zoning = nhb_attraction_balance_zoning
+        self.adjustment_factors = trip_end_adjustments
 
         # Generate the export paths
         super().__init__(
@@ -112,10 +120,15 @@ class NoTEM(NoTEMExportPaths):
         self._logger = nd.get_logger(
             logger_name=logger_name,
             log_file_path=log_file_path,
-            instantiate_msg="Initialised new NoTEM Logger",
+            instantiate_msg=f"Initialised new {self.name} Logger",
         )
 
         self._write_running_report()
+
+    @property
+    def name(self) -> str:
+        """Name of the model."""
+        return self.__class__.__name__
 
     def _write_running_report(self):
         """
@@ -124,7 +137,7 @@ class NoTEM(NoTEMExportPaths):
         # Define the lines to output
         out_lines = [
             'Code Version: %s' % str(nd.__version__),
-            'NoTEM Iteration: %s' % str(self.iteration_name),
+            '%s Iteration: %s' % (self.name, str(self.iteration_name)),
             'Scenario: %s' % str(self.scenario.value),
             '',
             '### HB Productions ###',
@@ -195,7 +208,7 @@ class NoTEM(NoTEMExportPaths):
         # TODO(BT): Add checks to make sure input paths exist when models
         #  depend on one another
         start_time = timing.current_milli_time()
-        self._logger.info("Starting a new run of NoTEM")
+        self._logger.info("Starting a new run of %s", self.name)
 
         # Determine which models to run
         if generate_all:
@@ -231,7 +244,7 @@ class NoTEM(NoTEMExportPaths):
 
         end_time = timing.current_milli_time()
         time_taken = timing.time_taken(start_time, end_time)
-        self._logger.info("NoTEM run complete! Took %s" % time_taken)
+        self._logger.info("%s run complete! Took %s" % (self.name, time_taken))
 
     def _generate_hb_production(self) -> None:
         """
@@ -246,6 +259,7 @@ class NoTEM(NoTEMExportPaths):
             **import_files,
             constraint_paths=None,
             export_home=self.hb_production.export_paths.home,
+            trip_end_adjustments=self.adjustment_factors,
         )
 
         self._logger.info("Running the Home-Based Production Model")
