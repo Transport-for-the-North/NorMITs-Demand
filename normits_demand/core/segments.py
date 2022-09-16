@@ -965,7 +965,17 @@ class SegmentationLevel:
             )
 
         name_parts = segment_name.split(self._segment_name_separator)
-        return {n: s for n, s in zip(self.naming_order, name_parts)}
+
+        # Convert parameters to specific types if given
+        segment_parameters: dict[str, Any] = {}
+        for n, s in zip(self.naming_order, name_parts):
+            cast = self._segment_types.get(n)
+            if cast is not None:
+                segment_parameters[n] = cast(s)
+            else:
+                segment_parameters[n] = s
+
+        return segment_parameters
 
     def is_valid_segment_name(self, segment_name: str) -> bool:
         """
