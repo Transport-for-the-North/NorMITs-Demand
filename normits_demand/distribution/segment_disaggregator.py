@@ -286,55 +286,62 @@ def _set_dataframe_dtypes(df: pd.DataFrame, dtypes: Dict[str, str]) -> pd.DataFr
 
 
 def disaggregate_segments(
-    import_folder: pathlib.Path,
+    matrices: list[tuple[pathlib.Path, dict]],
+    matrix_fmt: nd.MatrixFormat,
+    segment_dtypes: dict[str, type],
     target_tld_folder: pathlib.Path,
     tld_units: nd.CostUnits,
-    model: nd.AssignmentModel,
     base_productions: nd.DVector,
     base_attractions: nd.DVector,
     export_folder: pathlib.Path,
     cost_folder: pathlib.Path,
     disaggregation_segment: DisaggregationOutputSegment,
-    trip_origin: nd.TripOrigin = nd.TripOrigin.HB,
+    trip_origin: nd.TripOrigin,
     settings: DisaggregationSettings = DisaggregationSettings(),
 ) -> None:  # TODO Update docstring
-    """
+    """Disaggregate the `matrices` to add in new `disaggregation_segment`.
+
     Parameters
     ----------
-    trip_origin:
-        from 'hb', 'nhb', 'both'
+    matrices : list[tuple[pathlib.Path, dict]]
+        Paths and segment parameters dictionary for all of the matrices
+        to disaggregate.
+    matrix_fmt : nd.MatrixFormat
+        Type of matrices e.g. PA or OD.
+    segment_dtypes : dict[str, type]
+        Data types for the matrix segment parameters.
+    target_tld_folder : pathlib.Path
+        Folder containing the trip length distributions.
+    tld_units : nd.CostUnits
+        Units for the trip length distributions.
+    base_productions : nd.DVector
+        Productions DVector.
+    base_attractions : nd.DVector
+        Attractions DVector.
+    export_folder : pathlib.Path
+        Outputs folder.
+    cost_folder : pathlib.Path
+        Folder containing the cost matrices.
+    disaggregation_segment : DisaggregationOutputSegment
+        Segment to disaggregate the matrices to.
+    trip_origin : nd.TripOrigin
+        HB or NHB trip origin for the matrices.
+    settings : DisaggregationSettings, optional
+        Settings for defining how the disaggregation is done.
 
-    aggregate_surplus_segments = True:
-        If there are segments on the left hand side that aren't in the
-        enhanced segmentation, aggregated them. Will
+    Raises
+    ------
+    ValueError
+        If multiple trip length distributions for the same segment are found.
+    KeyError
+        If trip end data doesn't have all the segments required.
     """
-    required_columns = ["matrix_type", "trip_origin", "yr", "m"]
-    if model == nd.AssignmentModel.NORMS:
-        required_columns.append("ca")
-    seg_dtypes = dict.fromkeys(("p", "yr", "m", "ca", "soc", "ns"), "Int64")
+    base_mat_seg = pd.DataFrame([{"matrix_path": p, **d} for p, d in matrices])
+    base_mat_seg.loc[:, "trip_origin"] = trip_origin.value
+    base_mat_seg.loc[:, "matrix_type"] = matrix_fmt.value
 
-    # Find all matrices and extract segmentation info
-    LOG.info("Finding base matrices in %s", import_folder)
-    base_mat_seg = pd.DataFrame(
-        file_ops.parse_folder_files(
-            import_folder,
-            extension_filter=constants.VALID_MAT_FTYPES,
-            required_data=required_columns,
-        )
-    )
-    base_mat_seg = _set_dataframe_dtypes(base_mat_seg, seg_dtypes)
-    base_mat_seg.loc[:, "name"] = base_mat_seg["path"].apply(lambda p: p.name)
-    base_mat_seg = base_mat_seg.loc[
-        (base_mat_seg["matrix_type"] == "pa")
-        & (base_mat_seg["trip_origin"] == trip_origin.value)
-    ].drop(columns="matrix_type")
-    duplicates = base_mat_seg.duplicated().sum()
-    if duplicates > 0:
-        raise ValueError(f"{duplicates} matrices with the same segmentation found")
-    exclude_columns = ["path", "name", "yr"]
-    segment_columns = [c for c in base_mat_seg.columns if c not in exclude_columns]
-    base_mat_seg.rename(columns={"path": "matrix_path", "name": "matrix_name"}, inplace=True)
-    LOG.info("Found matrices at segmentation: %s", " ".join(segment_columns))
+    segment_columns = list(segment_dtypes.keys())
+    segment_columns.append("trip_origin")
 
     # Find all TLDs and extract segmentation info
     LOG.info("Finding TLDs in %s", target_tld_folder)
@@ -345,7 +352,7 @@ def disaggregate_segments(
             required_data=segment_columns + [disaggregation_segment.value],
         )
     )
-    tld_seg = _set_dataframe_dtypes(tld_seg, seg_dtypes)
+    tld_seg = _set_dataframe_dtypes(tld_seg, segment_dtypes)
     tld_seg.loc[:, "name"] = tld_seg["path"].apply(lambda p: p.name)
     tld_seg = tld_seg.loc[
         tld_seg["trip_origin"] == trip_origin.value,

@@ -12,7 +12,7 @@ matrix_parameters:
   folder: I:\NorMITs Demand\Distribution Model\iter9.10.3\train\Final Outputs\Full TP PA Matrices
   zoning_system_name: norms
   segmentation_name: hb_p_m_ca_tp_wday_rail
-  aggregate_segmentation_name: hb_p_m_ca_rail
+  aggregate_segmentation_name: hb_uc_m_ca_rail
 disaggregation_settings:
   export_original: yes
   export_furness: no

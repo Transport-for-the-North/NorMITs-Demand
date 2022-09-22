@@ -442,6 +442,7 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
 
     LOG.info("Checking input matrices: %s", params.matrix_parameters.folder)
     # TODO(MB) Add matrix file description parameter
+    # TODO(MB) Add HB and NHB segmentation
     file_desc = "hb_synthetic_pa"
     if params.matrix_parameters.aggregate_segmentation is not None:
         matrix_folder = params.iteration_folder / "Aggregated Matrices"
@@ -462,11 +463,11 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
         iterate_matrix_files(matrix_folder, matrix_segmentation, file_desc, params.year)
     )
 
-    raise NotImplementedError(
-        "Not yet implemented functionality for handling matrix segmentations"
-    )
-
     for to in nd.TripOrigin:
+        if to != nd.TripOrigin.HB:
+            continue
+            raise NotImplementedError("only works with HB segmentation for now")
+
         LOG.info(
             "Splitting %s matrices to %s segmentation",
             to.value,
@@ -478,10 +479,11 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
         )
 
         segment_disaggregator.disaggregate_segments(
-            import_folder=matrix_folder,
+            matrices=matrices,
+            matrix_fmt=nd.MatrixFormat.PA, # TODO Add this as an input parameters
+            segment_dtypes=matrix_segmentation.segment_types,
             target_tld_folder=params.trip_length_distribution_folder,
             tld_units=params.trip_length_distribution_units,
-            model=params.model,
             base_productions=productions,
             base_attractions=attractions,
             export_folder=params.output_folder,
