@@ -2505,13 +2505,13 @@ def create_segmentation_level(
     except FileExistsError as err:
         raise SegmentationError(f"segmentation folder {name} already exists") from err
 
-    with open(folder / "naming_order.csv", "wt", encoding="utf-8") as file:
+    with open(folder / seg_level.naming_order_fname, "wt", encoding="utf-8") as file:
         file.write("\n".join(seg_level.naming_order) + "\n")
 
     file_ops.write_df(seg_level.segments, folder / "unique_segments.csv.bz2", index=False)
 
     if segment_types is not None:
-        with open(folder / "types", "wt", encoding="utf-8") as file:
+        with open(folder / seg_level.segment_type_fname, "wt", encoding="utf-8") as file:
             file.write("\n".join(f"{k},{v}" for k, v in segment_types.items()) + "\n")
 
     return seg_level
