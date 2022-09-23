@@ -50,5 +50,6 @@ notem_hb_output,notem_hb_output_uc,m;g;soc;ns;ca;tp,p:uc
 notem_nhb_output,notem_nhb_output_uc,m;g;soc;ns;ca;tp,p:uc
 ,,,
 hb_p_m_ca_tp_wday_rail,hb_p_m_ca_rail,p;m;ca,
+hb_p_m_ca_rail,hb_uc_m_ca_rail,uc;m;ca,p:uc
 hb_p_m_ca_tp_wday_rail,hb_uc_m_ca_rail,uc;m;ca,p:uc
 nhb_p_m_ca_tp_wday_rail,nhb_uc_m_ca_rail,uc;m;ca,p:uc
