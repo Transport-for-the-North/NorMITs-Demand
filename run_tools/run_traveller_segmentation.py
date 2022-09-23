@@ -44,8 +44,10 @@ class TSMatrixParameters(pydantic.BaseModel):
     ----------
     folder: pathlib.Path
         Folder containing the input matrices.
-    zoning_system_name: str
-        Name of the zone system the matrices are in.
+    file_description : str
+        Description in the matrix filenames before the segmentation parameters.
+    matrix_type : nd.MatrixFormat
+        The matrix type e.g. PA or OD.
     segmentation_name: str
         Name of the segmentation that the matrices are in.
     aggregate_segmentation_name: str, optional
@@ -61,12 +63,12 @@ class TSMatrixParameters(pydantic.BaseModel):
     """
 
     folder: pathlib.Path
-    zoning_system_name: str
+    file_description: str
+    matrix_type: nd.MatrixFormat
     segmentation_name: str
     aggregate_segmentation_name: Optional[str] = None
 
     # Define private variables for the actual zone system and segmentation instances
-    _zoning_system = pydantic.PrivateAttr(None)
     _segmentation = pydantic.PrivateAttr(None)
     _aggregate_segmentation = pydantic.PrivateAttr(None)
 
@@ -79,15 +81,6 @@ class TSMatrixParameters(pydantic.BaseModel):
         except NotADirectoryError as err:
             raise ValueError(err) from err
 
-    @pydantic.validator("zoning_system_name")
-    def _get_zone_system(cls, value: str) -> str:  # pylint: disable=no-self-argument
-        try:
-            nd.get_zoning_system(value)
-        except (FileNotFoundError, nd.NormitsDemandError) as err:
-            raise ValueError(err) from err
-
-        return value
-
     @pydantic.validator("segmentation_name", "aggregate_segmentation_name")
     def _get_segmentation(cls, value: str) -> str:  # pylint: disable=no-self-argument
         try:
@@ -96,13 +89,6 @@ class TSMatrixParameters(pydantic.BaseModel):
             raise ValueError(err) from err
 
         return value
-
-    @property
-    def zoning_system(self) -> nd.ZoningSystem:
-        """Zone system the input matrices are in."""
-        if self._zoning_system is None:
-            self._zoning_system = nd.get_zoning_system(self.zoning_system_name)
-        return self._zoning_system
 
     @property
     def segmentation(self) -> nd.SegmentationLevel:
@@ -145,8 +131,10 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         Assignment model of the input matrices.
     year : int
         Year of trip ends and matrices to use.
-    matrix_parameters : TSMatrixParameters
-        Parameters for defining the input matrices.
+    matrix_zoning_system_name: str
+        Name of the zone system the matrices are in.
+    hb_matrix_parameters, nhb_matrix_parameters : TSMatrixParameters
+        Parameters for defining the input home-based and non-home-based matrices.
     disaggregation_output_segment : DisaggregationOutputSegment
         Additional segment to disaggregate matrices to.
     cost_folder : pathlib.Path
@@ -168,7 +156,9 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
     scenario: nd.Scenario
     model: nd.AssignmentModel
     year: int
-    matrix_parameters: TSMatrixParameters
+    matrix_zoning_system_name: str
+    hb_matrix_parameters: TSMatrixParameters
+    nhb_matrix_parameters: TSMatrixParameters
     disaggregation_output_segment: segment_disaggregator.DisaggregationOutputSegment
     cost_folder: pathlib.Path
     trip_length_distribution_folder: pathlib.Path
@@ -176,6 +166,8 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
     disaggregation_settings: segment_disaggregator.DisaggregationSettings = (
         segment_disaggregator.DisaggregationSettings()
     )
+
+    _matrix_zoning_system = pydantic.PrivateAttr(None)
 
     @pydantic.validator(
         "notem_export_home",
@@ -190,6 +182,15 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         except NotADirectoryError as err:
             raise ValueError(err) from err
 
+    @pydantic.validator("matrix_zoning_system_name")
+    def _get_zone_system(cls, value: str) -> str:  # pylint: disable=no-self-argument
+        try:
+            nd.get_zoning_system(value)
+        except (FileNotFoundError, nd.NormitsDemandError) as err:
+            raise ValueError(err) from err
+
+        return value
+
     @property
     def iteration_folder(self) -> pathlib.Path:
         """Iteration output folder."""
@@ -203,6 +204,13 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
         output_folder = self.iteration_folder / str(self.disaggregation_output_segment.value)
         output_folder.mkdir(exist_ok=True)
         return output_folder
+
+    @property
+    def matrix_zoning_system(self) -> nd.ZoningSystem:
+        """Zone system the input matrices are in."""
+        if self._matrix_zoning_system is None:
+            self._matrix_zoning_system = nd.get_zoning_system(self.matrix_zoning_system_name)
+        return self._matrix_zoning_system
 
 
 @dataclasses.dataclass
@@ -414,7 +422,7 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
     LOG.debug("Input parameters:\n%s", params.to_yaml())
 
     trip_end_converter = traveller_segmentation_trip_ends.NoTEMToTravellerSegmentation(
-        output_zoning=params.matrix_parameters.zoning_system,
+        output_zoning=params.matrix_zoning_system,
         base_year=params.year,
         scenario=params.scenario,
         notem_iteration_name=params.notem_iteration,
@@ -440,33 +448,31 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
         params.trip_length_distribution_folder,
     )
 
-    LOG.info("Checking input matrices: %s", params.matrix_parameters.folder)
-    # TODO(MB) Add matrix file description parameter
-    # TODO(MB) Add HB and NHB segmentation
-    file_desc = "hb_synthetic_pa"
-    if params.matrix_parameters.aggregate_segmentation is not None:
-        matrix_folder = params.iteration_folder / "Aggregated Matrices"
-        matrix_segmentation = params.matrix_parameters.aggregate_segmentation
-        aggregate_matrices(
-            params.matrix_parameters.folder,
-            matrix_folder,
-            params.matrix_parameters.segmentation,
-            params.matrix_parameters.aggregate_segmentation,
-            params.year,
-            file_desc,
+    for to, mat_params in (
+        (nd.TripOrigin.HB, params.hb_matrix_parameters),
+        (nd.TripOrigin.NHB, params.nhb_matrix_parameters),
+    ):
+        LOG.info("Checking %s input matrices: %s", to.value, mat_params.folder)
+        if mat_params.aggregate_segmentation is not None:
+            matrix_folder = params.iteration_folder / f"Aggregated {to.value} Matrices"
+            matrix_segmentation = mat_params.aggregate_segmentation
+            aggregate_matrices(
+                mat_params.folder,
+                matrix_folder,
+                mat_params.segmentation,
+                mat_params.aggregate_segmentation,
+                params.year,
+                mat_params.file_description,
+            )
+        else:
+            matrix_folder = mat_params.folder
+            matrix_segmentation = mat_params.segmentation
+
+        matrices = list(
+            iterate_matrix_files(
+                matrix_folder, matrix_segmentation, mat_params.file_description, params.year
+            )
         )
-    else:
-        matrix_folder = params.matrix_parameters.folder
-        matrix_segmentation = params.matrix_parameters.segmentation
-
-    matrices = list(
-        iterate_matrix_files(matrix_folder, matrix_segmentation, file_desc, params.year)
-    )
-
-    for to in nd.TripOrigin:
-        if to != nd.TripOrigin.HB:
-            continue
-            raise NotImplementedError("only works with HB segmentation for now")
 
         LOG.info(
             "Splitting %s matrices to %s segmentation",
@@ -480,7 +486,7 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
 
         segment_disaggregator.disaggregate_segments(
             matrices=matrices,
-            matrix_fmt=nd.MatrixFormat.PA, # TODO Add this as an input parameters
+            matrix_fmt=mat_params.matrix_type,
             segment_dtypes=matrix_segmentation.segment_types,
             target_tld_folder=params.trip_length_distribution_folder,
             tld_units=params.trip_length_distribution_units,

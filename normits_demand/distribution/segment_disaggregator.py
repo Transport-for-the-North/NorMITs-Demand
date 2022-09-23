@@ -366,7 +366,7 @@ def disaggregate_segments(
         tld_seg, on=segment_columns, how="left", validate="1:m"
     )
     segment_columns += [disaggregation_segment.value]
-    out_path = export_folder / "output_segmentations.csv"
+    out_path = export_folder / f"{trip_origin.value}_output_segmentations.csv"
     output_segments.set_index(segment_columns, inplace=True)
     output_segments.to_csv(out_path)
     LOG.info("Segmentations found written to: %s", out_path)
