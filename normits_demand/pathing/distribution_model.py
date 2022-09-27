@@ -33,6 +33,8 @@ import numpy as np
 import pandas as pd
 import tqdm
 
+from caf.toolkit import pandas_utils as pd_utils
+
 # Local Imports
 import normits_demand as nd
 
@@ -44,7 +46,7 @@ from normits_demand.utils import file_ops
 from normits_demand.utils import math_utils
 from normits_demand.utils import translation
 from normits_demand.utils import general as du
-from normits_demand.utils import pandas_utils as pd_utils
+from normits_demand.utils import pandas_utils as dep_pd_utils
 
 from normits_demand import converters
 
@@ -295,7 +297,7 @@ class DMArgumentBuilderBase(abc.ABC):
                 )
 
             # Split into the internal and external demand for lower model
-            internal_mask = pd_utils.get_wide_mask(df=df, zones=self.lower_running_zones)
+            internal_mask = dep_pd_utils.get_wide_mask(df=df, zones=self.lower_running_zones)
             lower_model_demand = df * internal_mask
             external_demand = df * ~internal_mask
 

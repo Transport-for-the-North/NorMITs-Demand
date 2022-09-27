@@ -24,6 +24,8 @@ from typing import Dict, List, Optional
 # Third party imports
 import pandas as pd
 
+from caf.toolkit import pandas_utils as pd_utils
+
 # local imports
 import normits_demand as nd
 from normits_demand import constants as consts
@@ -31,7 +33,6 @@ from normits_demand import constants as consts
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
-from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.pathing import HBProductionModelPaths
 from normits_demand.pathing import NHBProductionModelPaths

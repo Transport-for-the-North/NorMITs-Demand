@@ -38,6 +38,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from caf.toolkit import pandas_utils as pd_utils
+
 # Local Imports
 import normits_demand as nd
 from normits_demand import constants as consts
@@ -45,7 +47,6 @@ from normits_demand import core
 from normits_demand import logging as nd_log
 
 from normits_demand.utils import general as du
-from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import compress

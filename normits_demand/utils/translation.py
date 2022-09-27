@@ -22,12 +22,13 @@ from typing import Union
 import numpy as np
 import pandas as pd
 
+from caf.toolkit import pandas_utils as pd_utils
+
 # Local Imports
 import normits_demand as nd
 
 from normits_demand import core as nd_core
 from normits_demand.utils import math_utils
-from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand.concurrency import multiprocessing
 
 

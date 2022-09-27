@@ -13,43 +13,20 @@ Collection of utility functions specifically for manipulating pandas
 # Builtins
 import os
 import operator
-import warnings
-import functools
 
 from typing import Any
-from typing import Dict
 from typing import List
 from typing import Callable
 from typing import Iterable
-from typing import Generator
 
 # Third Party
 import numpy as np
 import pandas as pd
 import openpyxl
 
-from caf.toolkit import pandas_utils as caf_pd_utils
-
 from openpyxl.utils import dataframe as openpyxl_dataframe
 
 # Local
-from normits_demand.utils import general as du
-from normits_demand.utils import math_utils
-
-
-# TODO(BT): Map existing usages directly into caf.toolkit calls
-from caf.toolkit.pandas_utils import reindex_cols
-from caf.toolkit.pandas_utils import reindex_rows_and_cols
-from caf.toolkit.pandas_utils import reindex_and_groupby_sum
-from caf.toolkit.pandas_utils import filter_df_mask
-from caf.toolkit.pandas_utils import filter_df
-from caf.toolkit.pandas_utils import str_join_cols
-from caf.toolkit.pandas_utils import chunk_df
-from caf.toolkit.pandas_utils import long_product_infill
-from caf.toolkit.pandas_utils import long_to_wide_infill
-from caf.toolkit.pandas_utils import wide_to_long_infill
-from caf.toolkit.pandas_utils import long_df_to_wide_ndarray
-
 
 def get_wide_mask(df: pd.DataFrame,
                   zones: List[Any] = None,
@@ -129,7 +106,7 @@ def get_wide_mask(df: pd.DataFrame,
     col_mask = np.broadcast_to(df.columns.isin(col_zones), df.shape)
     index_mask = np.broadcast_to(df.index.isin(index_zones), df.shape).T
 
-    # Combine together to get the full mask
+    # Combine to get the full mask
     return join_fn(col_mask, index_mask)
 
 

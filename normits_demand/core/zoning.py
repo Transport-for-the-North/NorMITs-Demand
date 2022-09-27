@@ -29,13 +29,15 @@ from typing import Any, Dict, List, Tuple, Union, Optional
 import numpy as np
 import pandas as pd
 
+from caf.toolkit import pandas_utils as pd_utils
+
+
 # Local Imports
 import normits_demand as nd
 from normits_demand import logging as nd_log
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import compress
-from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand.utils.config_base import BaseConfig
 
 

@@ -23,6 +23,8 @@ import pandas as pd
 import tqdm
 import operator
 
+from caf.toolkit import pandas_utils as pd_utils
+
 # Local Imports
 # pylint: disable=import-error
 from normits_demand import constants as nd_constants
@@ -31,7 +33,7 @@ from normits_demand import core as nd_core
 
 from normits_demand.utils import file_ops
 from normits_demand.utils import translation
-from normits_demand.utils import pandas_utils as pd_utils
+from normits_demand.utils import pandas_utils as dep_pd_utils
 from normits_demand.cost import utils as cost_utils
 from normits_demand.reports import templates
 # pylint: enable=import-error
@@ -69,7 +71,7 @@ def matrix_to_trip_ends(
 
     def summarise(axis: int):
         vector = matrix.sum(axis=axis).to_frame(name=val_col_name)
-        vector = pd_utils.prepend_cols(vector, col_names=col_names, col_vals=col_vals)
+        vector = dep_pd_utils.prepend_cols(vector, col_names=col_names, col_vals=col_vals)
         vector.index.name = zoning_name
         return vector.reset_index()
 
@@ -275,7 +277,7 @@ def cost_distribution_table(
     bin_edges = np.array([0, 1, 2, 3, 5, 10, 15, 25, 35, 50, 100, 200, np.inf]) * 1.609344
 
     # Remove the external to external demand
-    external_mask = pd_utils.get_wide_mask(
+    external_mask = dep_pd_utils.get_wide_mask(
         df=distribution_matrix,
         zones=matrix_zoning_system.external_zones,
         join_fn=operator.and_
@@ -346,7 +348,7 @@ def generate_excel_sector_report(
     report_template.copy_report_template(output_path)
 
     # Add sector data to the report
-    pd_utils.append_df_to_excel(
+    dep_pd_utils.append_df_to_excel(
         df=sector_report_data.data,
         path=output_path,
         sheet_name='sector_data',
@@ -356,7 +358,7 @@ def generate_excel_sector_report(
     )
 
     # Add Sector Intras to excel report
-    pd_utils.append_df_to_excel(
+    dep_pd_utils.append_df_to_excel(
         df=sector_intra_data.data,
         path=output_path,
         sheet_name='sector_intra_data',
@@ -366,7 +368,7 @@ def generate_excel_sector_report(
     )
 
     # Add cost_distributions to excel report
-    pd_utils.append_df_to_excel(
+    dep_pd_utils.append_df_to_excel(
         df=cost_distribution_data.data,
         path=output_path,
         sheet_name='tld_data',

@@ -23,6 +23,8 @@ from typing import List
 from typing import Tuple
 from typing import Callable
 
+from caf.toolkit import pandas_utils as pd_utils
+
 # self imports
 import normits_demand as nd
 from normits_demand import constants as consts
@@ -31,7 +33,7 @@ from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.utils import math_utils
 from normits_demand.utils import general as du
-from normits_demand.utils import pandas_utils as pd_utils
+from normits_demand.utils import pandas_utils as dep_pd_utils
 
 from normits_demand.concurrency import multiprocessing
 from normits_demand.audits import audits
@@ -437,7 +439,7 @@ def _distribute_pa_internal(productions,
     # Pull the seed matrix into line with unique zones
     if unique_zones is not None:
         # Get the mask and extract the data
-        mask = pd_utils.get_wide_mask(
+        mask = dep_pd_utils.get_wide_mask(
             df=seed_dist,
             zones=unique_zones,
             join_fn=unique_zones_join_fn,
@@ -1022,7 +1024,7 @@ def furness_pandas_wrapper(seed_values: pd.DataFrame,
     # If we were given certain zones, make sure everything else is 0
     if unique_zones is not None:
         # Get the mask and extract the data
-        mask = pd_utils.get_wide_mask(
+        mask = dep_pd_utils.get_wide_mask(
             df=seed_values,
             zones=unique_zones,
             join_fn=unique_zones_join_fn,

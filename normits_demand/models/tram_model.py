@@ -22,6 +22,8 @@ from typing import Tuple
 import pandas as pd
 import numpy as np
 
+from caf.toolkit import pandas_utils as pd_utils
+
 # local imports
 import normits_demand as nd
 from normits_demand import core as nd_core
@@ -30,7 +32,6 @@ from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
 from normits_demand.utils import math_utils
-from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.pathing import TramExportPaths
 
