@@ -763,7 +763,7 @@ class TramModel(TramExportPaths):
             def get_df(path, col_name):
                 df = nd.read_df(path)
                 df = df.rename(columns={self._val_col: col_name})
-                return pd_utils.reindex_and_groupby(
+                return pd_utils.reindex_and_groupby_sum(
                     df=df,
                     index_cols=merge_cols + [col_name],
                     value_cols=[col_name]
@@ -982,8 +982,8 @@ class TramModel(TramExportPaths):
         # Aggregate tram and vector data to north level
         index_cols = self._tram_segment_cols + [self._val_col]
 
-        trip_end = pd_utils.reindex_and_groupby(trip_end, index_cols, [self._val_col])
-        tram_data = pd_utils.reindex_and_groupby(tram_data, index_cols, [self._val_col])
+        trip_end = pd_utils.reindex_and_groupby_sum(trip_end, index_cols, [self._val_col])
+        tram_data = pd_utils.reindex_and_groupby_sum(tram_data, index_cols, [self._val_col])
 
         # Infills tram data
         tram_north_infilled, more_tram_report = self._infill_internal(
@@ -1143,8 +1143,8 @@ class TramModel(TramExportPaths):
         index_cols = self._tram_segment_cols + [self._val_col]
 
         kwargs = {'index_cols': index_cols, 'value_cols': [self._val_col]}
-        non_tram_north = pd_utils.reindex_and_groupby(north_no_tram_vector, **kwargs)
-        agg_tram_zone_infilled = pd_utils.reindex_and_groupby(tram_zone_infilled, **kwargs)
+        non_tram_north = pd_utils.reindex_and_groupby_sum(north_no_tram_vector, **kwargs)
+        agg_tram_zone_infilled = pd_utils.reindex_and_groupby_sum(tram_zone_infilled, **kwargs)
 
         # CALCULATE THE ADJUSTED NON-TRAM NORTH AVERAGE
         agg_tram_zone_infilled.rename(columns={self._val_col: 'tram_val'}, inplace=True)
