@@ -435,11 +435,15 @@ def disaggregate_segments(
 
     # Call using multiple threads
     LOG.debug("Running segment disaggregator on %s threads", settings.multiprocessing_threads)
-    mp.multiprocess(
-        _segment_build_worker,
-        kwargs=kwargs,
-        process_count=settings.multiprocessing_threads,
-    )
+    if settings.multiprocessing_threads == 1:
+        for func_kwargs in kwargs:
+            _segment_build_worker(**func_kwargs)
+    else:
+        mp.multiprocess(
+            _segment_build_worker,
+            kwargs=kwargs,
+            process_count=settings.multiprocessing_threads,
+        )
 
 
 def _isnull(value: Any) -> bool:
