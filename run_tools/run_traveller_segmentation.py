@@ -168,6 +168,9 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
     )
 
     _matrix_zoning_system = pydantic.PrivateAttr(None)
+    _export_folder_format = pydantic.PrivateAttr(
+        "{base_output_folder}/iter{iteration}/{scenario_name}/{mode}/zoning-system-{zoning}"
+    )
 
     @pydantic.validator(
         "notem_export_home",
@@ -194,8 +197,15 @@ class TravellerSegmentationParameters(config_base.BaseConfig):
     @property
     def iteration_folder(self) -> pathlib.Path:
         """Iteration output folder."""
-        iteration_folder = self.base_output_folder / f"iter{self.iteration}"
-        iteration_folder.mkdir(exist_ok=True)
+        iteration_folder = pathlib.Path(
+            self._export_folder_format.format(
+                mode=self.model.get_mode().get_name(),
+                zoning=self.matrix_zoning_system_name,
+                scenario_name=self.scenario.value,
+                **self.dict(),
+            )
+        )
+        iteration_folder.mkdir(exist_ok=True, parents=True)
         return iteration_folder
 
     @property
@@ -266,6 +276,7 @@ class TravellerSegmentationArguments:
 
 
 ##### FUNCTIONS #####
+# TODO(MB) Move to SegmentationLevel method and make flexible to iterate through any files
 def iterate_matrix_files(
     folder: pathlib.Path,
     segmentation: nd.SegmentationLevel,
@@ -309,6 +320,7 @@ def iterate_matrix_files(
         yield path, seg_params
 
 
+# TODO(MB) Move to matrix utilities module
 def aggregate_matrices(
     input_folder: pathlib.Path,
     output_folder: pathlib.Path,

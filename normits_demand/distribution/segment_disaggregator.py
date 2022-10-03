@@ -298,7 +298,7 @@ def disaggregate_segments(
     disaggregation_segment: DisaggregationOutputSegment,
     trip_origin: nd.TripOrigin,
     settings: DisaggregationSettings = DisaggregationSettings(),
-) -> None:  # TODO Update docstring
+) -> None:
     """Disaggregate the `matrices` to add in new `disaggregation_segment`.
 
     Parameters
