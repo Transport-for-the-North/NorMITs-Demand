@@ -7,9 +7,11 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime as dt
+import os
 import pathlib
 import sys
 from typing import Iterator, Optional
+import warnings
 
 import pydantic
 
@@ -34,6 +36,7 @@ MODEL_SEGMENTATIONS = {
     nd.TripOrigin.HB: "notem_hb_output_uc",
     nd.TripOrigin.NHB: "notem_nhb_output_uc",
 }
+ZONES_WARNING_NUMBER = 8000
 
 
 ##### CLASSES #####
@@ -432,6 +435,21 @@ def main(params: TravellerSegmentationParameters, init_logger: bool = True) -> N
     params.save_yaml(out)
     LOG.info("Input parameters saved to: %s", out)
     LOG.debug("Input parameters:\n%s", params.to_yaml())
+
+    if params.disaggregation_settings.multiprocessing_threads < 0:
+        num_processes = os.cpu_count() + params.disaggregation_settings.multiprocessing_threads
+    else:
+        num_processes = params.disaggregation_settings.multiprocessing_threads
+
+    if (
+        len(params.matrix_zoning_system.unique_zones) > ZONES_WARNING_NUMBER
+        and num_processes > 0
+    ):
+        warnings.warn(
+            f"Disaggregation of matrices with > {ZONES_WARNING_NUMBER} "
+            "zones can use a large amount of memory, consider reducing "
+            f"the number of multiprocessing threads from {num_processes}.",
+        )
 
     trip_end_converter = traveller_segmentation_trip_ends.NoTEMToTravellerSegmentation(
         output_zoning=params.matrix_zoning_system,

@@ -7,6 +7,7 @@ Created on Fri Nov 20 13:47:56 2020
 
 import csv
 import enum
+import os
 import pathlib
 from typing import Any, Dict, List, NamedTuple, Optional
 
@@ -83,6 +84,17 @@ class DisaggregationSettings(pydantic.BaseModel):  # pylint: disable=no-member
     pa_match_tolerance: float = 0.95
     minimum_bandshare_change: float = 1e-8
     trip_end_constraint: TripEndConstraint = TripEndConstraint.DOUBLE
+
+    @pydantic.validator("multiprocessing_threads")
+    def _check_processing_threads(cls, value: int) -> int:  # pylint: disable=no-self-argument
+        if value < -os.cpu_count():
+            raise ValueError(
+                "Negative multiprocessing_threads given is too small. "
+                f"Cannot run {abs(value)} less processes than cpu "
+                f"count as only {os.cpu_count()} cpu can be used."
+            )
+
+        return value
 
 
 class DisaggregationSummaryResults(NamedTuple):
@@ -435,15 +447,11 @@ def disaggregate_segments(
 
     # Call using multiple threads
     LOG.debug("Running segment disaggregator on %s threads", settings.multiprocessing_threads)
-    if settings.multiprocessing_threads == 1:
-        for func_kwargs in kwargs:
-            _segment_build_worker(**func_kwargs)
-    else:
-        mp.multiprocess(
-            _segment_build_worker,
-            kwargs=kwargs,
-            process_count=settings.multiprocessing_threads,
-        )
+    mp.multiprocess(
+        _segment_build_worker,
+        kwargs=kwargs,
+        process_count=settings.multiprocessing_threads,
+    )
 
 
 def _isnull(value: Any) -> bool:
