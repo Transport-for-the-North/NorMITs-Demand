@@ -19,11 +19,11 @@ sys.path.append(".")
 # pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
 from normits_demand.models.forecasting import (
+    edge_replicant,
     tem_forecast,
     ntem_forecast,
     tempro_trip_ends,
-    forecast_cnfg,
-    edge
+    forecast_cnfg
 )
 from normits_demand import logging as nd_log
 from normits_demand.reports import ntem_forecast_checks
@@ -136,7 +136,7 @@ def main(
     if model in (forecast_cnfg.ForecastModel.TRIP_END, forecast_cnfg.ForecastModel.NTEM):
         tem_forecasting(params, model)
     elif model == forecast_cnfg.ForecastModel.EDGE:
-        edge.main(params)
+        edge_replicant.main(params)
 
     LOG.info(
         "%s forecasting completed in %s",
