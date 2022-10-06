@@ -22,7 +22,8 @@ Below, a brief summary of patches made since the previous version can be found.
 ### V0.5.3
 - Tools
   - Traveller Segment Tool
-    - Front end adapted to optionally pick up weekday instead of weekly matrices
+    - Added parameters for custom input matrix segmentation
+    - Added flexible aggregation of input matrices to new segmentation
     - Output naming aligned with rest of framework
     - Front end run script finalised
     - Added summary reports
