@@ -6,17 +6,9 @@ Created on Fri Sep  9 10:01:48 2022
 """
 
 import os
-import sys
 
 import pandas as pd
-import numpy as np
-from numpy import genfromtxt
 from tqdm import tqdm
-import time
-import termcolor
-import typing as typ
-import subprocess as sp
-import openmatrix as omx
 import shutil
 import logging
 from datetime import datetime

@@ -4,22 +4,28 @@ Created on Fri Sep  9 15:04:16 2022
 
 @author: mishtaiwi - Systra
 """
-
+# ## IMPORTS ## #
+# Standard imports
 import os
 import sys
-
-import pandas as pd
-import numpy as np
-from itertools import product
-from tqdm import tqdm
-import termcolor
-import typing as typ
-import subprocess as sp
 import logging
+import itertools
 from datetime import datetime
-from multiprocessing import  Pool
 
+# Third party imports
+import pandas as pd
+from tqdm import tqdm
 
+# Local imports
+# pylint: disable=import-error,wrong-import-position
+# pylint: enable=import-error,wrong-import-position
+
+# ## CONSTANTS ## #
+LOG = logging.getLogger(__name__)
+
+# ## CLASSES ## #
+
+# ## FUNCTIONS ## #
 def CheckFileExists(file):
     '''
     Parameters
@@ -38,7 +44,7 @@ def CheckFileExists(file):
 
     '''
     if not os.path.isfile(file):
-        print(termcolor.colored(f' -- File not found - {file}', 'red'))
+        print(f' -- File not found - {file}', 'red')
         logging.info(f' -- File not found - {file}')
         sys.exit()
         
@@ -676,7 +682,7 @@ def AverageTwoMatrices(mx1, mx2, zones=1300):
         averaged matrix
     ''' 
     #create empty dataframe
-    mx = pd.DataFrame(list(product(range(1,zones+1), range(1,zones+1))), columns=['from_model_zone_id', 'to_model_zone_id'])
+    mx = pd.DataFrame(list(itertools.product(range(1,zones+1), range(1,zones+1))), columns=['from_model_zone_id', 'to_model_zone_id'])
     #get first matrix
     mx = mx.merge(mx1, how='outer', on=['from_model_zone_id', 'to_model_zone_id']).fillna(0)
     #get second matrix
@@ -705,7 +711,7 @@ def ExpandMatrix(mx, zones=1300):
         expanded matrix
     ''' 
     #create empty dataframe
-    eMx = pd.DataFrame(list(product(range(1,zones+1), range(1,zones+1))), columns=['from_model_zone_id', 'to_model_zone_id'])
+    eMx = pd.DataFrame(list(itertools.product(range(1,zones+1), range(1,zones+1))), columns=['from_model_zone_id', 'to_model_zone_id'])
     #get first matrix
     eMx = eMx.merge(mx, how='outer', on=['from_model_zone_id', 'to_model_zone_id']).fillna(0)
     return eMx
@@ -1053,7 +1059,7 @@ def RunEDGEGrowth(params):
         logging.warning('           Table Below lists all movements with no factors:')
         logging.warning('          {}'.format(no_factors_df.to_string(index=False)))
         logging.info('Process was interrupted @ '+ datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
-        print(termcolor.colored('Process was interrupted - Check the logfile for more details', 'red'))
+        print('Process was interrupted - Check the logfile for more details', 'red')
         #quit 
         sys.exit()
 
@@ -1094,5 +1100,5 @@ def RunEDGEGrowth(params):
             norms_matrices1[segment].to_csv(f'{params.output_path}/{params.forecast_year}_24Hr_{segment}.csv', index=False)
             #norms_matrices2[segment].to_csv(f'{output_path}/{forecast_year}/{forecast_year}_24Hr_{segment}.csv', index=False)
             
-        print(termcolor.colored('Process finished successfully!', 'green'))
+        print('Process finished successfully!', 'green')
         logging.info('Process finished successfully @ '+ datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))

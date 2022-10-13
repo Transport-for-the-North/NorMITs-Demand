@@ -9,14 +9,10 @@ import os
 import sys
 
 import pandas as pd
-import numpy as np
-from tqdm import tqdm
-import termcolor
 import typing as typ
 import subprocess as sp
 import openmatrix as omx
 import logging
-from datetime import datetime
 
 
 def CheckFileExists(file):
@@ -25,19 +21,19 @@ def CheckFileExists(file):
     ----------
     file : str
         full path to the file.
-        
+
     Function
     ----------
-    function checks if the file doesn't exist and report when it doesn't 
+    function checks if the file doesn't exist and report when it doesn't
     the function will force quit when a file doesn;t exist
-    
+
     Returns
     -------
     None.
 
     '''
     if not os.path.isfile(file):
-        print(termcolor.colored(f' -- File not found - {file}', "red"))
+        print(f' -- File not found - {file}', "red")
         sys.exit()
 
 
@@ -48,15 +44,15 @@ def proc_single(cmd_list: typ.List):
     ----------
     cmd_list : list
         list of commands to execute.
-        
+
     Function
     ----------
     execute processes one after the other in the list order
-    
+
     Returns
     -------
     None.
-    
+
     '''
     for ts in cmd_list:
         pr = sp.Popen(ts, creationflags=sp.CREATE_NEW_CONSOLE, shell=True)
@@ -75,7 +71,7 @@ def MAT2OMX(exe_cube: str, matFile: str, outPath: str, outFile: str):
         path to folder where outputs to be saved.
     outFile : str
         name of the output omx file.
-        
+
     Function
     ----------
     function takes a Cube .MAT file and exports it to .OMX file
@@ -88,31 +84,31 @@ def MAT2OMX(exe_cube: str, matFile: str, outPath: str, outFile: str):
     #check files exists
     CheckFileExists(exe_cube)
     CheckFileExists(matFile)
-    
+
     #replace / with \\ for file paths
     matFile = matFile.replace('/', '\\').strip()
     outPath = outPath.replace('/', '\\').strip()
-    
+
     to_write = [f'convertmat from="{matFile}" to="{outPath}\\{outFile}.omx" format=omx compression=4']
     with open(f'{outPath}\\Mat2OMX.s', 'w') as script:
         for line in to_write:
             print(line, file=script)
-            
+
     proc_single([f'"{exe_cube}" "{outPath}\\Mat2OMX.s" -Pvdmi /Start /Hide /HideScript',
                  f'del "{outPath}\\*.prn"', f'del "{outPath}\\*.VAR"', f'del "{outPath}\\*.PRJ"',
                  f'del "{outPath}\\Mat2OMX.s"'])
-    
+
 def OMX2DF(omx):
     '''
     Parameters
     ----------
     omx : cArray
         omx single matrix.
-    
+
     Function
     ----------
     function converts a cArray omx matrix to a pandas dataframe
-    
+
     Returns
     -------
     df : pandas df
@@ -125,7 +121,7 @@ def OMX2DF(omx):
     #adjust zone number
     df['from_model_zone_id'] = df['from_model_zone_id'] + 1
     df['to_model_zone_id'] = df['to_model_zone_id'] + 1
-    
+
     return df
 
 
@@ -141,10 +137,10 @@ def StnZone2StnTLC(stnZone2Node: str, railNodes: str, extNodes: str, overwrite_T
         full path to the external rail station nodes file.
     overwrite_TLCs: pandas dataframe
         TLC overwrite dataframe
-    
+
     Function
     ---------
-    produce a stn zone ID to TLC lookup while overwritting the NoRMS TLC with a 
+    produce a stn zone ID to TLC lookup while overwritting the NoRMS TLC with a
     more suitable and EDGE matching TLC
 
     Returns
@@ -177,7 +173,7 @@ def StnZone2StnTLC(stnZone2Node: str, railNodes: str, extNodes: str, overwrite_T
     df = df.rename(columns={'A':'stn_zone_id'})
     #remove '_' from station name and replace with ' '
     df['STATIONNAME'] = df['STATIONNAME'].str.replace('_',' ')
-    #overwrite TLCs 
+    #overwrite TLCs
     for i, row in overwrite_TLCs.iterrows():
         #get values
         currentTLC = overwrite_TLCs.at[i, 'NoRMS']
@@ -187,7 +183,7 @@ def StnZone2StnTLC(stnZone2Node: str, railNodes: str, extNodes: str, overwrite_T
         #log overwritten station code
         logging.info(f'NoRMS TLC ({currentTLC}) overwritten with ({overwriteTLC})')
     return df
-    
+
 
 def ExportMat2CSVViaOMX(cube_exe: str, in_mat: str, out_path:str, out_csv: str, segment: str):
     '''
@@ -203,11 +199,11 @@ def ExportMat2CSVViaOMX(cube_exe: str, in_mat: str, out_path:str, out_csv: str, 
         name of the output file name
     segment: str
         segment of the overarching loop (e.g. purposes, periods, etc.)
-        
+
     Function
     ----------
     takes a cube .MAT file and export tabs to .csv files
-    
+
     Returns
     -------
     None.
@@ -230,8 +226,8 @@ def ExportMat2CSVViaOMX(cube_exe: str, in_mat: str, out_path:str, out_csv: str, 
     os.remove(f'{out_path}/{out_csv}.omx')
     #delete .MAT files
     os.remove(f'{out_path}/PT_{segment}.MAT')
-    print(termcolor.colored(f' -- PT {in_mat} Exported Successfully ', 'green'))
-    
+    print(f' -- PT {in_mat} Exported Successfully ', 'green')
+
 
 def PTDemandFromTo(exe_cube: str, cat_folder: str, run_folder: str, output_folder: str):
     '''
@@ -258,62 +254,62 @@ def PTDemandFromTo(exe_cube: str, cat_folder: str, run_folder: str, output_folde
     #create file paths
     pt_24Hr_demand = run_folder + '/Inputs/Demand/PT_24hr_Demand.MAT'
     area_sectors = cat_folder + '/Params/Demand/Sector_Areas_Zones.MAT'
-    
+
     splittingfactors_ds1 = run_folder + '/Inputs/Demand/SplitFactors_DS1.MAT'
     splittingfactors_ds2 = run_folder + '/Inputs/Demand/SplitFactors_DS2.MAT'
     splittingfactors_ds3 = run_folder + '/Inputs/Demand/SplitFactors_DS3.MAT'
-    
+
     timeOfDay_AM = run_folder + '/Inputs/Demand/Time_of_Day_Factors_Zonal_AM.MAT'
     timeOfDay_IP = run_folder + '/Inputs/Demand/Time_of_Day_Factors_Zonal_IP.MAT'
     timeOfDay_PM = run_folder + '/Inputs/Demand/Time_of_Day_Factors_Zonal_PM.MAT'
     timeOfDay_OP = run_folder + '/Inputs/Demand/Time_of_Day_Factors_Zonal_OP.MAT'
-    
+
     nhb_props_AM = run_folder + '/Inputs/Demand/OD_Prop_AM_PT.MAT'
     nhb_props_IP = run_folder + '/Inputs/Demand/OD_Prop_IP_PT.MAT'
     nhb_props_PM = run_folder + '/Inputs/Demand/OD_Prop_PM_PT.MAT'
     nhb_props_OP = run_folder + '/Inputs/Demand/OD_Prop_OP_PT.MAT'
-    
+
     #check files exists
     CheckFileExists(exe_cube)
-    
+
     CheckFileExists(pt_24Hr_demand)
     CheckFileExists(area_sectors)
-    
+
     CheckFileExists(splittingfactors_ds1)
     CheckFileExists(splittingfactors_ds2)
     CheckFileExists(splittingfactors_ds3)
-    
+
     CheckFileExists(timeOfDay_AM)
     CheckFileExists(timeOfDay_IP)
     CheckFileExists(timeOfDay_PM)
     CheckFileExists(timeOfDay_OP)
-    
+
     CheckFileExists(nhb_props_AM)
     CheckFileExists(nhb_props_IP)
     CheckFileExists(nhb_props_PM)
     CheckFileExists(nhb_props_OP)
-    
+
 
     #replace / with \\ for file paths
     pt_24Hr_demand = pt_24Hr_demand.replace('/', '\\').strip()
     area_sectors = area_sectors.replace('/', '\\').strip()
-    
+
     splittingfactors_ds1 = splittingfactors_ds1.replace('/', '\\').strip()
     splittingfactors_ds2 = splittingfactors_ds2.replace('/', '\\').strip()
     splittingfactors_ds3 = splittingfactors_ds3.replace('/', '\\').strip()
-    
+
     timeOfDay_AM = timeOfDay_AM.replace('/', '\\').strip()
     timeOfDay_IP = timeOfDay_IP.replace('/', '\\').strip()
     timeOfDay_PM = timeOfDay_PM.replace('/', '\\').strip()
     timeOfDay_OP = timeOfDay_OP.replace('/', '\\').strip()
-    
+
     nhb_props_AM = nhb_props_AM.replace('/', '\\').strip()
     nhb_props_IP = nhb_props_IP.replace('/', '\\').strip()
     nhb_props_PM = nhb_props_PM.replace('/', '\\').strip()
     nhb_props_OP = nhb_props_OP.replace('/', '\\').strip()
 
     output_folder = output_folder.replace('/', '\\').strip()
-    
+
     to_write = [f'RUN PGM=MATRIX PRNFILE="{output_folder}\\1st_Print.prn"',
                 f'FILEI MATI[1] = "{pt_24Hr_demand}"',
                 f'FILEI MATI[13] = "{nhb_props_OP}"',
@@ -552,22 +548,22 @@ def PTDemandFromTo(exe_cube: str, cat_folder: str, run_folder: str, output_folde
                 f'MW[379]=0 ;MW[09]*;(MW[144]+MW[148]+MW[152]+MW[156])',
                 f'MW[380]=0 ;MW[10]*;(MW[144]+MW[148]+MW[152]+MW[156])',
                 f'ENDRUN']
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
     with open(f'{output_folder}\\PT_Periods_FT.s', 'w') as script:
         for line in to_write:
             print(line, file=script)
-            
+
     proc_single([f'"{exe_cube}" "{output_folder}\\PT_Periods_FT.s" -Pvdmi /Start /Hide /HideScript',
                  f'del "{output_folder}\\*.prn"', f'del "{output_folder}\\*.VAR"', f'del "{output_folder}\\*.PRJ"',
                  f'del "{output_folder}\\PT_Periods_FT.s"'])
-    
-    
-    
+
+
+
 def PA2OD(exe_cube: str, mats_folder: str):
     '''
     Parameters
@@ -577,7 +573,7 @@ def PA2OD(exe_cube: str, mats_folder: str):
     mats_folder : str
         full path to the input matrix files folder. this is uusually where matrices
         from "PTDemandFromTo" are saved, it's also where output matrices will be saved
-    
+
 
     Function
     ----------
@@ -593,25 +589,25 @@ def PA2OD(exe_cube: str, mats_folder: str):
     ipDemand = mats_folder + '/PT_IP.MAT'
     pmDemand = mats_folder + '/PT_PM.MAT'
     opDemand = mats_folder + '/PT_OP.MAT'
-    
+
     #check files exists
     CheckFileExists(exe_cube)
-    
+
     CheckFileExists(amDemand)
     CheckFileExists(ipDemand)
     CheckFileExists(pmDemand)
     CheckFileExists(opDemand)
-    
+
 
     #replace / with \\ for file paths
     amDemand = amDemand.replace('/', '\\').strip()
     ipDemand = ipDemand.replace('/', '\\').strip()
     pmDemand = pmDemand.replace('/', '\\').strip()
     opDemand = opDemand.replace('/', '\\').strip()
-    
+
 
     mats_folder = mats_folder.replace('/', '\\').strip()
-    
+
     to_write = [f'RUN PGM=MATRIX PRNFILE="{mats_folder}2nd_Print.prn"',
                 f'FILEI MATI[1] = "{amDemand}"',
                 f'FILEI MATI[2] = "{ipDemand}"',
@@ -647,7 +643,7 @@ def PA2OD(exe_cube: str, mats_folder: str):
                 f'HBEBCA_T,HBEBNCA_T,NHBEBCA_T,NHBEBNCA_T,HBWCA_T,HBWNCA_T,HBOCA_T,',
                 f'HBONCA_T,NHBOCA_T,NHBONCA_T,',
                 f'DEC=20*D',
-                
+
                 f';P>A',
                 f'FILLMW MW[01]=MI.1.1(19) ;AM 1-29',
                 f'FILLMW MW[31]=MI.2.1(19) ;IP 30-59',
@@ -659,8 +655,8 @@ def PA2OD(exe_cube: str, mats_folder: str):
                 f'FILLMW	MW[50]=Mi.2.20.T(10)',
                 f'FILLMW	MW[80]=Mi.3.20.T(10)',
                 f'FILLMW	MW[110]=Mi.4.20.T(10)',
-                
-                f';Add Externals  - AM',                
+
+                f';Add Externals  - AM',
                 f'MW[1] = MW[1] + MW[11]    ;EBCA_F',
                 f'MW[20] = MW[20] + MW[12]  ;EBCA_T',
                 f'MW[4] = MW[4] + MW[13]    ;EBNCA',
@@ -670,8 +666,8 @@ def PA2OD(exe_cube: str, mats_folder: str):
                 f'MW[7] = MW[7] + MW[17]    ;OCA_F',
                 f'MW[26] = MW[26] + MW[18]  ;OCA_T',
                 f'MW[10] = MW[10] + MW[19]  ;ONCA',
-                
-                f';Add Externals  - IP',       
+
+                f';Add Externals  - IP',
                 f'MW[31] = MW[31] + MW[41] ;EBCA_F',
                 f'MW[50] = MW[50] + MW[42] ;EBCA_T',
                 f'MW[34] = MW[34] + MW[43] ;EBNCA',
@@ -681,7 +677,7 @@ def PA2OD(exe_cube: str, mats_folder: str):
                 f'MW[37] = MW[37] + MW[47] ;OCA_F',
                 f'MW[56] = MW[56] + MW[48] ;OCA_T',
                 f'MW[40] = MW[40] + MW[49] ;ONCA',
-                
+
                 f';Add Externals  - PM',
                 f'MW[61] = MW[61] + MW[71] ;EBCA_F',
                 f'MW[80] = MW[80] + MW[72] ;EBCA_T',
@@ -692,7 +688,7 @@ def PA2OD(exe_cube: str, mats_folder: str):
                 f'MW[87] = MW[67] + MW[77] ;OCA_F',
                 f'MW[86] = MW[86] + MW[78] ;OCA_T',
                 f'MW[70] = MW[70] + MW[79] ;ONCA',
-                
+
                 f';Add Externals  - OP',
                 f'MW[91] = MW[91] + MW[101]   ;EBCA_F',
                 f'MW[110] = MW[110] + MW[102] ;EBCA_T',
@@ -703,16 +699,15 @@ def PA2OD(exe_cube: str, mats_folder: str):
                 f'MW[97] = MW[97] + MW[107] ;OCA_F',
                 f'MW[116] = MW[116] + MW[108] ;OCA_T',
                 f'MW[100] = MW[100] + MW[109] ;ONCA',
-                
+
                 f'ENDRUN']
-    
-    
+
+
 
     with open(f'{mats_folder}\\PA2OD.s', 'w') as script:
         for line in to_write:
             print(line, file=script)
-            
+
     proc_single([f'"{exe_cube}" "{mats_folder}\\PA2OD.s" -Pvdmi /Start /Hide /HideScript',
                  f'del "{mats_folder}\\*.prn"', f'del "{mats_folder}\\*.VAR"', f'del "{mats_folder}\\*.PRJ"',
                  f'del "{mats_folder}\\PA2OD.s"'])
-    
