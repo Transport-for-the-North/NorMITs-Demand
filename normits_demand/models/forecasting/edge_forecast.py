@@ -44,7 +44,7 @@ def CheckFileExists(file):
 
     """
     if not os.path.isfile(file):
-        print(f" -- File not found - {file}", "red")
+        print(f" -- File not found - {file}")
         logging.info(f" -- File not found - {file}")
         sys.exit()
 
@@ -1239,45 +1239,34 @@ def TransposeMatrix(mx):
 
 def RunEDGEGrowth(params):
     # create new logfile
-    if os.path.exists(f"{params.output_path}/EDGE_Factoring_{params.forecast_year}.Log"):
-        os.remove(f"{params.output_path}/EDGE_Factoring_{params.forecast_year}.Log")
+    if os.path.exists(f"{params.export_path}/EDGE_Factoring_{params.forecast_year}.Log"):
+        os.remove(f"{params.export_path}/EDGE_Factoring_{params.forecast_year}.Log")
     logging.basicConfig(
-        filename=f"{params.output_path}/EDGE_Factoring_{params.forecast_year}.Log",
+        filename=f"{params.export_path}/EDGE_Factoring_{params.forecast_year}.Log",
         format="%(levelname)s:%(message)s",
         level=logging.INFO,
     )
-    logging.info(
-        "######################################################################################"
-    )
+    logging.info("#" * 80)
     logging.info("Started Process @ " + datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
-    logging.info(
-        "######################################################################################"
-    )
+    logging.info("#" * 80)
 
     """Process Fixed objects"""
     periods = ["AM", "IP", "PM", "OP"]
 
-    """READ INPUT FILES"""
-    # Lookups
-    CheckFileExists(f"{params.lookups_path}/Segments2UCs.csv")
-    segments_Lookup = pd.read_csv(f"{params.lookups_path}/Segments2UCs.csv")
-    CheckFileExists(f"{params.lookups_path}/TicketTypeSplits.csv")
-    ticket_flow_props = pd.read_csv(f"{params.lookups_path}/TicketTypeSplits.csv")
-    CheckFileExists(f"{params.lookups_path}/FlowCats.csv")
-    flow_cats = pd.read_csv(f"{params.lookups_path}/FlowCats.csv")
-    # read EDGE Factors
-    CheckFileExists(f"{params.pEDGE}/Outputs/{params.edge_factors_file}")
-    factors_EDGE = pd.read_csv(f"{params.pEDGE}/Outputs/{params.edge_factors_file}")
-    # read EDGE flow files
-    CheckFileExists(f"{params.pEDGE}/Base and Mappings/{params.edge_flows_file}")
-    edge_flows_file = pd.read_csv(f"{params.pEDGE}/Base and Mappings/{params.edge_flows_file}")
-    # read TLC lookup file
-    CheckFileExists(f"{params.base_mx_files}/TLCs.csv")
-    stnsTLC = pd.read_csv(f"{params.base_mx_files}/TLCs.csv")
+    # ## READ INPUT FILES ## #
+    # Custom input files
+    segments_to_uc = pd.read_csv(params.segments_to_uc_path)
+    ticket_type_splits = pd.read_csv(params.ticket_type_splits_path)
+    flow_cats = pd.read_csv(params.flow_cat_path)
+    norms_to_edge_stns = pd.read_csv(params.norms_to_edge_stns_path)
+
+    # EDGE files
+    edge_flows_file = pd.read_csv(params.edge_flows_path)
+    edge_growth_factors = pd.read_csv(params.edge_factors_path)
 
     # Add Flag = 1 for all input factors in EDGE
     #    i.e. Flag = 1 if the factor comes directly from EDGE
-    factors_EDGE["Flag"] = 1
+    edge_growth_factors["Flag"] = 1
 
     # demand segment list groups
     # NoRMS demand segments
@@ -1353,12 +1342,12 @@ def RunEDGEGrowth(params):
     }
 
     # get list of demand segments
-    demand_segment_list = segments_Lookup["MX"].tolist()
+    demand_segment_list = segments_to_uc["MX"].tolist()
     # demand_segment_list = ['HBEBCA_Int_T']
 
     # factored matricies dictionary
     factored_matrices = {}
-    factored_24Hr_matrices = {}
+    factored_24hr_matrices = {}
 
     # empty DFs for recording missing factors
     other_tickets_df = pd.DataFrame()
@@ -1373,12 +1362,12 @@ def RunEDGEGrowth(params):
             f'-- Processing Time Period {period} @ {datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f")}'
         )
         # read distance matrix
-        CheckFileExists(f"{params.base_mx_files}/{period}_stn2stn_costs.csv")
-        distMX = pd.read_csv(f"{params.base_mx_files}/{period}_stn2stn_costs.csv")
+        CheckFileExists(f"{params.matrices_to_grow_dir}/{period}_stn2stn_costs.csv")
+        distMX = pd.read_csv(f"{params.matrices_to_grow_dir}/{period}_stn2stn_costs.csv")
         # read iRSj props
-        CheckFileExists(f"{params.base_mx_files}/{period}_iRSj_probabilities.h5")
+        CheckFileExists(f"{params.matrices_to_grow_dir}/{period}_iRSj_probabilities.h5")
         iRSjProps = pd.read_hdf(
-            f"{params.base_mx_files}/{period}_iRSj_probabilities.h5", key="iRSj"
+            f"{params.matrices_to_grow_dir}/{period}_iRSj_probabilities.h5", key="iRSj"
         )
         # period dictionary
         factored_matrices[period] = {}
@@ -1392,15 +1381,16 @@ def RunEDGEGrowth(params):
             unit=" Segment",
             colour="cyan",
         ):
+
             # demand matrices
-            CheckFileExists(f"{params.base_mx_files}/{period}_{segment}.csv")
-            demandMX = pd.read_csv(f"{params.base_mx_files}/{period}_{segment}.csv")
+            CheckFileExists(f"{params.matrices_to_grow_dir}/{period}_{segment}.csv")
+            demandMX = pd.read_csv(f"{params.matrices_to_grow_dir}/{period}_{segment}.csv")
             tot_input_demand = round(demandMX["Demand"].sum())
             # sum total demand
             demand_total = demand_total + tot_input_demand
             # add UCs to demand based on demand segment
             demandMX["userclass"] = (
-                segments_Lookup[segments_Lookup["MX"] == segment]
+                segments_to_uc[segments_to_uc["MX"] == segment]
                 .reset_index()
                 .iloc[0]["userclass"]
             )
@@ -1412,9 +1402,9 @@ def RunEDGEGrowth(params):
             demandMX = demandMX.loc[demandMX["Demand"] > 0].reset_index(drop=True)
             # prepare demand matrix
             if segment in internal_to_home:
-                demandMX = Preparestn2stnMatrixToHome(demandMX, iRSjProps, distMX, stnsTLC)
+                demandMX = Preparestn2stnMatrixToHome(demandMX, iRSjProps, distMX, norms_to_edge_stns)
             else:
-                demandMX = Preparestn2stnMatrix(demandMX, iRSjProps, distMX, stnsTLC)
+                demandMX = Preparestn2stnMatrix(demandMX, iRSjProps, distMX, norms_to_edge_stns)
             # assign EDGE flows
             demandMX = AssignEDGEFlow(edge_flows_file, flow_cats, demandMX)
             # add TAG flows
@@ -1423,28 +1413,28 @@ def RunEDGEGrowth(params):
             demandMX = AssignPurposes(demandMX)
             # add ticket splits props
             demandMX = demandMX.merge(
-                ticket_flow_props, how="left", on=["TAG_Flow", "Purpose"]
+                ticket_type_splits, how="left", on=["TAG_Flow", "Purpose"]
             )
             # apply Ticket Splits
             demandMX = ApplyTicketSplits(demandMX)
             # Get factors for missing movements if any
             (
-                factors_EDGE,
+                edge_growth_factors,
                 other_tickets_df,
                 no_factors_df,
             ) = CreateFactorsForMissingMOIRAMovements(
-                demandMX, factors_EDGE, other_tickets_df, no_factors_df
+                demandMX, edge_growth_factors, other_tickets_df, no_factors_df
             )
             # get factoring method
             method = segments_method[segment]
             # apply factoring based on demand segment
             if method == 1:
                 if segment in internal_to_home:
-                    demandMX = ApplyEDGEGrowthMethod1To(demandMX, factors_EDGE)
+                    demandMX = ApplyEDGEGrowthMethod1To(demandMX, edge_growth_factors)
                 else:
-                    demandMX = ApplyEDGEGrowthMethod1From(demandMX, factors_EDGE)
+                    demandMX = ApplyEDGEGrowthMethod1From(demandMX, edge_growth_factors)
             else:
-                demandMX = ApplyEDGEGrowthMethod2(demandMX, factors_EDGE)
+                demandMX = ApplyEDGEGrowthMethod2(demandMX, edge_growth_factors)
 
             # move back to zone2zone matrix
             demandMX = (
@@ -1524,18 +1514,18 @@ def RunEDGEGrowth(params):
             # get 24Hr demand amtrix
             demandMX = SumPeriodsDemand(am, ip, pm, op)
             # add to 24Hr matrices dict
-            factored_24Hr_matrices[segment] = demandMX
+            factored_24hr_matrices[segment] = demandMX
 
         # Combine matrices into NoRMS segments
-        norms_matrices1 = FromTo2FromByAveraging(factored_24Hr_matrices)
+        norms_matrices1 = FromTo2FromByAveraging(factored_24hr_matrices)
         # norms_matrices2 = pFunc.FromTo2FromByFrom(factored_24Hr_matrices)
         # plot matrices
         for segment in norms_segments:
             # write out demand matrix
             norms_matrices1[segment].to_csv(
-                f"{params.output_path}/{params.forecast_year}_24Hr_{segment}.csv", index=False
+                f"{params.export_path}/{params.forecast_year}_24Hr_{segment}.csv", index=False
             )
-            # norms_matrices2[segment].to_csv(f'{output_path}/{forecast_year}/{forecast_year}_24Hr_{segment}.csv', index=False)
+            # norms_matrices2[segment].to_csv(f'{export_path}/{forecast_year}/{forecast_year}_24Hr_{segment}.csv', index=False)
 
         print("Process finished successfully!", "green")
         logging.info(

@@ -11,6 +11,7 @@ import pandas as pd
 from tqdm import tqdm
 
 # Local imports
+sys.path.append(".")
 sys.path.append("..")
 # pylint: disable=import-error,wrong-import-position
 from normits_demand import logging as nd_log
@@ -25,7 +26,7 @@ CAT_RUN_DIR = "Runs"
 CUBE_RUN_ID = "ILP_2018"
 
 # Input files
-TLC_OVERWRITE_PATH = r"I:\NorMITs Demand\import\edge_replicant\apply_growth\TLC_Overwrite.csv"
+TLC_OVERWRITE_PATH = r"I:\NorMITs Demand\import\edge_replicant\apply_growth\pre-processing\TLC_Overwrite.csv"
 
 # Output location
 OUT_PATH = r"E:\Norms\Edge growth\output"
