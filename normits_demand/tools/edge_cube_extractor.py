@@ -14,6 +14,8 @@ import subprocess as sp
 import openmatrix as omx
 import logging
 
+# CONSTANTS
+LOG = logging.getLogger(__name__)
 
 def CheckFileExists(file):
     """
@@ -33,7 +35,7 @@ def CheckFileExists(file):
 
     """
     if not os.path.isfile(file):
-        print(f" -- File not found - {file}", "red")
+        print(f" -- File not found - {file}")
         sys.exit()
 
 
@@ -206,7 +208,7 @@ def StnZone2StnTLC(stnZone2Node: str, railNodes: str, extNodes: str, overwrite_T
         # amend value
         df["STATIONCODE"].loc[df["STATIONCODE"] == currentTLC] = overwriteTLC
         # log overwritten station code
-        logging.info(f"NoRMS TLC ({currentTLC}) overwritten with ({overwriteTLC})")
+        LOG.info(f"NoRMS TLC ({currentTLC}) overwritten with ({overwriteTLC})")
     return df
 
 
@@ -251,7 +253,6 @@ def ExportMat2CSVViaOMX(cube_exe: str, in_mat: str, out_path: str, out_csv: str,
     os.remove(f"{out_path}/{out_csv}.omx")
     # delete .MAT files
     os.remove(f"{out_path}/PT_{segment}.MAT")
-    print(f" -- PT {in_mat} Exported Successfully ", "green")
 
 
 def PTDemandFromTo(exe_cube: str, cat_folder: str, run_folder: str, output_folder: str):
@@ -277,8 +278,8 @@ def PTDemandFromTo(exe_cube: str, cat_folder: str, run_folder: str, output_folde
 
     """
     # create file paths
-    pt_24Hr_demand = run_folder + "/Inputs/Demand/PT_24hr_Demand.MAT"
     area_sectors = cat_folder + "/Params/Demand/Sector_Areas_Zones.MAT"
+    pt_24Hr_demand = run_folder + "/Inputs/Demand/PT_24hr_Demand.MAT"
 
     splittingfactors_ds1 = run_folder + "/Inputs/Demand/SplitFactors_DS1.MAT"
     splittingfactors_ds2 = run_folder + "/Inputs/Demand/SplitFactors_DS2.MAT"

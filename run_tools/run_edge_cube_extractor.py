@@ -1,113 +1,112 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Fri Sep  9 10:01:48 2022
-
-@author: mishtaiwi1
-"""
-
+"""Run Script for the EDGE CUBE extractor"""
+# ## IMPORTS ## #
+# Standard imports
 import os
+import sys
+import shutil
 
+# Third party imports
 import pandas as pd
 from tqdm import tqdm
-import shutil
-import logging
-from datetime import datetime
-import c01_ExportCubeFunctions as pFunc
 
-pd.options.mode.chained_assignment = None  # default='warn'
+# Local imports
+sys.path.append("..")
+# pylint: disable=import-error,wrong-import-position
+from normits_demand import logging as nd_log
+from normits_demand.tools import edge_cube_extractor
+# pylint: enable=import-error,wrong-import-position
 
+# ## USER INPUTS ## #
+# cube catalogue setup
+CUBE_EXE = "C:/Program Files/Citilabs/CubeVoyager/VOYAGER.EXE"
+CUBE_CAT_PATH = r"E:\Norms\NorTMS_T3_Model_v8.17"
+CAT_RUN_DIR = "Runs"
+CUBE_RUN_ID = "ILP_2018"
 
-""" >>> USER INPUTS ---"""
-#
-# Path to location of the NoRMS Cube Voyager Executable (use '/' insetad of '\\' or r'..)
-cube_exe = "C:/Program Files/Citilabs/CubeVoyager/VOYAGER.EXE"
-# Path to location of the NoRMS Cube Catalog (use '/' insetad of '\\' or r'..)
-cat_path = "C:/Work/NorMITs/NorTMS_T3_Model_v8.16b"
-# Path to location of the NoRMS Base Run (use '/' insetad of '\\' or r'..)
-run_path = "C:/Work/NorMITs/NorTMS_T3_Model_v8.16b/Runs"
-# Base Run ID
-run = "ILP_2018"
-# Path to Lookups folder (use '/' insetad of '\\' or r'..)
-lookups_path = "C:/Work/NorMITs/inputs"
-# Path to location of Where Outputs to be Saved (use '/' insetad of '\\' or r'..
-out_path = "C:/Work/NorMITs/outputs"
-#
-""" >>> END OF USER INPUTS"""
+# Input files
+TLC_OVERWRITE_PATH = r"I:\NorMITs Demand\import\edge_replicant\apply_growth\TLC_Overwrite.csv"
 
+# Output location
+OUT_PATH = r"E:\Norms\Edge growth\output"
 
-"""Process Fixed objects"""
-# journey purposes
-purposes = {"EB": 1, "Com": 2, "Oth": 3}
-# time periods
-periods = ["AM", "IP", "PM", "OP"]
+# ## CONSTANTS ## #
+# logger
+LOG_FILE = "Export_BaseMatrices_Logfile.Log"
+LOG = nd_log.get_logger(f"{nd_log.get_package_logger_name()}.run_edge_cube_extractor")
 
+# Derived from inputs
+CUBE_CAT_RUN_PATH = os.path.join(CUBE_CAT_PATH, CAT_RUN_DIR)
 
-# create new logfile
-if os.path.exists(f"{out_path}/Export_BaseMatrices_Logfile.Log"):
-    os.remove(f"{out_path}/Export_BaseMatrices_Logfile.Log")
-logging.basicConfig(
-    filename=f"{out_path}/Export_BaseMatrices_Logfile.Log",
-    format="%(levelname)s:%(message)s",
-    level=logging.INFO,
-)
-logging.info(
-    "######################################################################################"
-)
-logging.info("Started Process @ " + datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
-logging.info(
-    "######################################################################################"
-)
+# ## CLASSES ## #
 
 
-# copy Cube files
-for period in periods:
-    # read distance matrix
-    pFunc.CheckFileExists(f"{run_path}/{run}/Outputs/BaseAssign/{period}_stn2stn_costs.csv")
-    shutil.copy2(
-        f"{run_path}/{run}/Outputs/BaseAssign/{period}_stn2stn_costs.csv",
-        f"{out_path}/{period}_stn2stn_costs.csv",
+# ## FUNCTIONS ## #
+def run_extractor():
+    """Process Fixed objects"""
+    # time periods
+    periods = ["AM", "IP", "PM", "OP"]
+
+    # copy Cube files
+    for period in periods:
+        # read distance matrix
+        edge_cube_extractor.CheckFileExists(f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Outputs/BaseAssign/{period}_stn2stn_costs.csv")
+        shutil.copy2(
+            f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Outputs/BaseAssign/{period}_stn2stn_costs.csv",
+            f"{OUT_PATH}/{period}_stn2stn_costs.csv",
+        )
+        # read iRSj props
+        edge_cube_extractor.CheckFileExists(
+            f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Outputs/BaseAssign/{period}_iRSj_probabilities.h5"
+        )
+        shutil.copy2(
+            f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Outputs/BaseAssign/{period}_iRSj_probabilities.h5",
+            f"{OUT_PATH}/{period}_iRSj_probabilities.h5",
+        )
+
+        LOG.info(f"Distance and Probability matrices for period {period} has been copied")
+
+    # produce TLC lookup
+    edge_cube_extractor.CheckFileExists(TLC_OVERWRITE_PATH)
+    tlc_overwrite = pd.read_csv(TLC_OVERWRITE_PATH)
+    stns_tlc = edge_cube_extractor.StnZone2StnTLC(
+        f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Inputs/Network/Station_Connectors.csv",
+        f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Inputs/Network/TfN_Rail_Nodes.csv",
+        f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Inputs/Network/External_Station_Nodes.csv",
+        tlc_overwrite,
     )
-    # read iRSj props
-    pFunc.CheckFileExists(
-        f"{run_path}/{run}/Outputs/BaseAssign/{period}_iRSj_probabilities.h5"
+    # write TLC Lookup
+    stns_tlc.to_csv(f"{OUT_PATH}/TLCs.csv", index=False)
+
+    # PT Demand to time periods F/T
+    edge_cube_extractor.PTDemandFromTo(CUBE_EXE, CUBE_CAT_PATH, CUBE_CAT_RUN_PATH + "/" + CUBE_RUN_ID, OUT_PATH)
+    LOG.info("NoRMS matrices converted to OMX successfully")
+
+    # export to CSVs
+    for period in tqdm(periods, desc="Time Periods Loop ", unit="Period"):
+        edge_cube_extractor.ExportMat2CSVViaOMX(
+            CUBE_EXE, OUT_PATH + f"/PT_{period}.MAT", OUT_PATH, f"{period}", f"{period}"
+        )
+        LOG.info(f"{period} NoRMS matrices exported to CSVs")
+
+    LOG.info("#" * 80)
+    LOG.info("Process Finished Successfully")
+    LOG.info("#" * 80)
+
+
+def main():
+    # Set up a logger to capture all log outputs and warnings
+    nd_log.get_logger(
+        logger_name=nd_log.get_package_logger_name(),
+        log_file_path=os.path.join(OUT_PATH, LOG_FILE),
+        instantiate_msg="Running TLD Builder",
+        log_version=True,
     )
-    shutil.copy2(
-        f"{run_path}/{run}/Outputs/BaseAssign/{period}_iRSj_probabilities.h5",
-        f"{out_path}/{period}_iRSj_probabilities.h5",
+    nd_log.capture_warnings(
+        file_handler_args=dict(log_file=os.path.join(OUT_PATH, LOG_FILE))
     )
-
-    logging.info(f"Distance and Probability matrices for period {period} has been copied")
-
-
-# produce TLC lookup
-pFunc.CheckFileExists(f"{lookups_path}/TLC_Overwrite.csv")
-tlc_overwrite = pd.read_csv(f"{lookups_path}/TLC_Overwrite.csv")
-stnsTLC = pFunc.StnZone2StnTLC(
-    f"{run_path}/{run}/Inputs/Network/Station_Connectors.csv",
-    f"{run_path}/{run}/Inputs/Network/TfN_Rail_Nodes.csv",
-    f"{run_path}/{run}/Inputs/Network/External_Station_Nodes.csv",
-    tlc_overwrite,
-)
-# write TLC Lookup
-stnsTLC.to_csv(f"{out_path}/TLCs.csv", index=False)
-
-# PT Demand to time periods F/T
-pFunc.PTDemandFromTo(cube_exe, cat_path, run_path + "/" + run, out_path)
-logging.info("NoRMS matrices converted to OMX successfully")
+    run_extractor()
 
 
-# export to CSVs
-for period in tqdm(periods, desc="Time Periods Loop ", unit="Period"):
-    pFunc.ExportMat2CSVViaOMX(
-        cube_exe, out_path + f"/PT_{period}.MAT", out_path, f"{period}", f"{period}"
-    )
-    logging.info(f"{period} NoRMS matrices exported to CSVs")
-
-
-logging.info(
-    "######################################################################################"
-)
-logging.info("Process Finished Successfully")
-logging.info(
-    "######################################################################################"
-)
+if __name__ == "__main__":
+    main()
