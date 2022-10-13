@@ -2,10 +2,7 @@ iteration: 1.0
 forecast_scenario: core
 export_folder: I:\NorMITs Demand
 assignment_model: NoRMS
-assignment_model_run_folder: I:\NorMITs Demand\norms
-assignment_run_id: 1
 forecast_year: 2040
-pEDGE_folder: I:\NorMITs Demand\norms\pEDGE
 
 # Input paths
 matrices_to_grow_dir: E:\Norms\Edge growth\output
