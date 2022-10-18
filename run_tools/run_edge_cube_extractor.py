@@ -51,13 +51,13 @@ def run_extractor():
     # copy Cube files
     for period in periods:
         # read distance matrix
-        edge_cube_extractor.CheckFileExists(f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Outputs/BaseAssign/{period}_stn2stn_costs.csv")
+        edge_cube_extractor.check_file_exists(f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Outputs/BaseAssign/{period}_stn2stn_costs.csv")
         shutil.copy2(
             f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Outputs/BaseAssign/{period}_stn2stn_costs.csv",
             f"{OUT_PATH}/{period}_stn2stn_costs.csv",
         )
         # read iRSj props
-        edge_cube_extractor.CheckFileExists(
+        edge_cube_extractor.check_file_exists(
             f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Outputs/BaseAssign/{period}_iRSj_probabilities.h5"
         )
         shutil.copy2(
@@ -68,9 +68,9 @@ def run_extractor():
         LOG.info(f"Distance and Probability matrices for period {period} has been copied")
 
     # produce TLC lookup
-    edge_cube_extractor.CheckFileExists(TLC_OVERWRITE_PATH)
+    edge_cube_extractor.check_file_exists(TLC_OVERWRITE_PATH)
     tlc_overwrite = pd.read_csv(TLC_OVERWRITE_PATH)
-    stns_tlc = edge_cube_extractor.StnZone2StnTLC(
+    stns_tlc = edge_cube_extractor.stnzone_2_stn_tlc(
         f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Inputs/Network/Station_Connectors.csv",
         f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Inputs/Network/TfN_Rail_Nodes.csv",
         f"{CUBE_CAT_RUN_PATH}/{CUBE_RUN_ID}/Inputs/Network/External_Station_Nodes.csv",
@@ -80,12 +80,12 @@ def run_extractor():
     stns_tlc.to_csv(f"{OUT_PATH}/TLCs.csv", index=False)
 
     # PT Demand to time periods F/T
-    edge_cube_extractor.PTDemandFromTo(CUBE_EXE, CUBE_CAT_PATH, CUBE_CAT_RUN_PATH + "/" + CUBE_RUN_ID, OUT_PATH)
+    edge_cube_extractor.pt_demand_from_to(CUBE_EXE, CUBE_CAT_PATH, CUBE_CAT_RUN_PATH + "/" + CUBE_RUN_ID, OUT_PATH)
     LOG.info("NoRMS matrices converted to OMX successfully")
 
     # export to CSVs
     for period in tqdm(periods, desc="Time Periods Loop ", unit="Period"):
-        edge_cube_extractor.ExportMat2CSVViaOMX(
+        edge_cube_extractor.export_mat_2_csv_via_omx(
             CUBE_EXE, OUT_PATH + f"/PT_{period}.MAT", OUT_PATH, f"{period}", f"{period}"
         )
         LOG.info(f"{period} NoRMS matrices exported to CSVs")
