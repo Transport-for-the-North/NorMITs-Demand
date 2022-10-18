@@ -17,7 +17,7 @@ import logging
 # CONSTANTS
 LOG = logging.getLogger(__name__)
 
-def CheckFileExists(file):
+def check_file_exists(file):
     """
     Parameters
     ----------
@@ -61,7 +61,7 @@ def proc_single(cmd_list: typ.List):
         pr.wait()
 
 
-def MAT2OMX(exe_cube: str, matFile: str, outPath: str, outFile: str):
+def mat_2_omx(exe_cube: str, matFile: str, outPath: str, outFile: str):
     """
     Parameters
     ----------
@@ -84,8 +84,8 @@ def MAT2OMX(exe_cube: str, matFile: str, outPath: str, outFile: str):
 
     """
     # check files exists
-    CheckFileExists(exe_cube)
-    CheckFileExists(matFile)
+    check_file_exists(exe_cube)
+    check_file_exists(matFile)
 
     # replace / with \\ for file paths
     matFile = matFile.replace("/", "\\").strip()
@@ -109,7 +109,7 @@ def MAT2OMX(exe_cube: str, matFile: str, outPath: str, outFile: str):
     )
 
 
-def OMX2DF(omx):
+def omx_2_df(omx):
     """
     Parameters
     ----------
@@ -138,7 +138,7 @@ def OMX2DF(omx):
     return df
 
 
-def StnZone2StnTLC(stnZone2Node: str, railNodes: str, extNodes: str, overwrite_TLCs):
+def stnzone_2_stn_tlc(stnZone2Node: str, railNodes: str, extNodes: str, overwrite_TLCs):
     """
     Parameters
     ----------
@@ -163,9 +163,9 @@ def StnZone2StnTLC(stnZone2Node: str, railNodes: str, extNodes: str, overwrite_T
 
     """
     # check files exists
-    CheckFileExists(stnZone2Node)
-    CheckFileExists(railNodes)
-    CheckFileExists(extNodes)
+    check_file_exists(stnZone2Node)
+    check_file_exists(railNodes)
+    check_file_exists(extNodes)
     # read dataframes
     stnZone2Node = pd.read_csv(stnZone2Node)
     railNodes = pd.read_csv(railNodes)
@@ -212,7 +212,7 @@ def StnZone2StnTLC(stnZone2Node: str, railNodes: str, extNodes: str, overwrite_T
     return df
 
 
-def ExportMat2CSVViaOMX(cube_exe: str, in_mat: str, out_path: str, out_csv: str, segment: str):
+def export_mat_2_csv_via_omx(cube_exe: str, in_mat: str, out_path: str, out_csv: str, segment: str):
     """
     Parameters
     ----------
@@ -236,7 +236,7 @@ def ExportMat2CSVViaOMX(cube_exe: str, in_mat: str, out_path: str, out_csv: str,
     None.
     """
     # Export PT Demand
-    MAT2OMX(cube_exe, in_mat, out_path, f"/{out_csv}")
+    mat_2_omx(cube_exe, in_mat, out_path, f"/{out_csv}")
     # open omx
     omx_file = omx.open_file(out_path + f"/{out_csv}.omx")
     # get list of tabs
@@ -244,7 +244,7 @@ def ExportMat2CSVViaOMX(cube_exe: str, in_mat: str, out_path: str, out_csv: str,
     # loop over MX tabs
     for mx in omx_tabs:
         # convert omx to pd dataframe
-        df = OMX2DF(omx_file[mx])
+        df = omx_2_df(omx_file[mx])
         # export df to CSV
         df.to_csv(f"{out_path}/{out_csv}_{mx}.csv", index=False)
     # close omx
@@ -255,7 +255,7 @@ def ExportMat2CSVViaOMX(cube_exe: str, in_mat: str, out_path: str, out_csv: str,
     os.remove(f"{out_path}/PT_{segment}.MAT")
 
 
-def PTDemandFromTo(exe_cube: str, cat_folder: str, run_folder: str, output_folder: str):
+def pt_demand_from_to(exe_cube: str, cat_folder: str, run_folder: str, output_folder: str):
     """
     Parameters
     ----------
@@ -296,24 +296,24 @@ def PTDemandFromTo(exe_cube: str, cat_folder: str, run_folder: str, output_folde
     nhb_props_OP = run_folder + "/Inputs/Demand/OD_Prop_OP_PT.MAT"
 
     # check files exists
-    CheckFileExists(exe_cube)
+    check_file_exists(exe_cube)
 
-    CheckFileExists(pt_24Hr_demand)
-    CheckFileExists(area_sectors)
+    check_file_exists(pt_24Hr_demand)
+    check_file_exists(area_sectors)
 
-    CheckFileExists(splittingfactors_ds1)
-    CheckFileExists(splittingfactors_ds2)
-    CheckFileExists(splittingfactors_ds3)
+    check_file_exists(splittingfactors_ds1)
+    check_file_exists(splittingfactors_ds2)
+    check_file_exists(splittingfactors_ds3)
 
-    CheckFileExists(timeOfDay_AM)
-    CheckFileExists(timeOfDay_IP)
-    CheckFileExists(timeOfDay_PM)
-    CheckFileExists(timeOfDay_OP)
+    check_file_exists(timeOfDay_AM)
+    check_file_exists(timeOfDay_IP)
+    check_file_exists(timeOfDay_PM)
+    check_file_exists(timeOfDay_OP)
 
-    CheckFileExists(nhb_props_AM)
-    CheckFileExists(nhb_props_IP)
-    CheckFileExists(nhb_props_PM)
-    CheckFileExists(nhb_props_OP)
+    check_file_exists(nhb_props_AM)
+    check_file_exists(nhb_props_IP)
+    check_file_exists(nhb_props_PM)
+    check_file_exists(nhb_props_OP)
 
     # replace / with \\ for file paths
     pt_24Hr_demand = pt_24Hr_demand.replace("/", "\\").strip()
@@ -590,7 +590,7 @@ def PTDemandFromTo(exe_cube: str, cat_folder: str, run_folder: str, output_folde
     )
 
 
-def PA2OD(exe_cube: str, mats_folder: str):
+def pa_2_od(exe_cube: str, mats_folder: str):
     """
     Parameters
     ----------
@@ -617,12 +617,12 @@ def PA2OD(exe_cube: str, mats_folder: str):
     opDemand = mats_folder + "/PT_OP.MAT"
 
     # check files exists
-    CheckFileExists(exe_cube)
+    check_file_exists(exe_cube)
 
-    CheckFileExists(amDemand)
-    CheckFileExists(ipDemand)
-    CheckFileExists(pmDemand)
-    CheckFileExists(opDemand)
+    check_file_exists(amDemand)
+    check_file_exists(ipDemand)
+    check_file_exists(pmDemand)
+    check_file_exists(opDemand)
 
     # replace / with \\ for file paths
     amDemand = amDemand.replace("/", "\\").strip()
