@@ -21,5 +21,5 @@ LOG = nd_log.get_logger(__name__)
 
 # ## FUNCTIONS ## #
 def main(params: forecast_cnfg.EDGEParameters) -> None:
-    edge_forecast.RunEDGEGrowth(params)
+    edge_forecast.run_edge_growth(params)
     raise NotImplementedError("Not yet implemented main function for EDGE model")

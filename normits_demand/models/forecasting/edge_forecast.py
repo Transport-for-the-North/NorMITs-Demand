@@ -26,7 +26,7 @@ LOG = logging.getLogger(__name__)
 # ## CLASSES ## #
 
 # ## FUNCTIONS ## #
-def CheckFileExists(file):
+def check_file_exist(file):
     """
     Parameters
     ----------
@@ -49,7 +49,7 @@ def CheckFileExists(file):
         sys.exit()
 
 
-def AddTLC2StationsMatrix(mx, stnTLC):
+def add_tls2stations_matrix(mx, stnTLC):
     """
     Parameters
     ----------
@@ -110,7 +110,7 @@ def AddTLC2StationsMatrix(mx, stnTLC):
     return mx
 
 
-def Preparestn2stnMatrix(demandMX, iRSjProps, distMX, stnTLC):
+def prepare_stn2stn_matrix(demandMX, iRSjProps, distMX, stnTLC):
     """
     Parameters
     ----------
@@ -174,12 +174,12 @@ def Preparestn2stnMatrix(demandMX, iRSjProps, distMX, stnTLC):
     # rename column
     df = df.rename(columns={"tran_distance": "Distance"})
     # add TLCs
-    df = AddTLC2StationsMatrix(df, stnTLC)
+    df = add_tls2stations_matrix(df, stnTLC)
 
     return df
 
 
-def Preparestn2stnMatrixToHome(demandMX, iRSjProps, distMX, stnTLC):
+def prepare_stn2stn_matrix_tohome(demandMX, iRSjProps, distMX, stnTLC):
     """
     Parameters
     ----------
@@ -256,12 +256,12 @@ def Preparestn2stnMatrixToHome(demandMX, iRSjProps, distMX, stnTLC):
     # rename column
     df = df.rename(columns={"tran_distance": "Distance"})
     # add TLCs
-    df = AddTLC2StationsMatrix(df, stnTLC)
+    df = add_tls2stations_matrix(df, stnTLC)
 
     return df
 
 
-def AssignEDGEFlow(flows_file, flows_lookup, mx):
+def assign_edge_flow(flows_file, flows_lookup, mx):
     """
     Parameters
     ----------
@@ -295,7 +295,7 @@ def AssignEDGEFlow(flows_file, flows_lookup, mx):
     return mx
 
 
-def AssignPurposes(df):
+def assign_purposes(df):
     """
     Parameters
     ----------
@@ -333,7 +333,7 @@ def AssignPurposes(df):
     return df
 
 
-def AddDistanceBandTAGFlow(df):
+def add_distance_band_tag_flow(df):
     """
     Parameters
     ----------
@@ -375,7 +375,7 @@ def AddDistanceBandTAGFlow(df):
     return df
 
 
-def ApplyTicketSplits(df):
+def apply_ticket_splits(df):
     """
     Parameters
     ----------
@@ -417,7 +417,7 @@ def ApplyTicketSplits(df):
     return df
 
 
-def CreateFactorsForMissingMOIRAMovements(mx, edgeFactors, other_tickets_df, no_factors_df):
+def create_factors_for_missing_moira_movements(mx, edgeFactors, other_tickets_df, no_factors_df):
     """
     Parameters
     ----------
@@ -583,7 +583,7 @@ def CreateFactorsForMissingMOIRAMovements(mx, edgeFactors, other_tickets_df, no_
     return upd_edge_factors, other_tickets_df, no_factors_df
 
 
-def ApplyEDGEGrowthMethod1From(mx, edgeFactors):
+def apply_edge_growth_method1_from(mx, edgeFactors):
     """
     Parameters
     ----------
@@ -658,7 +658,7 @@ def ApplyEDGEGrowthMethod1From(mx, edgeFactors):
     return mx
 
 
-def ApplyEDGEGrowthMethod1To(mx, edgeFactors):
+def apply_edge_growth_method1_to(mx, edgeFactors):
     """
     Parameters
     ----------
@@ -738,7 +738,7 @@ def ApplyEDGEGrowthMethod1To(mx, edgeFactors):
     return mx
 
 
-def ApplyEDGEGrowthMethod2(mx, edgeFactors):
+def apply_edge_growth_method2(mx, edgeFactors):
     """
     Parameters
     ----------
@@ -837,7 +837,7 @@ def ApplyEDGEGrowthMethod2(mx, edgeFactors):
     return mx
 
 
-def Prepare_logging_info(other_tickets_df, no_factors_df, demand_total):
+def prepare_logging_info(other_tickets_df, no_factors_df, demand_total):
     """
     Parameters
     ----------
@@ -940,7 +940,7 @@ def Prepare_logging_info(other_tickets_df, no_factors_df, demand_total):
     )
 
 
-def SumPeriodsDemand(am, ip, pm, op):
+def sum_periods_demand(am, ip, pm, op):
     """
     Parameters
     ----------
@@ -977,7 +977,7 @@ def SumPeriodsDemand(am, ip, pm, op):
     return comb
 
 
-def AverageTwoMatrices(mx1, mx2, zones=1300):
+def average_two_matrices(mx1, mx2, zones=1300):
     """
     Parameters
     ----------
@@ -1012,7 +1012,7 @@ def AverageTwoMatrices(mx1, mx2, zones=1300):
     return mx
 
 
-def ExpandMatrix(mx, zones=1300):
+def expand_matrix(mx, zones=1300):
     """
     Parameters
     ----------
@@ -1039,7 +1039,7 @@ def ExpandMatrix(mx, zones=1300):
     return eMx
 
 
-def FromTo2FromByAveraging(matrices_dict):
+def fromto_2_from_by_averaging(matrices_dict):
     """
     Parameters
     ----------
@@ -1058,79 +1058,79 @@ def FromTo2FromByAveraging(matrices_dict):
     # empty dictionary
     matrices = {}
     # HBEBCA_Int
-    mx1 = AverageTwoMatrices(
+    mx1 = average_two_matrices(
         matrices_dict["HBEBCA_Int"], TransposeMatrix(matrices_dict["HBEBCA_Int_T"])
     )
     matrices["HBEBCA_Int"] = mx1
     # HBEBNCA_Int
-    mx2 = AverageTwoMatrices(
+    mx2 = average_two_matrices(
         matrices_dict["HBEBNCA_Int"], TransposeMatrix(matrices_dict["HBEBNCA_Int_T"])
     )
     matrices["HBEBNCA_Int"] = mx2
     # NHBEBCA_Int
-    mx3 = ExpandMatrix(matrices_dict["NHBEBCA_Int"])
+    mx3 = expand_matrix(matrices_dict["NHBEBCA_Int"])
     matrices["NHBEBCA_Int"] = mx3
     # NHBEBNCA_Int
-    mx4 = ExpandMatrix(matrices_dict["NHBEBNCA_Int"])
+    mx4 = expand_matrix(matrices_dict["NHBEBNCA_Int"])
     matrices["NHBEBNCA_Int"] = mx4
     # HBWCA_Int
-    mx5 = AverageTwoMatrices(
+    mx5 = average_two_matrices(
         matrices_dict["HBWCA_Int"], TransposeMatrix(matrices_dict["HBWCA_Int_T"])
     )
     matrices["HBWCA_Int"] = mx5
     # HBWNCA_Int
-    mx6 = AverageTwoMatrices(
+    mx6 = average_two_matrices(
         matrices_dict["HBWNCA_Int"], TransposeMatrix(matrices_dict["HBWNCA_Int_T"])
     )
     matrices["HBWNCA_Int"] = mx6
     # HBOCA_Int
-    mx7 = AverageTwoMatrices(
+    mx7 = average_two_matrices(
         matrices_dict["HBOCA_Int"], TransposeMatrix(matrices_dict["HBOCA_Int_T"])
     )
     matrices["HBOCA_Int"] = mx7
     # HBONCA_Int
-    mx8 = AverageTwoMatrices(
+    mx8 = average_two_matrices(
         matrices_dict["HBONCA_Int"], TransposeMatrix(matrices_dict["HBONCA_Int_T"])
     )
     matrices["HBONCA_Int"] = mx8
     # NHBOCA_Int
-    mx9 = ExpandMatrix(matrices_dict["NHBOCA_Int"])
+    mx9 = expand_matrix(matrices_dict["NHBOCA_Int"])
     matrices["NHBOCA_Int"] = mx9
     # NHBONCA_Int
-    mx10 = ExpandMatrix(matrices_dict["NHBONCA_Int"])
+    mx10 = expand_matrix(matrices_dict["NHBONCA_Int"])
     matrices["NHBONCA_Int"] = mx10
     # EBCA_Ext_FM
-    mx11 = ExpandMatrix(matrices_dict["EBCA_Ext_FM"])
+    mx11 = expand_matrix(matrices_dict["EBCA_Ext_FM"])
     matrices["EBCA_Ext_FM"] = mx11
     # EBCA_Ext_TO
-    mx12 = ExpandMatrix(matrices_dict["EBCA_Ext_TO"])
+    mx12 = expand_matrix(matrices_dict["EBCA_Ext_TO"])
     matrices["EBCA_Ext_TO"] = mx12
     # EBNCA_Ext
-    mx13 = ExpandMatrix(matrices_dict["EBNCA_Ext"])
+    mx13 = expand_matrix(matrices_dict["EBNCA_Ext"])
     matrices["EBNCA_Ext"] = mx13
     # HBWCA_Ext_FM
-    mx14 = ExpandMatrix(matrices_dict["HBWCA_Ext_FM"])
+    mx14 = expand_matrix(matrices_dict["HBWCA_Ext_FM"])
     matrices["HBWCA_Ext_FM"] = mx14
     # HBWCA_Ext_TO
-    mx15 = ExpandMatrix(matrices_dict["HBWCA_Ext_TO"])
+    mx15 = expand_matrix(matrices_dict["HBWCA_Ext_TO"])
     matrices["HBWCA_Ext_TO"] = mx15
     # HBWNCA_Ext
-    mx16 = ExpandMatrix(matrices_dict["HBWNCA_Ext"])
+    mx16 = expand_matrix(matrices_dict["HBWNCA_Ext"])
     matrices["HBWNCA_Ext"] = mx16
     # OCA_Ext_FM
-    mx17 = ExpandMatrix(matrices_dict["OCA_Ext_FM"])
+    mx17 = expand_matrix(matrices_dict["OCA_Ext_FM"])
     matrices["OCA_Ext_FM"] = mx17
     # OCA_Ext_TO
-    mx18 = ExpandMatrix(matrices_dict["OCA_Ext_TO"])
+    mx18 = expand_matrix(matrices_dict["OCA_Ext_TO"])
     matrices["OCA_Ext_TO"] = mx18
     # ONCA_Ext
-    mx19 = ExpandMatrix(matrices_dict["ONCA_Ext"])
+    mx19 = expand_matrix(matrices_dict["ONCA_Ext"])
     matrices["ONCA_Ext"] = mx19
 
     return matrices
 
 
-def FromTo2FromByFrom(matrices_dict):
+def fromto_2_from_by_from(matrices_dict):
     """
     Parameters
     ----------
@@ -1149,67 +1149,67 @@ def FromTo2FromByFrom(matrices_dict):
     # empty dictionary
     matrices = {}
     # HBEBCA_Int
-    mx1 = ExpandMatrix(matrices_dict["HBEBCA_Int"])
+    mx1 = expand_matrix(matrices_dict["HBEBCA_Int"])
     matrices["HBEBCA_Int"] = mx1
     # HBEBNCA_Int
-    mx2 = ExpandMatrix(matrices_dict["HBEBNCA_Int"])
+    mx2 = expand_matrix(matrices_dict["HBEBNCA_Int"])
     matrices["HBEBNCA_Int"] = mx2
     # NHBEBCA_Int
-    mx3 = ExpandMatrix(matrices_dict["NHBEBCA_Int"])
+    mx3 = expand_matrix(matrices_dict["NHBEBCA_Int"])
     matrices["NHBEBCA_Int"] = mx3
     # NHBEBNCA_Int
-    mx4 = ExpandMatrix(matrices_dict["NHBEBNCA_Int"])
+    mx4 = expand_matrix(matrices_dict["NHBEBNCA_Int"])
     matrices["NHBEBNCA_Int"] = mx4
     # HBWCA_Int
-    mx5 = ExpandMatrix(matrices_dict["HBWCA_Int"])
+    mx5 = expand_matrix(matrices_dict["HBWCA_Int"])
     matrices["HBWCA_Int"] = mx5
     # HBWNCA_Int
-    mx6 = ExpandMatrix(matrices_dict["HBWNCA_Int"])
+    mx6 = expand_matrix(matrices_dict["HBWNCA_Int"])
     matrices["HBWNCA_Int"] = mx6
     # HBOCA_Int
-    mx7 = ExpandMatrix(matrices_dict["HBOCA_Int"])
+    mx7 = expand_matrix(matrices_dict["HBOCA_Int"])
     matrices["HBOCA_Int"] = mx7
     # HBONCA_Int
-    mx8 = ExpandMatrix(matrices_dict["HBONCA_Int"])
+    mx8 = expand_matrix(matrices_dict["HBONCA_Int"])
     matrices["HBONCA_Int"] = mx8
     # NHBOCA_Int
-    mx9 = ExpandMatrix(matrices_dict["NHBOCA_Int"])
+    mx9 = expand_matrix(matrices_dict["NHBOCA_Int"])
     matrices["NHBOCA_Int"] = mx9
     # NHBONCA_Int
-    mx10 = ExpandMatrix(matrices_dict["NHBONCA_Int"])
+    mx10 = expand_matrix(matrices_dict["NHBONCA_Int"])
     matrices["NHBONCA_Int"] = mx10
     # EBCA_Ext_FM
-    mx11 = ExpandMatrix(matrices_dict["EBCA_Ext_FM"])
+    mx11 = expand_matrix(matrices_dict["EBCA_Ext_FM"])
     matrices["EBCA_Ext_FM"] = mx11
     # EBCA_Ext_TO
-    mx12 = ExpandMatrix(matrices_dict["EBCA_Ext_TO"])
+    mx12 = expand_matrix(matrices_dict["EBCA_Ext_TO"])
     matrices["EBCA_Ext_TO"] = mx12
     # EBNCA_Ext
-    mx13 = ExpandMatrix(matrices_dict["EBNCA_Ext"])
+    mx13 = expand_matrix(matrices_dict["EBNCA_Ext"])
     matrices["EBNCA_Ext"] = mx13
     # HBWCA_Ext_FM
-    mx14 = ExpandMatrix(matrices_dict["HBWCA_Ext_FM"])
+    mx14 = expand_matrix(matrices_dict["HBWCA_Ext_FM"])
     matrices["HBWCA_Ext_FM"] = mx14
     # HBWCA_Ext_TO
-    mx15 = ExpandMatrix(matrices_dict["HBWCA_Ext_TO"])
+    mx15 = expand_matrix(matrices_dict["HBWCA_Ext_TO"])
     matrices["HBWCA_Ext_TO"] = mx15
     # HBWNCA_Ext
-    mx16 = ExpandMatrix(matrices_dict["HBWNCA_Ext"])
+    mx16 = expand_matrix(matrices_dict["HBWNCA_Ext"])
     matrices["HBWNCA_Ext"] = mx16
     # OCA_Ext_FM
-    mx17 = ExpandMatrix(matrices_dict["OCA_Ext_FM"])
+    mx17 = expand_matrix(matrices_dict["OCA_Ext_FM"])
     matrices["OCA_Ext_FM"] = mx17
     # OCA_Ext_TO
-    mx18 = ExpandMatrix(matrices_dict["OCA_Ext_TO"])
+    mx18 = expand_matrix(matrices_dict["OCA_Ext_TO"])
     matrices["OCA_Ext_TO"] = mx18
     # ONCA_Ext
-    mx19 = ExpandMatrix(matrices_dict["ONCA_Ext"])
+    mx19 = expand_matrix(matrices_dict["ONCA_Ext"])
     matrices["ONCA_Ext"] = mx19
 
     return matrices
 
 
-def TransposeMatrix(mx):
+def transpose_matrix(mx):
     """
     Parameters
     ----------
@@ -1237,7 +1237,7 @@ def TransposeMatrix(mx):
     return mx
 
 
-def RunEDGEGrowth(params):
+def run_edge_growth(params):
     # create new logfile
     if os.path.exists(f"{params.export_path}/EDGE_Factoring_{params.forecast_year}.Log"):
         os.remove(f"{params.export_path}/EDGE_Factoring_{params.forecast_year}.Log")
@@ -1362,10 +1362,10 @@ def RunEDGEGrowth(params):
             f'-- Processing Time Period {period} @ {datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f")}'
         )
         # read distance matrix
-        CheckFileExists(f"{params.matrices_to_grow_dir}/{period}_stn2stn_costs.csv")
+        check_file_exist(f"{params.matrices_to_grow_dir}/{period}_stn2stn_costs.csv")
         distMX = pd.read_csv(f"{params.matrices_to_grow_dir}/{period}_stn2stn_costs.csv")
         # read iRSj props
-        CheckFileExists(f"{params.matrices_to_grow_dir}/{period}_iRSj_probabilities.h5")
+        check_file_exist(f"{params.matrices_to_grow_dir}/{period}_iRSj_probabilities.h5")
         iRSjProps = pd.read_hdf(
             f"{params.matrices_to_grow_dir}/{period}_iRSj_probabilities.h5", key="iRSj"
         )
@@ -1383,7 +1383,7 @@ def RunEDGEGrowth(params):
         ):
 
             # demand matrices
-            CheckFileExists(f"{params.matrices_to_grow_dir}/{period}_{segment}.csv")
+            check_file_exist(f"{params.matrices_to_grow_dir}/{period}_{segment}.csv")
             demandMX = pd.read_csv(f"{params.matrices_to_grow_dir}/{period}_{segment}.csv")
             tot_input_demand = round(demandMX["Demand"].sum())
             # sum total demand
@@ -1402,27 +1402,27 @@ def RunEDGEGrowth(params):
             demandMX = demandMX.loc[demandMX["Demand"] > 0].reset_index(drop=True)
             # prepare demand matrix
             if segment in internal_to_home:
-                demandMX = Preparestn2stnMatrixToHome(demandMX, iRSjProps, distMX, norms_to_edge_stns)
+                demandMX = prepare_stn2stn_matrix_tohome(demandMX, iRSjProps, distMX, norms_to_edge_stns)
             else:
-                demandMX = Preparestn2stnMatrix(demandMX, iRSjProps, distMX, norms_to_edge_stns)
+                demandMX = prepare_stn2stn_matrix(demandMX, iRSjProps, distMX, norms_to_edge_stns)
             # assign EDGE flows
-            demandMX = AssignEDGEFlow(edge_flows_file, flow_cats, demandMX)
+            demandMX = assign_edge_flow(edge_flows_file, flow_cats, demandMX)
             # add TAG flows
-            demandMX = AddDistanceBandTAGFlow(demandMX)
+            demandMX = add_distance_band_tag_flow(demandMX)
             # add prupsoes to matrix
-            demandMX = AssignPurposes(demandMX)
+            demandMX = assign_purposes(demandMX)
             # add ticket splits props
             demandMX = demandMX.merge(
                 ticket_type_splits, how="left", on=["TAG_Flow", "Purpose"]
             )
             # apply Ticket Splits
-            demandMX = ApplyTicketSplits(demandMX)
+            demandMX = apply_ticket_splits(demandMX)
             # Get factors for missing movements if any
             (
                 edge_growth_factors,
                 other_tickets_df,
                 no_factors_df,
-            ) = CreateFactorsForMissingMOIRAMovements(
+            ) = create_factors_for_missing_moira_movements(
                 demandMX, edge_growth_factors, other_tickets_df, no_factors_df
             )
             # get factoring method
@@ -1430,11 +1430,11 @@ def RunEDGEGrowth(params):
             # apply factoring based on demand segment
             if method == 1:
                 if segment in internal_to_home:
-                    demandMX = ApplyEDGEGrowthMethod1To(demandMX, edge_growth_factors)
+                    demandMX = apply_edge_growth_method1_to(demandMX, edge_growth_factors)
                 else:
-                    demandMX = ApplyEDGEGrowthMethod1From(demandMX, edge_growth_factors)
+                    demandMX = apply_edge_growth_method1_from(demandMX, edge_growth_factors)
             else:
-                demandMX = ApplyEDGEGrowthMethod2(demandMX, edge_growth_factors)
+                demandMX = apply_edge_growth_method2(demandMX, edge_growth_factors)
 
             # move back to zone2zone matrix
             demandMX = (
@@ -1462,7 +1462,7 @@ def RunEDGEGrowth(params):
         tickets_demand_prop,
         tickets_internal_prop,
         factors_internal_prop,
-    ) = Prepare_logging_info(other_tickets_df, no_factors_df, demand_total)
+    ) = prepare_logging_info(other_tickets_df, no_factors_df, demand_total)
 
     # if the proportion of the demand that has no factor at all in EDGE exceeds 1%
     #        then report these movements and quit the program
@@ -1512,12 +1512,12 @@ def RunEDGEGrowth(params):
             pm = factored_matrices["PM"][segment]
             op = factored_matrices["OP"][segment]
             # get 24Hr demand amtrix
-            demandMX = SumPeriodsDemand(am, ip, pm, op)
+            demandMX = sum_periods_demand(am, ip, pm, op)
             # add to 24Hr matrices dict
             factored_24hr_matrices[segment] = demandMX
 
         # Combine matrices into NoRMS segments
-        norms_matrices1 = FromTo2FromByAveraging(factored_24hr_matrices)
+        norms_matrices1 = fromto_2_from_by_averaging(factored_24hr_matrices)
         # norms_matrices2 = pFunc.FromTo2FromByFrom(factored_24Hr_matrices)
         # plot matrices
         for segment in norms_segments:
