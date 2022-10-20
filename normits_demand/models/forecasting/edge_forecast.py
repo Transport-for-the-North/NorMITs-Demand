@@ -204,7 +204,7 @@ def prepare_stn2stn_matrix_tohome(demandMX, iRSjProps, distMX, stnTLC):
 
     """
     # transpose matrix
-    demandMX = TransposeMatrix(demandMX)
+    demandMX = transpose_matrix(demandMX)
     # merge demand matrix to iRSj probabilities
     df = demandMX.merge(
         iRSjProps,
@@ -1059,12 +1059,12 @@ def fromto_2_from_by_averaging(matrices_dict):
     matrices = {}
     # HBEBCA_Int
     mx1 = average_two_matrices(
-        matrices_dict["HBEBCA_Int"], TransposeMatrix(matrices_dict["HBEBCA_Int_T"])
+        matrices_dict["HBEBCA_Int"], transpose_matrix(matrices_dict["HBEBCA_Int_T"])
     )
     matrices["HBEBCA_Int"] = mx1
     # HBEBNCA_Int
     mx2 = average_two_matrices(
-        matrices_dict["HBEBNCA_Int"], TransposeMatrix(matrices_dict["HBEBNCA_Int_T"])
+        matrices_dict["HBEBNCA_Int"], transpose_matrix(matrices_dict["HBEBNCA_Int_T"])
     )
     matrices["HBEBNCA_Int"] = mx2
     # NHBEBCA_Int
@@ -1075,22 +1075,22 @@ def fromto_2_from_by_averaging(matrices_dict):
     matrices["NHBEBNCA_Int"] = mx4
     # HBWCA_Int
     mx5 = average_two_matrices(
-        matrices_dict["HBWCA_Int"], TransposeMatrix(matrices_dict["HBWCA_Int_T"])
+        matrices_dict["HBWCA_Int"], transpose_matrix(matrices_dict["HBWCA_Int_T"])
     )
     matrices["HBWCA_Int"] = mx5
     # HBWNCA_Int
     mx6 = average_two_matrices(
-        matrices_dict["HBWNCA_Int"], TransposeMatrix(matrices_dict["HBWNCA_Int_T"])
+        matrices_dict["HBWNCA_Int"], transpose_matrix(matrices_dict["HBWNCA_Int_T"])
     )
     matrices["HBWNCA_Int"] = mx6
     # HBOCA_Int
     mx7 = average_two_matrices(
-        matrices_dict["HBOCA_Int"], TransposeMatrix(matrices_dict["HBOCA_Int_T"])
+        matrices_dict["HBOCA_Int"], transpose_matrix(matrices_dict["HBOCA_Int_T"])
     )
     matrices["HBOCA_Int"] = mx7
     # HBONCA_Int
     mx8 = average_two_matrices(
-        matrices_dict["HBONCA_Int"], TransposeMatrix(matrices_dict["HBONCA_Int_T"])
+        matrices_dict["HBONCA_Int"], transpose_matrix(matrices_dict["HBONCA_Int_T"])
     )
     matrices["HBONCA_Int"] = mx8
     # NHBOCA_Int
