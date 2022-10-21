@@ -510,7 +510,7 @@ def _heatmap_figure(
         axes[0].legend(**LEGEND_KWARGS, loc="upper right")
 
     # Drop nan
-    geodata = geodata.loc[~geodata[column_name].isna()]
+    # geodata = geodata.loc[~geodata[column_name].isna()]
 
     kwargs = dict(
         column=column_name,
@@ -541,11 +541,15 @@ def _heatmap_figure(
             bins=list(filter(lambda x: x <= 0, bins)) if bins is not None else bins,
         )
         positive_cmap = _colormap_classify(
-            geodata.loc[geodata[column_name] > 0, column_name],
+            geodata.loc[
+                (geodata[column_name] > 0) | (geodata[column_name].isna())
+                , column_name
+            ],
             "YlGn",
             label_fmt=label_fmt,
             n_bins=n_bins,
             bins=list(filter(lambda x: x > 0, bins)) if bins is not None else bins,
+            nan_colour=(1.0, 0.0, 0.0, 1.0),
         )
         cmap = negative_cmap + positive_cmap
         # Update colours index to be the same order as geodata
@@ -1240,6 +1244,7 @@ def _colormap_classify(
     n_bins: int = 5,
     label_fmt: str = "{:.0f}",
     bins: Optional[List[Union[int, float]]] = None,
+    nan_colour: Optional[tuple[float, float, float, float]] = None
 ) -> CustomCmap:
     """Calculate a NaturalBreaks colour map."""
 
@@ -1267,7 +1272,11 @@ def _colormap_classify(
     colours = pd.DataFrame(
         cmap(bin_categories), index=bin_categories.index, columns=iter("RGBA")
     )
-    colours.loc[bin_categories.isna(), :] = np.nan
+
+    if nan_colour is None:
+        colours.loc[bin_categories.isna(), :] = np.nan
+    else:
+        colours.loc[bin_categories.isna(), :] = nan_colour
 
     min_bin = np.min(finite)
     if min_bin > mc_bins.bins[0]:
@@ -1281,6 +1290,9 @@ def _colormap_classify(
     legend = [
         patches.Patch(fc=c, label=l, ls="") for c, l in zip(cmap(range(mc_bins.k)), labels)
     ]
+
+    if nan_colour is not None:
+        legend.append(patches.Patch(fc=nan_colour, label="Missing Values", ls=""))
 
     return CustomCmap(bin_categories, colours, legend)
 

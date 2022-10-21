@@ -9,7 +9,10 @@ import sys
 from typing import NamedTuple
 
 # Third party imports
+from matplotlib import pyplot as plt
+import numpy as np
 import pandas as pd
+import geopandas as gpd
 
 # Local imports
 sys.path.append("..")
@@ -17,7 +20,7 @@ sys.path.append(".")
 # pylint: disable=import-error, wrong-import-position
 import normits_demand as nd
 from normits_demand import logging as nd_log
-from normits_demand.utils import config_base, file_ops
+from normits_demand.utils import config_base, file_ops, plots
 from normits_demand.core.enumerations import LandUseType
 
 # pylint: enable=import-error, wrong-import-position
@@ -30,16 +33,28 @@ EDDIE_ZONE_SYSTEM = "lad_2020"
 ##### CLASSES #####
 class EDDIEComparisonParameters(config_base.BaseConfig):
     eddie_file: pathlib.Path = pathlib.Path(
-        r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Codebase\EDDIE\EDDIE_Proper_April22_DN.xlsm"
+        r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand"
+        r"\Codebase\EDDIE\EDDIE_Proper_April22_DN.xlsm"
     )
     eddie_sheet: str = "I; CEBR_LA_EMP_POP_GDP_Central"
     eddie_header_row: int = 17
     tfn_base_folder: pathlib.Path = pathlib.Path(
-        r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Inputs\NorMITs Land Use\import\scenarios"
+        r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand"
+        r"\Inputs\NorMITs Land Use\import\scenarios"
     )
     scenario: nd.Scenario = nd.Scenario.SC04_UZC
     output_folder: pathlib.Path = pathlib.Path(
-        r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Codebase\EDDIE\TfN Land Use Comparison"
+        r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand"
+        r"\Codebase\EDDIE\TfN Land Use Comparison"
+    )
+    map_years: list[int] = [2018, 2038]
+    lad_shapefile: plots.GeoSpatialFile = plots.GeoSpatialFile(
+        pathlib.Path(
+            r"Y:\Data Strategy\GIS Shapefiles"
+            r"\Local_Authority_Districts_(December_2020)_UK_BFC"
+            r"\Local_Authority_Districts_(December_2020)_UK_BGC.shp"
+        ),
+        "LAD20CD",
     )
 
 
@@ -154,10 +169,35 @@ def load_landuse_tfn(folder: pathlib.Path, scenario: nd.Scenario):
     return LandUseData(scenario, landuse)
 
 
-def compare_landuse(eddie: EDDIELandUseData, tfn: LandUseData, output_folder: pathlib.Path):
-    output_folder.mkdir(exist_ok=True, parents=True)
+def compare_landuse(
+    eddie: EDDIELandUseData, tfn: LandUseData, output_file_base: pathlib.Path
+) -> dict[LandUseType, pd.DataFrame]:
+    """Compare EDDIE to TfN land use data in Excel workbook.
+
+    Outputs a spreadsheet for each land use type containing
+    4 sheets: EDDIE, TfN, Difference and % Difference.
+
+    Parameters
+    ----------
+    eddie : EDDIELandUseData
+        Land use data taken from the EDDIE spreadsheet.
+    tfn : LandUseData
+        TfN's land use data.
+    output_file_base : pathlib.Path
+        Base filepath used for naming Excel workbooks..
+
+    Returns
+    -------
+    dict[LandUseType, pd.DataFrame]
+        Land use data with 4 index columns ('region', 'local_authority',
+        'units' and 'lad_2020_zone_id') with column groups 'EDDIE', 'TfN',
+        'Difference' and '% Difference', each containing a column for
+        each year.
+    """
+    output_file_base.parent.mkdir(exist_ok=True, parents=True)
 
     LOG.info("Comparing EDDIE to TfN land use")
+    comparison: dict[LandUseType, pd.DataFrame] = {}
     for pop_emp in LandUseType.to_list():
         eddie_data = eddie.data[pop_emp].copy()
         eddie_data.columns = pd.MultiIndex.from_product((("EDDIE",), eddie_data.columns))
@@ -190,13 +230,82 @@ def compare_landuse(eddie: EDDIELandUseData, tfn: LandUseData, output_folder: pa
                 continue
 
             merged.loc[:, ("Difference", yr)] = tfn_col - merged[("EDDIE", yr)]
-            merged.loc[:, ("% Difference", yr)] = (tfn_col / merged[("EDDIE", yr)]) - 1
+            merged.loc[:, ("% Difference", yr)] = (
+                np.divide(
+                    tfn_col,
+                    merged[("EDDIE", yr)],
+                    out=np.ones_like(tfn_col.values),
+                    where=merged[("EDDIE", yr)] > 0,
+                )
+                - 1
+            )
 
-        file = output_folder / f"EDDIE_TfN_landuse_comparison-{pop_emp.value}.xlsx"
+        comparison[pop_emp] = merged
+
+        file = output_file_base.with_name(output_file_base.stem + f"-{pop_emp.value}.xlsx")
         LOG.info("Writing: %s", file)
         with pd.ExcelWriter(file) as excel:
             for name in merged.columns.get_level_values(0).unique():
                 merged.loc[:, name].to_excel(excel, sheet_name=name)
+
+    return comparison
+
+
+def comparison_heatmaps(
+    comparisons: dict[LandUseType, pd.DataFrame],
+    geodata: gpd.GeoDataFrame,
+    geom_id_column: str,
+    years: list[int],
+    output_file_base: pathlib.Path,
+) -> None:
+    years = [str(y) for y in years]
+    LOG.info("Plotting EDDIE vs TfN comparisons for %s", ", ".join(years))
+
+    plt.rcParams["figure.facecolor"] = "w"
+
+    for pop_emp, data in comparisons.items():
+        data = data.loc[:, "% Difference"].reset_index()
+        data = data.loc[:, [geom_id_column] + years]
+        data = data.loc[data[geom_id_column] != "N/A"]
+
+        geodata = geodata[[geom_id_column, "geometry"]].merge(
+            data, on=geom_id_column, how="left", validate="1:1"
+        )
+
+        for yr in years:
+            fig = plots._heatmap_figure(
+                geodata,
+                yr,
+                f"EDDIE vs TfN {pop_emp.value.title()} Comparison - {yr}",
+                n_bins=5,
+                positive_negative_colormaps=True,
+            )
+            file = output_file_base.with_name(
+                output_file_base.stem + f"-{pop_emp.value}_{yr}.png"
+            )
+            fig.savefig(file)
+            LOG.info("Written: %s", file)
+
+
+def write_eddie_format(
+    comparisons: dict[LandUseType, pd.DataFrame], output_file: pathlib.Path
+) -> None:
+    LOG.info("Writing TfN land use to EDDIE format")
+    with pd.ExcelWriter(output_file) as excel:
+        for pop_emp, data in comparisons.items():
+            data = data.loc[data.index.get_level_values("lad_2020_zone_id") != "N/A", "TfN"]
+
+            quarters = []
+            for yr in data.columns:
+                for q in range(1, 5):
+                    series = data[yr].copy()
+                    series.name = f"{yr} Q{q}"
+                    quarters.append(series)
+
+            data = pd.concat(quarters, axis=1)
+            data.to_excel(excel, sheet_name=pop_emp.value.title())
+
+    LOG.info("Written: %s", output_file)
 
 
 def main(params: EDDIEComparisonParameters):
@@ -204,7 +313,18 @@ def main(params: EDDIEComparisonParameters):
     tfn_folder = params.tfn_base_folder / params.scenario.value
     tfn = load_landuse_tfn(tfn_folder, params.scenario)
 
-    compare_landuse(eddie, tfn, params.output_folder)
+    output_file_base = params.output_folder / "EDDIE_TfN_landuse_comparison"
+    comparisons = compare_landuse(eddie, tfn, output_file_base)
+    write_eddie_format(comparisons, params.output_folder / "TfN_landuse-EDDIE_format.xlsx")
+
+    lad_geom = gpd.read_file(params.lad_shapefile.path)
+    lad_geom = lad_geom.loc[:, [params.lad_shapefile.id_column, "geometry"]]
+    lad_zones = nd.get_zoning_system(EDDIE_ZONE_SYSTEM)
+    lad_geom = lad_geom.rename(columns={params.lad_shapefile.id_column: lad_zones.col_name})
+
+    comparison_heatmaps(
+        comparisons, lad_geom, lad_zones.col_name, params.map_years, output_file_base
+    )
 
 
 if __name__ == "__main__":
