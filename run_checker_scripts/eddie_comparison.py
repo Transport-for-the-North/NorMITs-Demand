@@ -207,11 +207,26 @@ def compare_landuse(
         index_columns = eddie_data.index.names
         merged = eddie_data.reset_index().merge(
             tfn_data.reset_index(),
+            how="outer",
             on=(nd.get_zoning_system(EDDIE_ZONE_SYSTEM).col_name,),
             validate="1:1",
+            indicator=True,
         )
+
         merged = merged.set_index([(c,) for c in index_columns])
         merged.index.names = index_columns
+
+        join_check = merged["_merge"].to_frame(name="Data Found")
+        join_check.loc[:, "Data Found"] = join_check["Data Found"].replace(
+            {"both": "Both", "left_only": "EDDIE only", "right_only": "TfN only"}
+        )
+        merged = merged.drop(columns="_merge")
+
+        merge_stats = dict(zip(*np.unique(join_check["Data Found"], return_counts=True)))
+        if merge_stats.get("EDDIE only", 0) > 0 or merge_stats.get("TfN only", 0) > 0:
+            LOG.warning(
+                "EDDIE & TfN do not share all LADs, counts of LADs found in %s", merge_stats
+            )
 
         # Calculate region totals
         units = merged.index.get_level_values("units")[0]
@@ -221,7 +236,18 @@ def compare_landuse(
             if region == "Great Britain":
                 continue
             index_slice = pd.IndexSlice[region, "Total", units, "N/A"]
-            merged.loc[index_slice, :] = merged.loc[region].sum(axis=0)
+
+            if isinstance(region, float) and np.isnan(region):
+                # Append total to merged because cannot insert using loc with NaN
+                total = (
+                    merged.loc[region]
+                    .sum(axis=0)
+                    .to_frame(name=(region, "Total", units, "N/A"))
+                    .T
+                )
+                merged = pd.concat([merged, total])
+            else:
+                merged.loc[index_slice, :] = merged.loc[region].sum(axis=0)
 
         for _, yr in eddie_data.columns:
             try:
@@ -229,15 +255,20 @@ def compare_landuse(
             except KeyError:
                 continue
 
-            merged.loc[:, ("Difference", yr)] = tfn_col - merged[("EDDIE", yr)]
-            merged.loc[:, ("% Difference", yr)] = (
+            eddie_col = merged[("EDDIE", yr)]
+            merged.loc[:, ("Difference", yr)] = tfn_col - eddie_col
+
+            perc_diff = (
                 np.divide(
                     tfn_col,
-                    merged[("EDDIE", yr)],
+                    eddie_col,
                     out=np.ones_like(tfn_col.values),
-                    where=merged[("EDDIE", yr)] > 0,
+                    where=eddie_col > 0,
                 )
                 - 1
+            )
+            merged.loc[:, ("% Difference", yr)] = np.where(
+                np.isnan(tfn_col) | np.isnan(eddie_col), np.nan, perc_diff
             )
 
         comparison[pop_emp] = merged
@@ -247,6 +278,8 @@ def compare_landuse(
         with pd.ExcelWriter(file) as excel:
             for name in merged.columns.get_level_values(0).unique():
                 merged.loc[:, name].to_excel(excel, sheet_name=name)
+
+            join_check.to_excel(excel, sheet_name="LAD Join")
 
     return comparison
 
