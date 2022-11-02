@@ -583,7 +583,7 @@ def create_factors_for_missing_moira_movements(mx, edgeFactors, other_tickets_df
     return upd_edge_factors, other_tickets_df, no_factors_df
 
 
-def apply_edge_growth_method1_from(mx, edgeFactors):
+def apply_edge_growth_method1(mx, edgeFactors):
     """
     Parameters
     ----------
@@ -654,86 +654,6 @@ def apply_edge_growth_method1_from(mx, edgeFactors):
             "N_Demand",
         ]
     ]
-
-    return mx
-
-
-def apply_edge_growth_method1_to(mx, edgeFactors):
-    """
-    Parameters
-    ----------
-    mx : pandas dataframe
-        prepared stn2stn matrix by flow, ticket type and purpose
-    edgeFactors : pandas dataframe
-        EDGE gowth factors by flow, ticket type and purpose
-
-
-    Function
-    ---------
-    applies EDGE growth to the stn2stn demand by flow, ticekt type and purpose
-    using method 1 where the factors are applied on P=D and A=O level
-
-    Returns
-    -------
-    mx : pandas dataframe
-        grown stn2stn demand matrix
-    """
-    # melt Matrix
-    mx = pd.melt(
-        mx,
-        id_vars=[
-            "from_model_zone_id",
-            "to_model_zone_id",
-            "from_stn_zone_id",
-            "O_TLC",
-            "to_stn_zone_id",
-            "D_TLC",
-            "userclass",
-            "Purpose",
-        ],
-        value_vars=["F", "R", "S"],
-    )
-    # rename column
-    mx = mx.rename(
-        columns={
-            "value": "T_Demand",
-            "variable": "TicketType",
-            "O_TLC": "ZoneCodeFrom",
-            "D_TLC": "ZoneCodeTo",
-            "Purpose": "purpose",
-        }
-    )
-    # merge new factors file to matrix
-    mx = mx.merge(
-        edgeFactors,
-        how="left",
-        left_on=["ZoneCodeFrom", "ZoneCodeTo", "TicketType", "purpose"],
-        right_on=["ZoneCodeTo", "ZoneCodeFrom", "TicketType", "purpose"],
-    )
-    # Records with nan means no factor was found hence no frowth therfore fill nan with 1
-    mx["Demand_rate"] = mx[["Demand_rate"]].fillna(1)
-    # fill nan flag with zero as it doesn;t exist in the inut EDGE factors
-    mx["Flag"] = mx[["Flag"]].fillna(0)
-    # apply growth
-    mx["N_Demand"] = mx["T_Demand"] * mx["Demand_rate"]
-    # keep needed columns
-    mx = mx[
-        [
-            "from_model_zone_id",
-            "to_model_zone_id",
-            "from_stn_zone_id",
-            "ZoneCodeFrom_x",
-            "to_stn_zone_id",
-            "ZoneCodeTo_x",
-            "userclass",
-            "purpose",
-            "TicketType",
-            "T_Demand",
-            "N_Demand",
-        ]
-    ]
-    # rename column
-    mx = mx.rename(columns={"ZoneCodeFrom_x": "ZoneCodeFrom", "ZoneCodeTo_x": "ZoneCodeTo"})
 
     return mx
 
@@ -1429,10 +1349,7 @@ def run_edge_growth(params):
             method = segments_method[segment]
             # apply factoring based on demand segment
             if method == 1:
-                if segment in internal_to_home:
-                    demandMX = apply_edge_growth_method1_to(demandMX, edge_growth_factors)
-                else:
-                    demandMX = apply_edge_growth_method1_from(demandMX, edge_growth_factors)
+                demandMX = apply_edge_growth_method1(demandMX, edge_growth_factors)
             else:
                 demandMX = apply_edge_growth_method2(demandMX, edge_growth_factors)
 
