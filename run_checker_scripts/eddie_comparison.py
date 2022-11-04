@@ -28,7 +28,8 @@ from normits_demand.core.enumerations import LandUseType
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_traveller_segmentation")
 TFN_ZONE_SYSTEM = "msoa"
-EDDIE_ZONE_SYSTEM = "lad_2020"
+EDDIE_ZONE_SYSTEM = "lad_2017"
+EDDIE_LAD_LOOKUP_SHEET = "I; Map Full LA-reduced LA list"
 
 ##### CLASSES #####
 class EDDIEComparisonParameters(config_base.BaseConfig):
@@ -48,14 +49,6 @@ class EDDIEComparisonParameters(config_base.BaseConfig):
         r"\Codebase\EDDIE\TfN Land Use Comparison"
     )
     map_years: list[int] = [2018, 2038]
-    lad_shapefile: plots.GeoSpatialFile = plots.GeoSpatialFile(
-        pathlib.Path(
-            r"Y:\Data Strategy\GIS Shapefiles"
-            r"\Local_Authority_Districts_(December_2020)_UK_BFC"
-            r"\Local_Authority_Districts_(December_2020)_UK_BGC.shp"
-        ),
-        "LAD20CD",
-    )
 
 
 class EDDIELandUseData(NamedTuple):
@@ -70,12 +63,34 @@ class LandUseData(NamedTuple):
 
 
 ##### FUNCTIONS #####
+def column_name_tidy(df: pd.DataFrame) -> pd.DataFrame:
+    df.columns = [re.sub(r"\s+", "_", str(c).lower().strip()) for c in df.columns]
+    return df
+
+
+def load_eddie_lad_lookup(path: pathlib.Path) -> pd.DataFrame:
+    LOG.info("Loading EDDIE LAD lookup from '%s' in '%s'", EDDIE_LAD_LOOKUP_SHEET, path)
+    lookup = pd.read_excel(path, sheet_name=EDDIE_LAD_LOOKUP_SHEET, usecols="H:K", skiprows=14)
+    lookup = lookup.dropna(how="all")
+    lookup = column_name_tidy(lookup)
+
+    correct_codes = lookup["lad13cd"].str.match(r"^[EWS]\d+$")
+    LOG.warning(
+        "Dropping %s EDDIE LADs with incorrect codes:\n%s",
+        np.sum(~correct_codes),
+        lookup.loc[~correct_codes],
+    )
+    return lookup.loc[correct_codes]
+
+
 def load_landuse_eddie(
     path: pathlib.Path, sheet_name: str, header_row: int
 ) -> EDDIELandUseData:
+    lad_lookup = load_eddie_lad_lookup(path)
+
     LOG.info("Loading EDDIE data from '%s' in '%s'", sheet_name, path)
     data = pd.read_excel(path, sheet_name=sheet_name, skiprows=header_row - 1, na_values="-")
-    data.columns = [re.sub(r"\s+", "_", c.lower().strip()) for c in data.columns]
+    data = column_name_tidy(data)
 
     unnamed = [c for c in data.columns if c.startswith("unnamed:")]
     data = data.drop(columns=unnamed)
@@ -103,12 +118,12 @@ def load_landuse_eddie(
         data = data.drop(columns=columns)
 
     # Add zone code column to index
-    zones = nd.get_zoning_system(EDDIE_ZONE_SYSTEM)
-    desc_to_zone = {v: k for k, v in zones.zone_to_description_dict.items()}
-    data.loc[:, zones.col_name] = data["local_authority"].replace(desc_to_zone)
+    lad_replace = lad_lookup.set_index("cebr_lad")["lad13cd"].to_dict()
+    zone_col_name = f"{EDDIE_ZONE_SYSTEM}_zone_id"
+    data.loc[:, zone_col_name] = data["local_authority"].replace(lad_replace)
 
     # TODO(MB) Keep track of original Excel row numbers for replacing data
-    data = data.set_index(["variable", "region", "local_authority", "units", zones.col_name])
+    data = data.set_index(["variable", "region", "local_authority", "units", zone_col_name])
 
     return EDDIELandUseData(
         sheet_name,
@@ -326,7 +341,9 @@ def write_eddie_format(
     LOG.info("Writing TfN land use to EDDIE format")
     with pd.ExcelWriter(output_file) as excel:
         for pop_emp, data in comparisons.items():
-            data = data.loc[data.index.get_level_values("lad_2020_zone_id") != "N/A", "TfN"]
+            data = data.loc[
+                data.index.get_level_values(f"{EDDIE_ZONE_SYSTEM}_zone_id") != "N/A", "TfN"
+            ]
 
             quarters = []
             for yr in data.columns:
@@ -350,13 +367,16 @@ def main(params: EDDIEComparisonParameters):
     comparisons = compare_landuse(eddie, tfn, output_file_base)
     write_eddie_format(comparisons, params.output_folder / "TfN_landuse-EDDIE_format.xlsx")
 
-    lad_geom = gpd.read_file(params.lad_shapefile.path)
-    lad_geom = lad_geom.loc[:, [params.lad_shapefile.id_column, "geometry"]]
-    lad_zones = nd.get_zoning_system(EDDIE_ZONE_SYSTEM)
-    lad_geom = lad_geom.rename(columns={params.lad_shapefile.id_column: lad_zones.col_name})
+    eddie_zone = nd.get_zoning_system(EDDIE_ZONE_SYSTEM)
+    eddie_zone_meta = eddie_zone.get_metadata()
+    eddie_geom = gpd.read_file(eddie_zone_meta.shapefile_path)
+    eddie_geom = eddie_geom.loc[:, [eddie_zone_meta.shapefile_id_col, "geometry"]]
+    eddie_geom = eddie_geom.rename(
+        columns={eddie_zone_meta.shapefile_id_col: eddie_zone.col_name}
+    )
 
     comparison_heatmaps(
-        comparisons, lad_geom, lad_zones.col_name, params.map_years, output_file_base
+        comparisons, eddie_geom, eddie_zone.col_name, params.map_years, output_file_base
     )
 
 
