@@ -252,6 +252,19 @@ class EDGEParameters(config_base.BaseConfig):
             raise ValueError(f"file doesn't exist: {value}")
         return value
 
+    @pydantic.root_validator(skip_on_failure=True)
+    def _check_factors_path(  # pylint: disable=no-self-argument
+        cls, values: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Check the factors Path."""
+        path: Path = values["edge_growth_dir"]
+        if not path.is_dir():
+            raise ValueError(
+                f"EDGE factors folder doesn't exist: {path}"
+            )
+
+        return values
+
     @property
     def edge_factors_path(self) -> Path:
         """Path to EDGE factors file."""

@@ -10,10 +10,13 @@ import re
 import subprocess
 
 # Third party imports
+import typing as typ
+import subprocess as sp
 
 # Local imports
 from normits_demand import logging as nd_log
 from normits_demand.utils import general
+from normits_demand.utils import file_ops
 
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
@@ -141,11 +144,76 @@ class CUBEMatConverter:
 
         return mat_path
 
+    def mat_2_omx(self,
+                  mat_file: Path,
+                  out_path: Path,
+                  out_file: str):
+        """Convert Cube .MAT to .OMX.
 
-##### FUNCTIONS #####
+        Parameters
+        ----------
+        mat_file : str
+            full path to the .mat file.
+        out_path : str
+            path to folder where outputs to be saved.
+        out_file : str
+            name of the output omx file.
+
+        Function
+        ----------
+        function takes a Cube .MAT file and exports it to .OMX file
+
+        Returns
+        -------
+        None.
+
+        """
+        # check files exists
+        file_ops.check_file_exists(mat_file)
+
+        to_write = [
+            f'convertmat from="{mat_file}" to="{out_path}\\{out_file}.omx" '
+            'format=omx compression=4'
+        ]
+        with open(f"{out_path}\\Mat2OMX.s", "w") as script:
+            for line in to_write:
+                print(line, file=script)
+
+        proc_single(
+            [
+                f'"{self.voyager_path.resolve()}" "{out_path}\\Mat2OMX.s" -Pvdmi /Start /Hide /HideScript',
+                f'del "{out_path}\\*.prn"',
+                f'del "{out_path}\\*.VAR"',
+                f'del "{out_path}\\*.PRJ"',
+                f'del "{out_path}\\Mat2OMX.s"',
+            ]
+        )
+
 def _stdout_decode(stdout: bytes) -> str:
     """Convert bytes to string starting with a newline, or return empty string."""
     stdout = stdout.decode().strip()
     if stdout != "":
         stdout = "\n" + stdout
     return stdout
+
+# subprocess
+def proc_single(cmd_list: typ.List):
+    """Execute Single Process at a time.
+
+    Parameters
+    ----------
+    cmd_list : list
+        list of commands to execute.
+
+    Function
+    ----------
+    execute processes one after the other in the list order
+
+    Returns
+    -------
+    None.
+
+    """
+    for ts in cmd_list:
+        pr = sp.Popen(ts, creationflags=sp.CREATE_NEW_CONSOLE, shell=True)
+        pr.wait()
