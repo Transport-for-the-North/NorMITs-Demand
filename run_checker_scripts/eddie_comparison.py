@@ -26,7 +26,8 @@ from normits_demand.core.enumerations import LandUseType
 # pylint: enable=import-error, wrong-import-position
 
 ##### CONSTANTS #####
-LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_traveller_segmentation")
+LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".eddie_comparison")
+LOG_FILE = "EDDIE_comparison.log"
 TFN_ZONE_SYSTEM = "msoa"
 EDDIE_ZONE_SYSTEM = "lad_2017"
 EDDIE_LAD_LOOKUP_SHEET = "I; Map Full LA-reduced LA list"
@@ -353,7 +354,24 @@ def write_eddie_format(
     LOG.info("Written: %s", output_file)
 
 
-def main(params: EDDIEComparisonParameters):
+def main(params: EDDIEComparisonParameters, init_logger: bool = True):
+    if init_logger:
+        nd_log.get_logger(
+            nd_log.get_package_logger_name(),
+            params.output_folder / LOG_FILE,
+            "Running EDDIE Inputs Comparison",
+            log_version=True,
+        )
+        nd_log.capture_warnings(
+            file_handler_args=dict(log_file=params.output_folder / LOG_FILE)
+        )
+
+    LOG.debug("Input parameters:\n%s", params.to_yaml())
+
+    params_out_file = params.output_folder / "EDDIE_comparison_parameters.yml"
+    LOG.info("Written input parameters to %s", params_out_file)
+    params.save_yaml(params_out_file)
+
     eddie = load_landuse_eddie(params.eddie_file, params.eddie_sheet, params.eddie_header_row)
     tfn_folder = params.tfn_base_folder / params.scenario.value
     tfn = load_landuse_tfn(tfn_folder, params.scenario)
