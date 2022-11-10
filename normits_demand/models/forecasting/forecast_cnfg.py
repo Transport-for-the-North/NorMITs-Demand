@@ -219,6 +219,7 @@ class EDGEParameters(config_base.BaseConfig):
     flow_cat_path: Path
     ticket_type_splits_path: Path
     norms_to_edge_stns_path: Path
+    cube_exe : Path
 
     # EDGE file
     edge_flows_path: Path
@@ -246,6 +247,7 @@ class EDGEParameters(config_base.BaseConfig):
         "norms_to_edge_stns_path",
         "edge_flows_path",
         "edge_factors_path",
+        "cube_exe",
     )
     def _check_file(cls, value: Path) -> Path:
         if not value.is_file():

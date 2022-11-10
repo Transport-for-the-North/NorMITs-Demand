@@ -7,6 +7,7 @@ import itertools
 from datetime import datetime
 
 # Third party imports
+from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
@@ -15,6 +16,7 @@ from tqdm import tqdm
 # pylint: enable=import-error,wrong-import-position
 from normits_demand.utils import file_ops
 from normits_demand.models.forecasting import forecast_cnfg
+from normits_demand.matrices.cube_mat_converter import CUBEMatConverter
 # ## CONSTANTS ## #
 LOG = logging.getLogger(__name__)
 
@@ -1043,7 +1045,46 @@ def transpose_matrix(mx_df: pd.DataFrame):
 
     return mx_df
 
+def convert_csv_2_mat(norms_segments : list,
+                      cube_exe: Path,
+                      forecast_year : int,
+                      output_folder: Path):
+    """Convert CSV output matrices to Cube .MAT.
 
+    Parameters
+    ----------
+    norms_segments : list
+        list of NoRMS input demand segments
+    cube_exe : Path
+        path to Cube Voyager executable
+    forecast_year : int
+        forecaset year
+    output_folder : Path
+        path to folder where CSV matrices are saved. this is where the .MAT
+        will also be saved to
+    Function
+    ---------
+    Function converts output CSV matrices into a signle Cube .MAT matrrix
+    in NoRMS input demand matrix format
+
+    Returns
+    -------
+    none
+    """
+    #empty dictionary
+    mats_dict = {}
+    #create a dictionary of matrices and their paths
+    for segment in norms_segments:
+        mats_dict[segment] = Path(output_folder, f"{forecast_year}_24Hr_{segment}.csv")
+    
+    #call CUBE convertor class
+    c_m = CUBEMatConverter(cube_exe)
+    c_m.csv_to_mat(1300,
+                   mats_dict,
+                   Path(output_folder,
+                   "PT_24hr_Demand.MAT"),
+                   1)
+    
 def run_edge_growth(params: forecast_cnfg.EDGEParameters):
     """Run Growth Process."""
     LOG.info("#" * 80)
@@ -1331,7 +1372,11 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
         )
         # norms_matrices2[segment].to_csv(
         #    f'{export_path}/{forecast_year}/{forecast_year}_24Hr_{segment}.csv', index=False)
-
+    # convert to NoRMS format .MAT
+    convert_csv_2_mat(norms_segments,
+                          params.cube_exe,
+                          params.forecast_year,
+                          params.export_path)
     print("Process finished successfully!")
     LOG.info(
         'Process finished successfully @ %s', datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f")

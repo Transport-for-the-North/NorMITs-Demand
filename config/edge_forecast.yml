@@ -12,6 +12,7 @@ segments_to_uc_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\Segmen
 flow_cat_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\FlowCats.csv
 ticket_type_splits_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\TicketTypeSplits.csv
 norms_to_edge_stns_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\norms_to_edge_tlc.csv
+cube_exe: C:\Program Files\Citilabs\CubeVoyager\VOYAGER.EXE
 
 # EDGE Inputs
 edge_flows_path: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Base and Mappings\FC_fullfat1819_NEW_DDG.csv
