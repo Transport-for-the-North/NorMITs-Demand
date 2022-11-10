@@ -20,7 +20,7 @@ sys.path.append(".")
 # pylint: disable=import-error, wrong-import-position
 import normits_demand as nd
 from normits_demand import logging as nd_log
-from normits_demand.utils import config_base, file_ops, plots
+from normits_demand.utils import config_base, file_ops, plots, pandas_utils
 from normits_demand.core.enumerations import LandUseType
 
 # pylint: enable=import-error, wrong-import-position
@@ -63,16 +63,11 @@ class LandUseData(NamedTuple):
 
 
 ##### FUNCTIONS #####
-def column_name_tidy(df: pd.DataFrame) -> pd.DataFrame:
-    df.columns = [re.sub(r"\s+", "_", str(c).lower().strip()) for c in df.columns]
-    return df
-
-
 def load_eddie_lad_lookup(path: pathlib.Path) -> pd.DataFrame:
     LOG.info("Loading EDDIE LAD lookup from '%s' in '%s'", EDDIE_LAD_LOOKUP_SHEET, path)
     lookup = pd.read_excel(path, sheet_name=EDDIE_LAD_LOOKUP_SHEET, usecols="H:K", skiprows=14)
     lookup = lookup.dropna(how="all")
-    lookup = column_name_tidy(lookup)
+    lookup = pandas_utils.column_name_tidy(lookup)
 
     correct_codes = lookup["lad13cd"].str.match(r"^[EWS]\d+$")
     LOG.warning(
@@ -90,7 +85,7 @@ def load_landuse_eddie(
 
     LOG.info("Loading EDDIE data from '%s' in '%s'", sheet_name, path)
     data = pd.read_excel(path, sheet_name=sheet_name, skiprows=header_row - 1, na_values="-")
-    data = column_name_tidy(data)
+    data = pandas_utils.column_name_tidy(data)
 
     unnamed = [c for c in data.columns if c.startswith("unnamed:")]
     data = data.drop(columns=unnamed)

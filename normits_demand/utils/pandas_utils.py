@@ -13,6 +13,7 @@ Collection of utility functions specifically for manipulating pandas
 # Builtins
 import os
 import operator
+import re
 import warnings
 import functools
 
@@ -1132,4 +1133,25 @@ def prepend_cols(
     for name, val in zip(col_names, col_vals):
         df.insert(loc=0, column=name, value=val, allow_duplicates=allow_duplicates)
 
+    return df
+
+
+def column_name_tidy(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert column names to lowercase and replace spaces with '_'.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Pandas DataFrame to be updated, will be edited inplace.
+
+    Returns
+    -------
+    pd.DataFrame
+        `df` with updated column names.
+    """
+
+    def rename(col) -> str:
+        return re.sub(r"\s+", "_", str(col).lower().strip())
+
+    df.columns = [rename(c) for c in df.columns]
     return df
