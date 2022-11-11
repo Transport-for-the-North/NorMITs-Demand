@@ -1155,3 +1155,46 @@ def column_name_tidy(df: pd.DataFrame) -> pd.DataFrame:
 
     df.columns = [rename(c) for c in df.columns]
     return df
+
+
+def tidy_dataframe(
+    df: pd.DataFrame,
+    rename: bool = True,
+    drop_unnamed: bool = True,
+    nan_columns: bool = True,
+    nan_rows: bool = True,
+) -> pd.DataFrame:
+    """Drop Nans and normalise column names.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame to update, will not be edited inplace.
+    rename : bool, default True
+        Whether to run `column_name_tidy`.
+    drop_unnamed : bool, default True
+        Whether to drop columns starting with 'unnamed'.
+    nan_columns : bool, default True
+        Whether to drop columns with all Nans.
+    nan_rows : bool, default True
+        Whether to drop rows with all Nans.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of `df` with filtering or renaming done.
+    """
+    if rename:
+        df = column_name_tidy(df.copy())
+
+    if drop_unnamed:
+        unnamed = [c for c in df.columns if c.startswith("unnamed:")]
+        df = df.drop(columns=unnamed)
+
+    if nan_columns:
+        df = df.dropna(axis=1, how="all")
+
+    if nan_rows:
+        df = df.dropna(axis=0, how="all")
+
+    return df
