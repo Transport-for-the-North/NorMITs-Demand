@@ -12,6 +12,7 @@ from typing import NamedTuple
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
+import pydantic
 import geopandas as gpd
 
 # Local imports
@@ -30,26 +31,36 @@ LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".eddie_comparison")
 LOG_FILE = "EDDIE_comparison.log"
 TFN_ZONE_SYSTEM = "msoa"
 EDDIE_ZONE_SYSTEM = "lad_2017"
-EDDIE_LAD_LOOKUP_SHEET = "I; Map Full LA-reduced LA list"
+CONFIG_FILE = pathlib.Path(r"config\checker\EDDIE_comparison_parameters.yml")
+
 
 ##### CLASSES #####
+class WorksheetParams(pydantic.BaseModel):
+    """Parameters for an individual worksheet."""
+
+    sheet_name: str
+    header_row: int
+
+
+class EDDIEWorkbookParams(pydantic.BaseModel):
+    """Parameters for the worksheets in the EDDIE workbook."""
+
+    landuse: WorksheetParams
+    lad_lookup: WorksheetParams
+    wor_wap: WorksheetParams
+    employment_industry: WorksheetParams
+    employment_occupation: WorksheetParams
+
+
 class EDDIEComparisonParameters(config_base.BaseConfig):
-    eddie_file: pathlib.Path = pathlib.Path(
-        r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand"
-        r"\Codebase\EDDIE\EDDIE_Proper_April22_DN.xlsm"
-    )
-    eddie_sheet: str = "I; CEBR_LA_EMP_POP_GDP_Central"
-    eddie_header_row: int = 17
-    tfn_base_folder: pathlib.Path = pathlib.Path(
-        r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand"
-        r"\Inputs\NorMITs Land Use\import\scenarios"
-    )
-    scenario: nd.Scenario = nd.Scenario.SC04_UZC
-    output_folder: pathlib.Path = pathlib.Path(
-        r"C:\WSP_Projects\TfN Secondment\NorMITs-Demand"
-        r"\Codebase\EDDIE\TfN Land Use Comparison"
-    )
-    map_years: list[int] = [2018, 2038]
+    """Parameters for running EDDIE comparison script."""
+
+    eddie_file: pathlib.Path
+    workbook_parameters: EDDIEWorkbookParams
+    tfn_base_folder: pathlib.Path
+    scenario: nd.Scenario
+    output_folder: pathlib.Path
+    map_years: list[int]
 
 
 class EDDIELandUseData(NamedTuple):
@@ -64,9 +75,14 @@ class LandUseData(NamedTuple):
 
 
 ##### FUNCTIONS #####
-def load_eddie_lad_lookup(path: pathlib.Path) -> pd.DataFrame:
-    LOG.info("Loading EDDIE LAD lookup from '%s' in '%s'", EDDIE_LAD_LOOKUP_SHEET, path)
-    lookup = pd.read_excel(path, sheet_name=EDDIE_LAD_LOOKUP_SHEET, usecols="H:K", skiprows=14)
+def load_eddie_lad_lookup(path: pathlib.Path, sheet_params: WorksheetParams) -> pd.DataFrame:
+    LOG.info("Loading EDDIE LAD lookup from '%s' in '%s'", sheet_params.sheet_name, path)
+    lookup = pd.read_excel(
+        path,
+        sheet_name=sheet_params.sheet_name,
+        usecols="H:K",
+        skiprows=sheet_params.header_row - 1,
+    )
     lookup = lookup.dropna(how="all")
     lookup = pandas_utils.column_name_tidy(lookup)
 
@@ -80,12 +96,17 @@ def load_eddie_lad_lookup(path: pathlib.Path) -> pd.DataFrame:
 
 
 def load_landuse_eddie(
-    path: pathlib.Path, sheet_name: str, header_row: int
+    path: pathlib.Path, sheet_params: WorksheetParams, lad_sheet_params: WorksheetParams
 ) -> EDDIELandUseData:
-    lad_lookup = load_eddie_lad_lookup(path)
+    lad_lookup = load_eddie_lad_lookup(path, lad_sheet_params)
 
-    LOG.info("Loading EDDIE data from '%s' in '%s'", sheet_name, path)
-    data = pd.read_excel(path, sheet_name=sheet_name, skiprows=header_row - 1, na_values="-")
+    LOG.info("Loading EDDIE data from '%s' in '%s'", sheet_params.sheet_name, path)
+    data = pd.read_excel(
+        path,
+        sheet_name=sheet_params.sheet_name,
+        skiprows=sheet_params.header_row - 1,
+        na_values="-",
+    )
     data = pandas_utils.column_name_tidy(data)
 
     unnamed = [c for c in data.columns if c.startswith("unnamed:")]
@@ -122,7 +143,7 @@ def load_landuse_eddie(
     data = data.set_index(["variable", "region", "local_authority", "units", zone_col_name])
 
     return EDDIELandUseData(
-        sheet_name,
+        sheet_params.sheet_name,
         {LandUseType.EMPLOYMENT: data.loc["Emp"], LandUseType.POPULATION: data.loc["Pop"]},
     )
 
@@ -355,6 +376,9 @@ def write_eddie_format(
 
 
 def main(params: EDDIEComparisonParameters, init_logger: bool = True):
+    if not params.output_folder.is_dir():
+        params.output_folder.mkdir(parents=True)
+
     if init_logger:
         nd_log.get_logger(
             nd_log.get_package_logger_name(),
@@ -367,12 +391,15 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
         )
 
     LOG.debug("Input parameters:\n%s", params.to_yaml())
-
     params_out_file = params.output_folder / "EDDIE_comparison_parameters.yml"
     LOG.info("Written input parameters to %s", params_out_file)
     params.save_yaml(params_out_file)
 
-    eddie = load_landuse_eddie(params.eddie_file, params.eddie_sheet, params.eddie_header_row)
+    eddie = load_landuse_eddie(
+        params.eddie_file,
+        params.workbook_parameters.landuse,
+        params.workbook_parameters.lad_lookup,
+    )
     tfn_folder = params.tfn_base_folder / params.scenario.value
     tfn = load_landuse_tfn(tfn_folder, params.scenario)
 
@@ -394,4 +421,7 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
 
 
 if __name__ == "__main__":
-    main(EDDIEComparisonParameters())
+    # TODO(MB) Add argument for config file path
+    parameters = EDDIEComparisonParameters.load_yaml(CONFIG_FILE)
+
+    main(parameters)

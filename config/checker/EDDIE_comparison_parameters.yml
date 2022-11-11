@@ -1,0 +1,23 @@
+eddie_file: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Codebase\EDDIE\Nov21_EDDIE_Proper_DN_v3.xlsm
+workbook_parameters:
+  landuse:
+    sheet_name: I; CEBR_LA_EMP_POP_GDP
+    header_row: 17
+  lad_lookup:
+    sheet_name: I; Map Full LA-reduced LA list
+    header_row: 15
+  wor_wap:
+    sheet_name: I; CEBR_Regions_WOR_WAP
+    header_row: 16
+  employment_industry:
+    sheet_name: I; CEBR_LA_EMPbyIndustry
+    header_row: 13
+  employment_occupation:
+    sheet_name: I; CEBR_LA_EMPbyOccupation
+    header_row: 13
+tfn_base_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Inputs\NorMITs Land Use\import\scenarios
+scenario: SC04_UZC
+output_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Codebase\EDDIE\TfN Land Use Comparison
+map_years:
+- 2018
+- 2038
