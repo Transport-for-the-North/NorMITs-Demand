@@ -17,6 +17,7 @@ from tqdm import tqdm
 from normits_demand.utils import file_ops
 from normits_demand.models.forecasting import forecast_cnfg
 from normits_demand.matrices.cube_mat_converter import CUBEMatConverter
+
 # ## CONSTANTS ## #
 LOG = logging.getLogger(__name__)
 
@@ -46,7 +47,9 @@ def add_tls2stations_matrix(mx_df: pd.DataFrame, stn_tlc: pd.DataFrame):
 
     """
     # add TLCs
-    mx_df = mx_df.merge(stn_tlc, how="left", left_on=["from_stn_zone_id"], right_on=["stn_zone_id"])
+    mx_df = mx_df.merge(
+        stn_tlc, how="left", left_on=["from_stn_zone_id"], right_on=["stn_zone_id"]
+    )
     # keep needed columns
     mx_df = mx_df[
         [
@@ -64,7 +67,9 @@ def add_tls2stations_matrix(mx_df: pd.DataFrame, stn_tlc: pd.DataFrame):
     # rename column
     mx_df = mx_df.rename(columns={"STATIONCODE": "O_TLC", "STATIONNAME": "O_StnName"})
     # add TLCs
-    mx_df = mx_df.merge(stn_tlc, how="left", left_on=["to_stn_zone_id"], right_on=["stn_zone_id"])
+    mx_df = mx_df.merge(
+        stn_tlc, how="left", left_on=["to_stn_zone_id"], right_on=["stn_zone_id"]
+    )
     # keep needed columns
     mx_df = mx_df[
         [
@@ -88,7 +93,11 @@ def add_tls2stations_matrix(mx_df: pd.DataFrame, stn_tlc: pd.DataFrame):
 
 
 def prepare_stn2stn_matrix(
-    demand_mx: pd.DataFrame, irsj_props: pd.DataFrame, dist_mx: pd.DataFrame, stn_tlc: pd.DataFrame
+    demand_mx: pd.DataFrame,
+    irsj_props: pd.DataFrame,
+    dist_mx: pd.DataFrame,
+    stn_tlc: pd.DataFrame,
+    to_home: bool = False,
 ):
     """Prepare stn 2 stn matrix with TLCs and distacnes from ij matrix.
 
@@ -102,7 +111,8 @@ def prepare_stn2stn_matrix(
         stn2stn distance matrix
     stn_tlc : pandas dataframe
         station zone id to TLC lookup dataframe
-
+    to_home : bool
+        True if the demand is a ToHome demand
     Function
     ---------
     produce stn2stn demand matrix with distance and TLC codes
@@ -113,13 +123,16 @@ def prepare_stn2stn_matrix(
         demand matrix with added attributes of Distacne and TLCs
 
     """
+    # if ToHome demand then transpose matrix
+    if to_home:
+        demand_mx = transpose_matrix(demand_mx)
     # merge demand matrix to iRSj probabilities
     mx_df = demand_mx.merge(
         irsj_props, how="left", on=["from_model_zone_id", "to_model_zone_id", "userclass"]
     )
     # calculate movement demand proportion
-    mx_df.loc[:,"Demand"] = mx_df["Demand"] * mx_df["proportion"]
-    #mx_df["Demand"] = mx_df["Demand"] * mx_df["proportion"]
+    mx_df.loc[:, "Demand"] = mx_df["Demand"] * mx_df["proportion"]
+    # mx_df["Demand"] = mx_df["Demand"] * mx_df["proportion"]
     # group by stn2stn
     mx_df = (
         mx_df.groupby(
@@ -158,90 +171,9 @@ def prepare_stn2stn_matrix(
     return mx_df
 
 
-def prepare_stn2stn_matrix_tohome(
-    demand_mx: pd.DataFrame, irsj_props: pd.DataFrame, dist_mx: pd.DataFrame, stn_tlc: pd.DataFrame
+def assign_edge_flow(
+    flows_file: pd.DataFrame, flows_lookup: pd.DataFrame, mx_df: pd.DataFrame
 ):
-    """Prepare stn 2 stn matrix with TLCs and distacnes from ij matrix for ToHome segments.
-
-    Parameters
-    ----------
-    demand_mx : pandas dataframe
-        demand matrix dataframe
-    irsj_props : pandas dataframe
-        iRSj split probabilities dataframe
-    dist_mx : pandas dataframe
-        stn2stn distance matrix
-    stn_tlc : pandas dataframe
-        station zone id to TLC lookup dataframe
-
-    Function
-    ---------
-    produce stn2stn demand matrix with distance and TLC codes for 'To Home' segments
-    i.e. transpose the matrix into OD matrix
-
-    Returns
-    -------
-    mx_df : pandas dataframe
-        demand matrix with added attributes of Distacne and TLCs
-
-    """
-    # transpose matrix
-    demand_mx = transpose_matrix(demand_mx)
-    # merge demand matrix to iRSj probabilities
-    mx_df = demand_mx.merge(
-        irsj_props,
-        how="left",
-        left_on=["from_model_zone_id", "to_model_zone_id", "userclass"],
-        right_on=["to_model_zone_id", "from_model_zone_id", "userclass"],
-    )
-    # rename column
-    mx_df = mx_df.rename(
-        columns={
-            "from_model_zone_id_x": "from_model_zone_id",
-            "to_model_zone_id_x": "to_model_zone_id",
-        }
-    )
-    # calculate movement demand proportion
-    mx_df.loc[:,"Demand"] = mx_df["Demand"] * mx_df["proportion"]
-    # group by stn2stn
-    mx_df = (
-        mx_df.groupby(
-            [
-                "from_model_zone_id",
-                "to_model_zone_id",
-                "from_stn_zone_id",
-                "to_stn_zone_id",
-                "userclass",
-            ]
-        )["Demand"]
-        .sum()
-        .reset_index()
-    )
-    # remove records of zer ostations
-    mx_df = mx_df.loc[mx_df["from_stn_zone_id"] != 0].reset_index()
-    # add distance matrix to get stn2stn distance
-    mx_df = mx_df.merge(dist_mx, how="left", on=["from_stn_zone_id", "to_stn_zone_id"])
-    # keep needed columns
-    mx_df = mx_df[
-        [
-            "from_model_zone_id",
-            "to_model_zone_id",
-            "from_stn_zone_id",
-            "to_stn_zone_id",
-            "userclass",
-            "tran_distance",
-            "Demand",
-        ]
-    ]
-    # rename column
-    mx_df = mx_df.rename(columns={"tran_distance": "Distance"})
-    # add TLCs
-    mx_df = add_tls2stations_matrix(mx_df, stn_tlc)
-
-    return mx_df
-
-
-def assign_edge_flow(flows_file: pd.DataFrame, flows_lookup: pd.DataFrame, mx_df: pd.DataFrame):
     """Assign EDGE flow to each stn2stn movement.
 
     Parameters
@@ -299,11 +231,11 @@ def assign_purposes(mx_df: pd.DataFrame):
     """
     # create empty vector
     mx_df["Purpose"] = ""
-    #assign jurney purpose to userclasses
+    # assign jurney purpose to userclasses
     userclass_lookup = {
-    **dict.fromkeys((1, 2, 3), "Business"),
-    **dict.fromkeys((4, 5, 6), "Commuting"),
-    **dict.fromkeys((7, 8, 9), "Leisure"),
+        **dict.fromkeys((1, 2, 3), "Business"),
+        **dict.fromkeys((4, 5, 6), "Commuting"),
+        **dict.fromkeys((7, 8, 9), "Leisure"),
     }
     mx_df.loc[:, "Purpose"] = mx_df["userclass"].replace(userclass_lookup)
 
@@ -329,28 +261,30 @@ def add_distance_band_tag_flow(mx_df: pd.DataFrame):
         dataframe with added new TAG flow
     """
     # set new flow to match the non-distance flow to begin with
-    mx_df.loc[:,"TAG_Flow"] = mx_df["TAG_NonDist"]
+    mx_df.loc[:, "TAG_Flow"] = mx_df["TAG_NonDist"]
     # Outside South East
     mx_df.loc[
-    (mx_df["TAG_NonDist"] == "Outside South East") & (mx_df["Distance"] < 25),
-    "TAG_Flow"
+        (mx_df["TAG_NonDist"] == "Outside South East") & (mx_df["Distance"] < 25), "TAG_Flow"
     ] = "Outside South East <25 miles"
     mx_df.loc[
-    (mx_df["TAG_NonDist"] == "Outside South East") & (mx_df["Distance"] >= 25)
-    & (mx_df["Distance"] < 100), "TAG_Flow"
+        (mx_df["TAG_NonDist"] == "Outside South East")
+        & (mx_df["Distance"] >= 25)
+        & (mx_df["Distance"] < 100),
+        "TAG_Flow",
     ] = "Outside South East 25 to 100 miles"
     mx_df.loc[
-    (mx_df["TAG_NonDist"] == "Outside South East") & (mx_df["Distance"] >= 100),
-    "TAG_Flow"
+        (mx_df["TAG_NonDist"] == "Outside South East") & (mx_df["Distance"] >= 100), "TAG_Flow"
     ] = "Outside South East  100 + miles - adjusted"
     # Outside South East to/from London
     mx_df.loc[
-    (mx_df["TAG_NonDist"] == "Outside South East to/from London") & (mx_df["Distance"] < 100),
-    "TAG_Flow"
+        (mx_df["TAG_NonDist"] == "Outside South East to/from London")
+        & (mx_df["Distance"] < 100),
+        "TAG_Flow",
     ] = "Outside South East to/from London < 100 miles"
     mx_df.loc[
-    (mx_df["TAG_NonDist"] == "Outside South East to/from London") & (mx_df["Distance"] >= 100),
-    "TAG_Flow"
+        (mx_df["TAG_NonDist"] == "Outside South East to/from London")
+        & (mx_df["Distance"] >= 100),
+        "TAG_Flow",
     ] = "Outside South East to/from London 100 + miles"
 
     return mx_df
@@ -375,9 +309,9 @@ def apply_ticket_splits(mx_df: pd.DataFrame):
         demand matrix by flow, ticket type and purpose
     """
     # apply split proportions by ticket type
-    mx_df.loc[:,"F"] = mx_df["F"] * mx_df["Demand"]
-    mx_df.loc[:,"R"] = mx_df["R"] * mx_df["Demand"]
-    mx_df.loc[:,"S"] = mx_df["S"] * mx_df["Demand"]
+    mx_df.loc[:, "F"] = mx_df["F"] * mx_df["Demand"]
+    mx_df.loc[:, "R"] = mx_df["R"] * mx_df["Demand"]
+    mx_df.loc[:, "S"] = mx_df["S"] * mx_df["Demand"]
 
     # keep needed columns
     mx_df = mx_df[
@@ -479,9 +413,9 @@ def create_factors_for_missing_moira_movements(
     # add internal flag
     missing_moira_zonal["Internal"] = 0
     missing_moira_zonal.loc[
-    (missing_moira_zonal["from_model_zone_id"] < 1158)
-    & (missing_moira_zonal["to_model_zone_id"] < 1158),
-    "Internal"
+        (missing_moira_zonal["from_model_zone_id"] < 1158)
+        & (missing_moira_zonal["to_model_zone_id"] < 1158),
+        "Internal",
     ] = 1
 
     # group to stn2stn
@@ -517,8 +451,14 @@ def create_factors_for_missing_moira_movements(
     )
     # keep needed columns
     available_ticket = available_ticket[
-        ["ZoneCodeFrom", "ZoneCodeTo", "purpose", "Missing_TicketType",
-         "Available_TicketType","Demand_rate"]
+        [
+            "ZoneCodeFrom",
+            "ZoneCodeTo",
+            "purpose",
+            "Missing_TicketType",
+            "Available_TicketType",
+            "Demand_rate",
+        ]
     ]
     # rename columns
     available_ticket = available_ticket.rename(columns={"Missing_TicketType": "TicketType"})
@@ -565,7 +505,9 @@ def create_factors_for_missing_moira_movements(
     return upd_edge_factors, other_tickets_df, no_factors_df
 
 
-def apply_edge_growth_method1(mx_df: pd.DataFrame, edge_factors: pd.DataFrame):
+def apply_edge_growth_method1(
+    mx_df: pd.DataFrame, edge_factors: pd.DataFrame, to_home: bool = False
+):
     """Grow demand by factoring it by EDGE factors using method 1.
 
     Parameters
@@ -574,7 +516,8 @@ def apply_edge_growth_method1(mx_df: pd.DataFrame, edge_factors: pd.DataFrame):
         prepared stn2stn matrix by flow, ticket type and purpose
     edge_factors : pandas dataframe
         EDGE gowth factors by flow, ticket type and purpose
-
+    to_home : bool
+        True if the matrix is a ToHome matrix
 
     Function
     ---------
@@ -612,15 +555,33 @@ def apply_edge_growth_method1(mx_df: pd.DataFrame, edge_factors: pd.DataFrame):
         }
     )
     # merge new factors file to matrix
-    mx_df = mx_df.merge(
-        edge_factors, how="left", on=["ZoneCodeFrom", "ZoneCodeTo", "TicketType", "purpose"]
-    )
+    if to_home:
+        mx_df = mx_df.merge(
+            edge_factors,
+            how="left",
+            left_on=["ZoneCodeFrom", "ZoneCodeTo", "TicketType", "purpose"],
+            right_on=["ZoneCodeTo", "ZoneCodeFrom", "TicketType", "purpose"],
+        )
+
+        mx_df = mx_df.rename(
+            columns={
+                "ZoneCodeFrom_x": "ZoneCodeFrom",
+                "ZoneCodeTo_x": "ZoneCodeTo",
+            }
+        )
+
+    else:
+        mx_df = mx_df.merge(
+            edge_factors,
+            how="left",
+            on=["ZoneCodeFrom", "ZoneCodeTo", "TicketType", "purpose"],
+        )
     # Records with nan means no factor was found hence no frowth therfore fill nan with 1
-    mx_df.loc[:,"Demand_rate"] = mx_df["Demand_rate"].fillna(1)
+    mx_df.loc[:, "Demand_rate"] = mx_df["Demand_rate"].fillna(1)
     # fill nan flag with zero as it doesn;t exist in the inut EDGE factors
-    mx_df.loc[:,"Flag"] = mx_df["Flag"].fillna(0)
+    mx_df.loc[:, "Flag"] = mx_df["Flag"].fillna(0)
     # apply growth
-    mx_df.loc[:,"N_Demand"] = mx_df["T_Demand"] * mx_df["Demand_rate"]
+    mx_df.loc[:, "N_Demand"] = mx_df["T_Demand"] * mx_df["Demand_rate"]
     # keep needed columns
     mx_df = mx_df[
         [
@@ -711,16 +672,16 @@ def apply_edge_growth_method2(mx_df: pd.DataFrame, edge_factors: pd.DataFrame):
         }
     )
     # get average growth for both directions
-    mx_df.loc[:,"Demand_rate"] = mx_df[["1st_Dir_Growth", "2nd_Dir_Growth"]].mean(axis=1)
+    mx_df.loc[:, "Demand_rate"] = mx_df[["1st_Dir_Growth", "2nd_Dir_Growth"]].mean(axis=1)
     # Records with nan means no factor was found hence no growth therfore fill nan with 1
-    mx_df.loc[:,"Demand_rate"] = mx_df[["Demand_rate"]].fillna(1)
+    mx_df.loc[:, "Demand_rate"] = mx_df[["Demand_rate"]].fillna(1)
     # fill nan flag with zero as it doesn;t exist in the inut EDGE factors
-    mx_df.loc[:,"Flag_x"] = mx_df[["Flag_x"]].fillna(0)
-    mx_df.loc[:,"Flag_y"] = mx_df[["Flag_y"]].fillna(0)
+    mx_df.loc[:, "Flag_x"] = mx_df[["Flag_x"]].fillna(0)
+    mx_df.loc[:, "Flag_y"] = mx_df[["Flag_y"]].fillna(0)
     mx_df["Flag"] = 0
     mx_df.loc[(mx_df["Flag_x"] == 1) & (mx_df["Flag_y"] == 1), "Flag"] = 1
     # apply growth
-    mx_df.loc[:,"N_Demand"] = mx_df["T_Demand"] * mx_df["Demand_rate"]
+    mx_df.loc[:, "N_Demand"] = mx_df["T_Demand"] * mx_df["Demand_rate"]
     # keep needed columns
     mx_df = mx_df[
         [
@@ -847,8 +808,9 @@ def prepare_logging_info(
     )
 
 
-def sum_periods_demand(am_df: pd.DataFrame, ip_df: pd.DataFrame,
-                       pm_df: pd.DataFrame, op_df: pd.DataFrame):
+def sum_periods_demand(
+    am_df: pd.DataFrame, ip_df: pd.DataFrame, pm_df: pd.DataFrame, op_df: pd.DataFrame
+):
     """Sum Periods demand to 24Hr demand.
 
     Parameters
@@ -878,7 +840,10 @@ def sum_periods_demand(am_df: pd.DataFrame, ip_df: pd.DataFrame,
     comb_df = comb_df.fillna(0)
     # sum 24Hr demand
     comb_df["Demand"] = (
-        comb_df["AM_Demand"] + comb_df["IP_Demand"] + comb_df["PM_Demand"] + comb_df["OP_Demand"]
+        comb_df["AM_Demand"]
+        + comb_df["IP_Demand"]
+        + comb_df["PM_Demand"]
+        + comb_df["OP_Demand"]
     )
     # keep needed columns
     comb_df = comb_df[["from_model_zone_id", "to_model_zone_id", "Demand"]]
@@ -912,11 +877,13 @@ def average_two_matrices(mx1_df: pd.DataFrame, mx2_df: pd.DataFrame, zones=1300)
         columns=["from_model_zone_id", "to_model_zone_id"],
     )
     # get first matrix
-    avg_mx = avg_mx.merge(mx1_df, how="outer", on=["from_model_zone_id",
-                                                   "to_model_zone_id"]).fillna(0)
+    avg_mx = avg_mx.merge(
+        mx1_df, how="outer", on=["from_model_zone_id", "to_model_zone_id"]
+    ).fillna(0)
     # get second matrix
-    avg_mx = avg_mx.merge(mx2_df, how="outer", on=["from_model_zone_id",
-                                                   "to_model_zone_id"]).fillna(0)
+    avg_mx = avg_mx.merge(
+        mx2_df, how="outer", on=["from_model_zone_id", "to_model_zone_id"]
+    ).fillna(0)
     # sum demand
     avg_mx["Demand"] = (avg_mx["Demand_x"] + avg_mx["Demand_y"]) / 2
     # keep needed columns
@@ -948,13 +915,15 @@ def expand_matrix(mx_df: pd.DataFrame, zones=1300):
         columns=["from_model_zone_id", "to_model_zone_id"],
     )
     # get first matrix
-    expanded_mx = expanded_mx.merge(mx_df, how="outer",
-                                    on=["from_model_zone_id", "to_model_zone_id"]).fillna(0)
+    expanded_mx = expanded_mx.merge(
+        mx_df, how="outer", on=["from_model_zone_id", "to_model_zone_id"]
+    ).fillna(0)
     return expanded_mx
 
 
-def fromto_2_from_by_averaging(matrices_dict: dict, norms_segments: list,
-                               segments_method: dict):
+def fromto_2_from_by_averaging(
+    matrices_dict: dict, norms_segments: list, segments_method: dict
+):
     """Get the FromHome demand by averaging FromHome and ToHome.
 
     Parameters
@@ -978,16 +947,16 @@ def fromto_2_from_by_averaging(matrices_dict: dict, norms_segments: list,
     # empty dictionary
     matrices = {}
 
-    #loop over all norms segments
+    # loop over all norms segments
     for segment in norms_segments:
-        #check if the segment has a ToHome component or if it's a non-home based
-        if ((segment + "_T" in segments_method) and  (segment[:3] != 'NHB')):
-            #average the FromHome and the transposition of the toHome
+        # check if the segment has a ToHome component or if it's a non-home based
+        if (segment + "_T" in segments_method) and (segment[:3] != "NHB"):
+            # average the FromHome and the transposition of the toHome
             matrices[segment] = average_two_matrices(
-                matrices_dict[segment],
-                transpose_matrix(matrices_dict[segment + "_T"]))
+                matrices_dict[segment], transpose_matrix(matrices_dict[segment + "_T"])
+            )
         else:
-            #Expand the matrix and add to the matrices dict
+            # Expand the matrix and add to the matrices dict
             matrices[segment] = expand_matrix(matrices_dict[segment])
 
     return matrices
@@ -1015,9 +984,9 @@ def fromto_2_from_by_from(matrices_dict: dict, norms_segments: list):
     # empty dictionary
     matrices = {}
 
-    #loop over all norms segments
+    # loop over all norms segments
     for segment in norms_segments:
-        #expand the FromHome matrix and add to the matrices dict
+        # expand the FromHome matrix and add to the matrices dict
         matrices[segment] = expand_matrix(matrices_dict[segment])
 
     return matrices
@@ -1040,15 +1009,19 @@ def transpose_matrix(mx_df: pd.DataFrame):
         transposed matrix
     """
     # transpose to-home PA to OD by renaming from <> to model zone id
-    mx_df = mx_df.rename(columns={"from_model_zone_id": "to_model_zone_id",
-                                  "to_model_zone_id": "from_model_zone_id"})
+    mx_df = mx_df.rename(
+        columns={
+            "from_model_zone_id": "to_model_zone_id",
+            "to_model_zone_id": "from_model_zone_id",
+        }
+    )
 
     return mx_df
 
-def convert_csv_2_mat(norms_segments : list,
-                      cube_exe: Path,
-                      forecast_year : int,
-                      output_folder: Path):
+
+def convert_csv_2_mat(
+    norms_segments: list, cube_exe: Path, forecast_year: int, output_folder: Path
+):
     """Convert CSV output matrices to Cube .MAT.
 
     Parameters
@@ -1071,27 +1044,24 @@ def convert_csv_2_mat(norms_segments : list,
     -------
     none
     """
-    #empty dictionary
+    # empty dictionary
     mats_dict = {}
-    #create a dictionary of matrices and their paths
+    # create a dictionary of matrices and their paths
     for segment in norms_segments:
         mats_dict[segment] = Path(output_folder, f"{forecast_year}_24Hr_{segment}.csv")
-    
-    #call CUBE convertor class
+
+    # call CUBE convertor class
     c_m = CUBEMatConverter(cube_exe)
-    c_m.csv_to_mat(1300,
-                   mats_dict,
-                   Path(output_folder,
-                   "PT_24hr_Demand.MAT"),
-                   1)
-    
+    c_m.csv_to_mat(1300, mats_dict, Path(output_folder, "PT_24hr_Demand.MAT"), 1)
+
+
 def run_edge_growth(params: forecast_cnfg.EDGEParameters):
     """Run Growth Process."""
     LOG.info("#" * 80)
     LOG.info("Started Process @ %s", datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
     LOG.info("#" * 80)
 
-    #Process Fixed objects
+    # Process Fixed objects
     periods = ["AM", "IP", "PM", "OP"]
 
     # ## READ INPUT FILES ## #
@@ -1198,20 +1168,21 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
 
     # loop over periods
     for period in tqdm(periods, desc="Time Periods Loop ", unit=" Period", colour="cyan"):
-        LOG.info("-- Processing Time Period %s @"
-               " %s",
-               period, datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f")
+        LOG.info(
+            "-- Processing Time Period %s @" " %s",
+            period,
+            datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"),
         )
         # read distance matrix
         dist_mx = file_ops.read_df(params.matrices_to_grow_dir / f"{period}_stn2stn_costs.csv")
         # read iRSj props
-        irsj_props = pd.read_hdf(params.matrices_to_grow_dir / f"{period}_iRSj_probabilities.h5",
-                                 key="iRSj"
+        irsj_props = pd.read_hdf(
+            params.matrices_to_grow_dir / f"{period}_iRSj_probabilities.h5", key="iRSj"
         )
         # period dictionary
         factored_matrices[period] = {}
         LOG.info(
-            "Demand Segment           Base_Demand             %s_Demand",params.forecast_year
+            "Demand Segment           Base_Demand             %s_Demand", params.forecast_year
         )
         # loop over demand segments
         for segment in tqdm(
@@ -1220,17 +1191,19 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
             unit=" Segment",
             colour="cyan",
         ):
-
+            # check if ToHome segment
+            to_home = bool(segment in internal_to_home)
             # demand matrices
-            demand_mx = file_ops.read_df(params.matrices_to_grow_dir / f"{period}_{segment}.csv")
+            demand_mx = file_ops.read_df(
+                params.matrices_to_grow_dir / f"{period}_{segment}.csv"
+            )
             tot_input_demand = round(demand_mx["Demand"].sum())
             # sum total demand
             demand_total = demand_total + tot_input_demand
             # add UCs to demand based on demand segment
-            demand_mx.loc[:,"userclass"] = (
-                segments_to_uc[segments_to_uc["MX"] == segment]
-                .iloc[0]["userclass"]
-            )
+            demand_mx.loc[:, "userclass"] = segments_to_uc[
+                segments_to_uc["MX"] == segment
+            ].iloc[0]["userclass"]
             # keep needed columns
             demand_mx = demand_mx[
                 ["from_model_zone_id", "to_model_zone_id", "userclass", "Demand"]
@@ -1238,14 +1211,9 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
             # keep non-zero demand records
             demand_mx = demand_mx.loc[demand_mx["Demand"] > 0].reset_index(drop=True)
             # prepare demand matrix
-            if segment in internal_to_home:
-                demand_mx = prepare_stn2stn_matrix_tohome(
-                    demand_mx, irsj_props, dist_mx, norms_to_edge_stns
-                )
-            else:
-                demand_mx = prepare_stn2stn_matrix(
-                    demand_mx, irsj_props, dist_mx, norms_to_edge_stns
-                )
+            demand_mx = prepare_stn2stn_matrix(
+                demand_mx, irsj_props, dist_mx, norms_to_edge_stns, to_home
+            )
             # assign EDGE flows
             demand_mx = assign_edge_flow(edge_flows_file, flow_cats, demand_mx)
             # add TAG flows
@@ -1270,7 +1238,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
             method = segments_method[segment]
             # apply factoring based on demand segment
             if method == 1:
-                demand_mx = apply_edge_growth_method1(demand_mx, edge_growth_factors)
+                demand_mx = apply_edge_growth_method1(demand_mx, edge_growth_factors, to_home)
             else:
                 demand_mx = apply_edge_growth_method2(demand_mx, edge_growth_factors)
 
@@ -1283,11 +1251,12 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
                 .reset_index()
             )
             tot_output_demand = round(demand_mx["N_Demand"].sum())
-            LOG.info("%s                 "
-                     "%s                   "
-                     "%s", segment, tot_input_demand, tot_output_demand
+            LOG.info(
+                "%s                 " "%s                   " "%s",
+                segment,
+                tot_input_demand,
+                tot_output_demand,
             )
-
 
             # ammend forecast matrix to main dictionary
             demand_mx = demand_mx[["from_model_zone_id", "to_model_zone_id", "N_Demand"]]
@@ -1304,14 +1273,19 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
         factors_internal_prop,
     ) = prepare_logging_info(other_tickets_df, no_factors_df, demand_total)
 
+    # write filled factors file
+    file_ops.write_df(
+        edge_growth_factors, params.export_path / "Filled_Factors.csv", index=False
+    )
+
     # if the proportion of the demand that has no factor at all in EDGE exceeds 1%
     #        then report these movements and quit the program
     #        user MUST look into these movements and check why these have no factor
     #        and act accordingly
     if no_factor_demand_prop > 1:
         LOG.warning(
-            f"          Demand with no factors  = {no_factor_demand_prop}% "/
-            "exceeding the 1% threshold of the total demand hence the process terminated"
+            f"          Demand with no factors  = {no_factor_demand_prop}% "
+            / "exceeding the 1% threshold of the total demand hence the process terminated"
         )
         LOG.warning("           Table Below lists all movements with no factors:")
         LOG.warning("          %s", no_factors_df.to_string(index=False))
@@ -1320,8 +1294,10 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
         )
         print("Process was interrupted - Check the logfile for more details!")
         # quit
-        raise ValueError("Process interrupted due to high proportion of demand"\
-                         " having no Growth factor - see Logfile for more details!")
+        raise ValueError(
+            "Process interrupted due to high proportion of demand"
+            " having no Growth factor - see Logfile for more details!"
+        )
 
     LOG.info(
         "          Records below have missing factors for -Missing_TicketType- "
@@ -1330,7 +1306,9 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
     LOG.info("          Tickets from Availabkle_TicektType- have been used")
     LOG.info(
         "          Total demand proportion for these movements = %s %% "
-              "of which %s %% is Internal", tickets_demand_prop, tickets_internal_prop
+        "of which %s %% is Internal",
+        tickets_demand_prop,
+        tickets_internal_prop,
     )
     LOG.info("          -----------------------------------")
     LOG.info("%s", other_tickets_df.to_string(index=False))
@@ -1341,9 +1319,10 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
     )
     LOG.warning(
         "          Total demand proportion for these movements = "
-              "%s %% of which %s %% is Internal", no_factor_demand_prop,
-                                                    factors_internal_prop
-    ) ####LOG PYLINT
+        "%s %% of which %s %% is Internal",
+        no_factor_demand_prop,
+        factors_internal_prop,
+    )  ####LOG PYLINT
     LOG.warning("          -----------------------------------")
     LOG.warning("%s", no_factors_df.to_string(index=False))
 
@@ -1360,24 +1339,25 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
         factored_24hr_matrices[segment] = demand_mx
 
     # Combine matrices into NoRMS segments
-    norms_matrices1 = fromto_2_from_by_averaging(factored_24hr_matrices,
-                                                 norms_segments, segments_method)
+    norms_matrices1 = fromto_2_from_by_averaging(
+        factored_24hr_matrices, norms_segments, segments_method
+    )
     # norms_matrices2 = pFunc.fromto_2_from_by_from(factored_24Hr_matrices)
     # plot matrices
     for segment in norms_segments:
         # write out demand matrix
-        file_ops.write_df(norms_matrices1[segment],
-                          params.export_path / f"{params.forecast_year}_24Hr_{segment}.csv",
-                          index=False
+        file_ops.write_df(
+            norms_matrices1[segment],
+            params.export_path / f"{params.forecast_year}_24Hr_{segment}.csv",
+            index=False,
         )
         # norms_matrices2[segment].to_csv(
         #    f'{export_path}/{forecast_year}/{forecast_year}_24Hr_{segment}.csv', index=False)
     # convert to NoRMS format .MAT
-    convert_csv_2_mat(norms_segments,
-                          params.cube_exe,
-                          params.forecast_year,
-                          params.export_path)
+    convert_csv_2_mat(
+        norms_segments, params.cube_exe, params.forecast_year, params.export_path
+    )
     print("Process finished successfully!")
     LOG.info(
-        'Process finished successfully @ %s', datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f")
+        "Process finished successfully @ %s", datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f")
     )
