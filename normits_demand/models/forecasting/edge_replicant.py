@@ -14,6 +14,7 @@ from tqdm import tqdm
 # Local imports
 # pylint: disable=import-error,wrong-import-position
 # pylint: enable=import-error,wrong-import-position
+from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.models.forecasting import forecast_cnfg
 from normits_demand.matrices.cube_mat_converter import CUBEMatConverter
@@ -1058,7 +1059,7 @@ def convert_csv_2_mat(
 def run_edge_growth(params: forecast_cnfg.EDGEParameters):
     """Run Growth Process."""
     LOG.info("#" * 80)
-    LOG.info("Started Process @ %s", datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
+    LOG.info("Started Process @ %s", timing.get_datetime())
     LOG.info("#" * 80)
 
     # Process Fixed objects
@@ -1171,7 +1172,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
         LOG.info(
             "-- Processing Time Period %s @" " %s",
             period,
-            datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"),
+            timing.get_datetime(),
         )
         # read distance matrix
         dist_mx = file_ops.read_df(params.matrices_to_grow_dir / f"{period}_stn2stn_costs.csv")
@@ -1290,7 +1291,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
         LOG.warning("           Table Below lists all movements with no factors:")
         LOG.warning("          %s", no_factors_df.to_string(index=False))
         LOG.info(
-            "Process was interrupted @ %s", datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f")
+            "Process was interrupted @ %s", timing.get_datetime()
         )
         print("Process was interrupted - Check the logfile for more details!")
         # quit
@@ -1359,5 +1360,5 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
     )
     print("Process finished successfully!")
     LOG.info(
-        "Process finished successfully @ %s", datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f")
+        "Process finished successfully @ %s", timing.get_datetime()
     )
