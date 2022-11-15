@@ -136,7 +136,7 @@ def main(
     if model in (forecast_cnfg.ForecastModel.TRIP_END, forecast_cnfg.ForecastModel.NTEM):
         tem_forecasting(params, model)
     elif model == forecast_cnfg.ForecastModel.EDGE:
-        edge_replicant.main(params)
+        edge_replicant.run_edge_growth(params)
 
     LOG.info(
         "%s forecasting completed in %s",
