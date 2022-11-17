@@ -32,6 +32,8 @@ LOG_FILE = "EDDIE_comparison.log"
 TFN_ZONE_SYSTEM = "msoa"
 EDDIE_ZONE_SYSTEM = "lad_2017"
 CONFIG_FILE = pathlib.Path(r"config\checker\EDDIE_comparison_parameters.yml")
+EDDIE_EMPLOYMENT_HEADER_SKIP = 9
+"""Number of header rows to skip in the occupation and industry sheets."""
 
 
 ##### CLASSES #####
@@ -74,6 +76,13 @@ class LandUseData(NamedTuple):
     data: dict[LandUseType, pd.DataFrame]
 
 
+class DisaggregatedLandUse(NamedTuple):
+    wap: pd.DataFrame
+    wor: pd.DataFrame
+    employment_industry: pd.DataFrame
+    employment_occupation: pd.DataFrame
+
+
 ##### FUNCTIONS #####
 def load_eddie_lad_lookup(path: pathlib.Path, sheet_params: WorksheetParams) -> pd.DataFrame:
     LOG.info("Loading EDDIE LAD lookup from '%s' in '%s'", sheet_params.sheet_name, path)
@@ -83,8 +92,7 @@ def load_eddie_lad_lookup(path: pathlib.Path, sheet_params: WorksheetParams) -> 
         usecols="H:K",
         skiprows=sheet_params.header_row - 1,
     )
-    lookup = lookup.dropna(how="all")
-    lookup = pandas_utils.column_name_tidy(lookup)
+    lookup = pandas_utils.tidy_dataframe(lookup)
 
     correct_codes = lookup["lad13cd"].str.match(r"^[EWS]\d+$")
     LOG.warning(
@@ -107,12 +115,7 @@ def load_landuse_eddie(
         skiprows=sheet_params.header_row - 1,
         na_values="-",
     )
-    data = pandas_utils.column_name_tidy(data)
-
-    unnamed = [c for c in data.columns if c.startswith("unnamed:")]
-    data = data.drop(columns=unnamed)
-    data = data.dropna(axis=1, how="all")
-    data = data.dropna(axis=0, how="all")
+    data = pandas_utils.tidy_dataframe(data)
 
     fill_cols = ["variable", "region"]
     data.loc[:, fill_cols] = data[fill_cols].fillna(method="ffill")
@@ -132,12 +135,17 @@ def load_landuse_eddie(
 
     for yr, columns in years.items():
         data.loc[:, yr] = data[columns].mean(axis=1)
-        data = data.drop(columns=columns)
+        # data = data.drop(columns=columns)
 
     # Add zone code column to index
     lad_replace = lad_lookup.set_index("cebr_lad")["lad13cd"].to_dict()
     zone_col_name = f"{EDDIE_ZONE_SYSTEM}_zone_id"
     data.loc[:, zone_col_name] = data["local_authority"].replace(lad_replace)
+
+    # Update regions to use names from LAD lookup sheet, as
+    # these are consistent across other worksheets
+    region_replace = lad_lookup.set_index("lad13cd")["region"].to_dict()
+    data.loc[:, "region"] = data[zone_col_name].replace(region_replace)
 
     # TODO(MB) Keep track of original Excel row numbers for replacing data
     data = data.set_index(["variable", "region", "local_authority", "units", zone_col_name])
@@ -201,6 +209,72 @@ def load_landuse_tfn(folder: pathlib.Path, scenario: nd.Scenario):
     return LandUseData(scenario, landuse)
 
 
+def _load_wor_wap(path: pathlib.Path, sheet_params: WorksheetParams) -> pd.DataFrame:
+    wor_wap = pd.read_excel(
+        path, sheet_name=sheet_params.sheet_name, skiprows=sheet_params.header_row - 1
+    )
+
+    wor_wap = pandas_utils.tidy_dataframe(wor_wap)
+    wor_wap = wor_wap.drop(columns="variable")
+    wor_wap.loc[:, "description"] = wor_wap["description"].fillna(method="ffill")
+
+    index_columns = ["description", "region", "units"]
+    wor_wap = wor_wap.dropna(axis=0, subset=index_columns, how="any")
+    wor_wap = wor_wap.dropna(axis=1, how="all")
+    wor_wap = wor_wap.set_index(index_columns)
+
+    return wor_wap
+
+
+def load_disaggregated_eddie(
+    path: pathlib.Path, workbook_params: EDDIEWorkbookParams
+) -> DisaggregatedLandUse:
+    wor_wap = _load_wor_wap(path, workbook_params.wor_wap)
+
+    emp_params = {
+        "occupation": workbook_params.employment_occupation,
+        "industry": workbook_params.employment_industry,
+    }
+    emp_data = {}
+    drop_columns = [
+        "nts_/_rdfe_sector",
+        "la+occupation_lookup",
+        "base_year_contains_data?",
+        "first_year_contains_data?",
+        "units",
+        "calendar_year",
+    ]
+    for name, sheet_params in emp_params.items():
+        df = pd.read_excel(
+            path, sheet_name=sheet_params.sheet_name, skiprows=sheet_params.header_row - 1
+        )
+        df = df.iloc[EDDIE_EMPLOYMENT_HEADER_SKIP:]
+        rename = {}
+        for nm, col in df.items():
+            if str(nm).lower().startswith("unnamed") and isinstance(col.iloc[0], str):
+                rename[nm] = col.iloc[0]
+        df.rename(columns=rename, inplace=True)
+        df = df.iloc[1:]
+
+        df = pandas_utils.tidy_dataframe(df)
+        df = df.drop(columns=drop_columns, errors="ignore")
+        index_columns = ["region", "local_authority", f"cebr_{name}"]
+        df = df.dropna(axis=0, how="any", subset=index_columns)
+
+        df = df.set_index(index_columns)
+        for c in df.columns:
+            df.loc[:, c] = pd.to_numeric(df[c], downcast="unsigned", errors="coerce")
+
+        emp_data[name] = df
+
+    return DisaggregatedLandUse(
+        wap=wor_wap.loc["Working-Age Population"],
+        wor=wor_wap.loc["Employment (Residence-based)"],
+        employment_industry=emp_data["industry"],
+        employment_occupation=emp_data["occupation"],
+    )
+
+
 def compare_landuse(
     eddie: EDDIELandUseData, tfn: LandUseData, output_file_base: pathlib.Path
 ) -> dict[LandUseType, pd.DataFrame]:
@@ -232,6 +306,10 @@ def compare_landuse(
     comparison: dict[LandUseType, pd.DataFrame] = {}
     for pop_emp in LandUseType.to_list():
         eddie_data = eddie.data[pop_emp].copy()
+        # Only keep average year columns
+        columns = [c for c in eddie_data.columns if re.match("^\d+$", c) is not None]
+        eddie_data = eddie_data.loc[:, columns]
+
         eddie_data.columns = pd.MultiIndex.from_product((("EDDIE",), eddie_data.columns))
         tfn_data = tfn.data[pop_emp].copy()
         tfn_data.columns = pd.MultiIndex.from_product((("TfN",), tfn_data.columns))
@@ -316,6 +394,106 @@ def compare_landuse(
     return comparison
 
 
+def _calculate_yearly_quarters(data: pd.DataFrame) -> pd.DataFrame:
+    drop = []
+    for yr in data.columns:
+        for q in range(1, 5):
+            data.loc[:, f"{yr}_q{q}"] = data[yr]
+        drop.append(yr)
+
+    return data.drop(columns=drop)
+
+
+def _disaggregate_tfn_wor_wap(
+    eddie: pd.DataFrame, tfn: pd.DataFrame, eddie_wor_wap: pd.DataFrame
+) -> pd.DataFrame:
+    eddie_wor_wap = eddie_wor_wap / eddie.groupby(level="region").sum()
+    # Drop NaN columns, which will be average years which aren't
+    # given in wor_regions, left with year quarters
+    eddie_wor_wap = eddie_wor_wap.dropna(how="all", axis=1)
+
+    tfn_pop_regions = tfn.groupby(level="region").sum()
+    tfn_pop_regions = _calculate_yearly_quarters(tfn_pop_regions)
+
+    tfn_wor_wap = pd.DataFrame(index=eddie_wor_wap.index)
+    for c in eddie_wor_wap.columns:
+        if c in tfn_pop_regions.columns:
+            tfn_wor_wap.loc[:, c] = eddie_wor_wap[c] * tfn_pop_regions[c]
+        else:
+            tfn_wor_wap.loc[:, c] = np.nan
+
+    return tfn_wor_wap
+
+
+def _disaggregate_tfn_employment(
+    eddie_emp: pd.DataFrame,
+    tfn_emp: pd.DataFrame,
+    disagg_emp: pd.DataFrame,
+    disagg_column: str,
+) -> pd.DataFrame:
+    geo_cols = ["region", "local_authority"]
+    columns = disagg_emp.columns.tolist()
+    disagg_emp = disagg_emp.reset_index().merge(
+        eddie_emp, how="left", on=geo_cols, suffixes=("_disagg", "_tot")
+    )
+    disagg_emp = disagg_emp.set_index(geo_cols + [disagg_column])
+
+    # Calculate proportion of employment for each disaggregation
+    for c in columns:
+        disagg_emp.loc[:, c] = disagg_emp[f"{c}_disagg"] / disagg_emp[f"{c}_tot"]
+    disagg_emp = disagg_emp.loc[:, columns]
+
+    disagg_emp = disagg_emp.reset_index().merge(
+        tfn_emp, how="left", on=geo_cols, suffixes=("_prop", "_tfn")
+    )
+    disagg_emp = disagg_emp.set_index(geo_cols + [disagg_column])
+
+    # Apply proportion of employment to TfN totals
+    for c in columns:
+        if f"{c}_tfn" in disagg_emp.columns:
+            disagg_emp.loc[:, c] = disagg_emp[f"{c}_prop"] * disagg_emp[f"{c}_tfn"]
+        else:
+            disagg_emp.loc[:, c] = np.nan
+
+    return disagg_emp.loc[:, columns]
+
+
+def disaggregate_tfn_landuse(
+    eddie_data: dict[LandUseType, pd.DataFrame],
+    tfn_data: dict[LandUseType, pd.DataFrame],
+    eddie_disaggregated: DisaggregatedLandUse,
+) -> DisaggregatedLandUse:
+    tfn_wor = _disaggregate_tfn_wor_wap(
+        eddie_data[LandUseType.POPULATION],
+        tfn_data[LandUseType.POPULATION],
+        eddie_disaggregated.wor.droplevel(level="units", axis=0),
+    )
+    tfn_wap = _disaggregate_tfn_wor_wap(
+        eddie_data[LandUseType.EMPLOYMENT],
+        tfn_data[LandUseType.EMPLOYMENT],
+        eddie_disaggregated.wap.droplevel(level="units", axis=0),
+    )
+    tfn_emp_industry = _disaggregate_tfn_employment(
+        eddie_data[LandUseType.EMPLOYMENT],
+        tfn_data[LandUseType.EMPLOYMENT],
+        eddie_disaggregated.employment_industry,
+        "cebr_industry",
+    )
+    tfn_emp_occupation = _disaggregate_tfn_employment(
+        eddie_data[LandUseType.EMPLOYMENT],
+        tfn_data[LandUseType.EMPLOYMENT],
+        eddie_disaggregated.employment_occupation,
+        "cebr_occupation",
+    )
+
+    return DisaggregatedLandUse(
+        wap=tfn_wap,
+        wor=tfn_wor,
+        employment_industry=tfn_emp_industry,
+        employment_occupation=tfn_emp_occupation,
+    )
+
+
 def comparison_heatmaps(
     comparisons: dict[LandUseType, pd.DataFrame],
     geodata: gpd.GeoDataFrame,
@@ -353,24 +531,35 @@ def comparison_heatmaps(
 
 
 def write_eddie_format(
-    comparisons: dict[LandUseType, pd.DataFrame], output_file: pathlib.Path
+    comparisons: dict[LandUseType, pd.DataFrame],
+    disaggregated_tfn: DisaggregatedLandUse,
+    output_file: pathlib.Path,
 ) -> None:
     LOG.info("Writing TfN land use to EDDIE format")
     with pd.ExcelWriter(output_file) as excel:
         for pop_emp, data in comparisons.items():
+            eddie_years = data.loc[:, "EDDIE"].columns.tolist()
             data = data.loc[
                 data.index.get_level_values(f"{EDDIE_ZONE_SYSTEM}_zone_id") != "N/A", "TfN"
             ]
 
+            # Use original columns for EDDIE even if they are empty
             quarters = []
-            for yr in data.columns:
+            for yr in eddie_years:
                 for q in range(1, 5):
-                    series = data[yr].copy()
+                    if yr in data.columns:
+                        series = data[yr].copy()
+                    else:
+                        series = pd.Series(index=data.index)
+
                     series.name = f"{yr} Q{q}"
                     quarters.append(series)
 
             data = pd.concat(quarters, axis=1)
             data.to_excel(excel, sheet_name=pop_emp.value.title())
+
+        for nm, data in disaggregated_tfn._asdict().items():
+            data.to_excel(excel, sheet_name=nm)
 
     LOG.info("Written: %s", output_file)
 
@@ -405,7 +594,16 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
 
     output_file_base = params.output_folder / "EDDIE_TfN_landuse_comparison"
     comparisons = compare_landuse(eddie, tfn, output_file_base)
-    write_eddie_format(comparisons, params.output_folder / "TfN_landuse-EDDIE_format.xlsx")
+
+    # Load other land use data and use it to split the TfN totals
+    disaggregated = load_disaggregated_eddie(params.eddie_file, params.workbook_parameters)
+    disaggregated = disaggregate_tfn_landuse(
+        eddie.data, {k: v.loc[:, "TfN"] for k, v in comparisons.items()}, disaggregated
+    )
+
+    write_eddie_format(
+        comparisons, disaggregated, params.output_folder / "TfN_landuse-EDDIE_format.xlsx"
+    )
 
     eddie_zone = nd.get_zoning_system(EDDIE_ZONE_SYSTEM)
     eddie_zone_meta = eddie_zone.get_metadata()
