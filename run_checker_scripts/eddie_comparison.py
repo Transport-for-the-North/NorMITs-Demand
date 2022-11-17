@@ -66,17 +66,20 @@ class EDDIEComparisonParameters(config_base.BaseConfig):
 
 
 class EDDIELandUseData(NamedTuple):
+    """Land use data loaded from the EDDIE workbook."""
     sheet_name: str
     data: dict[LandUseType, pd.DataFrame]
     excel_row_lookup: pd.DataFrame = NotImplemented
 
 
 class LandUseData(NamedTuple):
+    """Land use data from NPIER."""
     scenario: nd.Scenario
     data: dict[LandUseType, pd.DataFrame]
 
 
 class DisaggregatedLandUse(NamedTuple):
+    """Disaggregated land use data."""
     wap: pd.DataFrame
     wor: pd.DataFrame
     employment_industry: pd.DataFrame
@@ -85,6 +88,21 @@ class DisaggregatedLandUse(NamedTuple):
 
 ##### FUNCTIONS #####
 def load_eddie_lad_lookup(path: pathlib.Path, sheet_params: WorksheetParams) -> pd.DataFrame:
+    """Load LAD lookup data from EDDIE workbook.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Path to EDDIE Workbook.
+    sheet_params : WorksheetParams
+        Parameters for the worksheet containing the LAD lookup.
+
+    Returns
+    -------
+    pd.DataFrame
+        LAD lookup with columns: "cebr_lad", "region", "lad13cd",
+        "industry_and_occupation_local_authority_group".
+    """
     LOG.info("Loading EDDIE LAD lookup from '%s' in '%s'", sheet_params.sheet_name, path)
     lookup = pd.read_excel(
         path,
@@ -106,6 +124,23 @@ def load_eddie_lad_lookup(path: pathlib.Path, sheet_params: WorksheetParams) -> 
 def load_landuse_eddie(
     path: pathlib.Path, sheet_params: WorksheetParams, lad_sheet_params: WorksheetParams
 ) -> EDDIELandUseData:
+    """Read population and employment data from EDDIE workbook.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Path to EDDIE workbook file.
+    sheet_params : WorksheetParams
+        Parameters for the worksheet containing the population
+        and employment data.
+    lad_sheet_params : WorksheetParams
+        Parameters to the worksheet containing the LAD lookup.
+
+    Returns
+    -------
+    EDDIELandUseData
+        Land use data from EDDIE workbook.
+    """
     lad_lookup = load_eddie_lad_lookup(path, lad_sheet_params)
 
     LOG.info("Loading EDDIE data from '%s' in '%s'", sheet_params.sheet_name, path)
@@ -163,6 +198,27 @@ def translate_tfn_landuse(
     index_columns: list[str],
     data_columns: list[str],
 ) -> pd.DataFrame:
+    """Perform zone translation on NPIER land use data.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Land use data at `from_zone` zone system to be translated.
+    from_zone : nd.ZoningSystem
+        Zone system `data` is given at.
+    to_zone : nd.ZoningSystem
+        Zone system to convert to.
+    index_columns : list[str]
+        Columns in `data` to be considered indices (no
+        translation factor will be applied).
+    data_columns : list[str]
+        Columns containing data (translation factor will be applied).
+
+    Returns
+    -------
+    pd.DataFrame
+        `data` in the `to_zone` zone system.
+    """
     LOG.info("Translating land use from '%s' to '%s' zoning", from_zone.name, to_zone.name)
 
     translation = from_zone._get_translation_definition(to_zone)
@@ -176,7 +232,22 @@ def translate_tfn_landuse(
     return translated.groupby([to_zone.col_name] + index_columns).sum()
 
 
-def load_landuse_tfn(folder: pathlib.Path, scenario: nd.Scenario):
+def load_landuse_tfn(folder: pathlib.Path, scenario: nd.Scenario) -> LandUseData:
+    """Load NPIER landuse data.
+
+    Parameters
+    ----------
+    folder : pathlib.Path
+        Folder to find land use CSVs in, files are expected to be in population
+        / employment sub-folders and named 'future_growth_values.csv'.
+    scenario : nd.Scenario
+        Scenario of land use data being used.
+
+    Returns
+    -------
+    LandUseData
+        NPIER population and employment land use data.
+    """
     landuse: dict[LandUseType, pd.DataFrame] = {}
     from_zone = nd.get_zoning_system(TFN_ZONE_SYSTEM)
     to_zone = nd.get_zoning_system(EDDIE_ZONE_SYSTEM)
@@ -210,6 +281,22 @@ def load_landuse_tfn(folder: pathlib.Path, scenario: nd.Scenario):
 
 
 def _load_wor_wap(path: pathlib.Path, sheet_params: WorksheetParams) -> pd.DataFrame:
+    """Load WOR and WAP data from EDDIE workbook.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Path to EDDIE workbook file.
+    sheet_params : WorksheetParams
+        Parameters for the sheet containing the WOR / WAP data.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing the WOR and WAP data, with 3 index columns
+        ("description", "region" and "units") and columns for each year
+        quarter e.g. "2011_q1".
+    """
     wor_wap = pd.read_excel(
         path, sheet_name=sheet_params.sheet_name, skiprows=sheet_params.header_row - 1
     )
@@ -229,6 +316,20 @@ def _load_wor_wap(path: pathlib.Path, sheet_params: WorksheetParams) -> pd.DataF
 def load_disaggregated_eddie(
     path: pathlib.Path, workbook_params: EDDIEWorkbookParams
 ) -> DisaggregatedLandUse:
+    """Load WOR, WAP and employment by industry and occupancy from EDDIE.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Path to EDDIE workbook file.
+    workbook_params : EDDIEWorkbookParams
+        Parameters for the various worksheets in the file.
+
+    Returns
+    -------
+    DisaggregatedLandUse
+        DataFrames for the various disaggregated land use data.
+    """
     wor_wap = _load_wor_wap(path, workbook_params.wor_wap)
 
     emp_params = {
@@ -395,6 +496,11 @@ def compare_landuse(
 
 
 def _calculate_yearly_quarters(data: pd.DataFrame) -> pd.DataFrame:
+    """Convert single year columns into quarters.
+    
+    All quarters for a single year are identical to the
+    original year column.
+    """
     drop = []
     for yr in data.columns:
         for q in range(1, 5):
@@ -407,6 +513,27 @@ def _calculate_yearly_quarters(data: pd.DataFrame) -> pd.DataFrame:
 def _disaggregate_tfn_wor_wap(
     eddie: pd.DataFrame, tfn: pd.DataFrame, eddie_wor_wap: pd.DataFrame
 ) -> pd.DataFrame:
+    """Disaggregate NPIER land use data using EDDIE proportions.
+
+    Disaggregates to either WOR or WAP.
+
+    Parameters
+    ----------
+    eddie : pd.DataFrame
+        EDDIE population or employment data, should be the
+        same land use type as `tfn`.
+    tfn : pd.DataFrame
+        TfN (NPIER) population or employment data, should be the
+        same land use type as `eddie`.
+    eddie_wor_wap : pd.DataFrame
+        EDDIE WAP or WOR data, WAP corresponds to population data
+        and WOR to employment.
+
+    Returns
+    -------
+    pd.DataFrame
+        NPIER land use disaggregated to WOR / WAP.
+    """
     eddie_wor_wap = eddie_wor_wap / eddie.groupby(level="region").sum()
     # Drop NaN columns, which will be average years which aren't
     # given in wor_regions, left with year quarters
@@ -431,6 +558,25 @@ def _disaggregate_tfn_employment(
     disagg_emp: pd.DataFrame,
     disagg_column: str,
 ) -> pd.DataFrame:
+    """Disaggregate NPIER employment using EDDIE proportions.
+
+    Parameters
+    ----------
+    eddie_emp : pd.DataFrame
+        EDDIE employment data at LAD.
+    tfn_emp : pd.DataFrame
+        NPIER employment data and LAD.
+    disagg_emp : pd.DataFrame
+        EDDIE disaggregated employment data.
+    disagg_column : str
+        Column in `disagg_emp` which contains the disaggregation
+        names.
+
+    Returns
+    -------
+    pd.DataFrame
+        NPIER employement disaggregated based on `disagg_emp`.
+    """
     geo_cols = ["region", "local_authority"]
     columns = disagg_emp.columns.tolist()
     disagg_emp = disagg_emp.reset_index().merge(
@@ -463,6 +609,22 @@ def disaggregate_tfn_landuse(
     tfn_data: dict[LandUseType, pd.DataFrame],
     eddie_disaggregated: DisaggregatedLandUse,
 ) -> DisaggregatedLandUse:
+    """Disaggregate the NPIER land use using EDDIE proportions.
+
+    Parameters
+    ----------
+    eddie_data : dict[LandUseType, pd.DataFrame]
+        Population and employment dand use data for EDDIE at LAD.
+    tfn_data : dict[LandUseType, pd.DataFrame]
+        Population and employment dand use data for NPIER at LAD.
+    eddie_disaggregated : DisaggregatedLandUse
+        Disaggregated EDDIE land use.
+
+    Returns
+    -------
+    DisaggregatedLandUse
+        Disaggregated NPIER land use.
+    """
     tfn_wor = _disaggregate_tfn_wor_wap(
         eddie_data[LandUseType.POPULATION],
         tfn_data[LandUseType.POPULATION],
@@ -501,6 +663,23 @@ def comparison_heatmaps(
     years: list[int],
     output_file_base: pathlib.Path,
 ) -> None:
+    """Plot heatmaps of the percentrage difference between EDDIE and NPIER.
+
+    Parameters
+    ----------
+    comparisons : dict[LandUseType, pd.DataFrame]
+        DataFrames containing the EDDIE and TfN land use data.
+    geodata : gpd.GeoDataFrame
+        Geometries for the LADs to create the heatmap.
+    geom_id_column : str
+        Name of the column in `geodata` containing the geometry
+        ID to link to `comparisons`.
+    years : list[int]
+        List of years to produce comparisons for.
+    output_file_base : pathlib.Path
+        Base file name for saving the plots to, additional
+        metadata about the plot will be appended to the filename.
+    """
     years = [str(y) for y in years]
     LOG.info("Plotting EDDIE vs TfN comparisons for %s", ", ".join(years))
 
@@ -535,6 +714,18 @@ def write_eddie_format(
     disaggregated_tfn: DisaggregatedLandUse,
     output_file: pathlib.Path,
 ) -> None:
+    """Write NPIER data to workbook in EDDIE format.
+
+
+    Parameters
+    ----------
+    comparisons : dict[LandUseType, pd.DataFrame]
+        DataFrames containing TfN and EDDIE land use.
+    disaggregated_tfn : DisaggregatedLandUse
+        DataFrames containing the disaggregated NPIER land use.
+    output_file : pathlib.Path
+        Excel workbook file to write to.
+    """
     LOG.info("Writing TfN land use to EDDIE format")
     with pd.ExcelWriter(output_file) as excel:
         for pop_emp, data in comparisons.items():
@@ -565,6 +756,15 @@ def write_eddie_format(
 
 
 def main(params: EDDIEComparisonParameters, init_logger: bool = True):
+    """Compare EDDIE land use inputs to NPIER.
+
+    Parameters
+    ----------
+    params : EDDIEComparisonParameters
+        Parameters for running comparison.
+    init_logger : bool, default True
+        Whether to initialise a logger.
+    """
     if not params.output_folder.is_dir():
         params.output_folder.mkdir(parents=True)
 
