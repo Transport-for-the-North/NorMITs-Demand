@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Module for creating inputs for EDDIE from TfN land use data."""
+"""
+Module for creating inputs for EDDIE from TfN land use data.
+
+Flowchart detailing the methodolgy in the module is given here:
+`docs\op_models\Misc\EDDIE_inputs.drawio`.
+"""
 
 ##### IMPORTS #####
 # Standard imports
@@ -67,6 +72,7 @@ class EDDIEComparisonParameters(config_base.BaseConfig):
 
 class EDDIELandUseData(NamedTuple):
     """Land use data loaded from the EDDIE workbook."""
+
     sheet_name: str
     data: dict[LandUseType, pd.DataFrame]
     excel_row_lookup: pd.DataFrame = NotImplemented
@@ -74,12 +80,14 @@ class EDDIELandUseData(NamedTuple):
 
 class LandUseData(NamedTuple):
     """Land use data from NPIER."""
+
     scenario: nd.Scenario
     data: dict[LandUseType, pd.DataFrame]
 
 
 class DisaggregatedLandUse(NamedTuple):
     """Disaggregated land use data."""
+
     wap: pd.DataFrame
     wor: pd.DataFrame
     employment_industry: pd.DataFrame
@@ -497,7 +505,7 @@ def compare_landuse(
 
 def _calculate_yearly_quarters(data: pd.DataFrame) -> pd.DataFrame:
     """Convert single year columns into quarters.
-    
+
     All quarters for a single year are identical to the
     original year column.
     """
