@@ -246,7 +246,6 @@ class EDGEParameters(config_base.BaseConfig):
         "ticket_type_splits_path",
         "norms_to_edge_stns_path",
         "edge_flows_path",
-        "edge_factors_path",
         "cube_exe",
     )
     def _check_file(cls, value: Path) -> Path:
@@ -266,6 +265,20 @@ class EDGEParameters(config_base.BaseConfig):
             )
 
         return values
+    
+    @pydantic.root_validator(skip_on_failure=True)
+    def _check_factors_file(  # pylint: disable=no-self-argument
+        cls, values: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Check the factors file."""
+        path: Path = Path(values["edge_growth_dir"]) / values["edge_growth_fname"].format(**values)
+        if not path.is_file():
+            raise ValueError(
+                f"EDGE factors file doesn't exist: {path}"
+            )
+
+        return values
+
 
     @property
     def edge_factors_path(self) -> Path:

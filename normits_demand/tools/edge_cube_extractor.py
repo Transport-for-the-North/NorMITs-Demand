@@ -3,49 +3,25 @@
 # ## IMPORTS ## #
 # Standard imports
 import os
+import pathlib
+import re
+import subprocess
+import logging
 
 # Third party imports
-import typing as typ
-import subprocess as sp
-import logging
-import pathlib
-import openmatrix as omx
 import pandas as pd
 import numpy as np
 
 # Local imports
 from normits_demand.matrices.cube_mat_converter import CUBEMatConverter
 from normits_demand.utils import file_ops
-
-# from normits_demand.matrices import omx_file
+from normits_demand.matrices import omx_file
 
 # CONSTANTS
 LOG = logging.getLogger(__name__)
 
-# subprocess
-def proc_single(cmd_list: typ.List):
-    """Execute single process at a time.
 
-    Parameters
-    ----------
-    cmd_list : list
-        list of commands to execute.
-
-    Function
-    ----------
-    execute processes one after the other in the list order
-
-    Returns
-    -------
-    None.
-
-    """
-    for t_s in cmd_list:
-        p_r = sp.Popen(t_s, creationflags=sp.CREATE_NEW_CONSOLE, shell=True)
-        p_r.wait()
-
-
-def omx_2_df(omx_mx: np.array):
+def omx_2_df(omx_mx: np.array) -> pd.DataFrame:
     """Read omx to a pandas dataframe.
 
     Parameters
@@ -59,7 +35,7 @@ def omx_2_df(omx_mx: np.array):
 
     Returns
     -------
-    mx_df : pandas df
+    mx_df : pd.DataFrame
         matrix dataframe.
     """
     # get omx array to pandas dataframe and reset productions
@@ -77,8 +53,11 @@ def omx_2_df(omx_mx: np.array):
 
 def stnzone_2_stn_tlc(
     stn_zone_to_node: str, rail_nodes: str, ext_nodes: str, overwrite_tlcs: pd.DataFrame
-):
+) -> pd.DataFrame:
     """Prepare the NoRMS 2 EDGE TLC codes dataframe.
+
+    Produce a stn zone ID to TLC lookup while overwritting the NoRMS TLC with a
+    more suitable and EDGE matching TLC
 
     Parameters
     ----------
@@ -91,14 +70,9 @@ def stnzone_2_stn_tlc(
     overwrite_tlcs: pandas dataframe
         TLC overwrite dataframe
 
-    Function
-    ---------
-    produce a stn zone ID to TLC lookup while overwritting the NoRMS TLC with a
-    more suitable and EDGE matching TLC
-
     Returns
     -------
-    zones_df : pandas dataframe
+    zones_df : pd.DataFrame
         lookup betwee nstation zone ID and station TLC.
 
     """
@@ -142,8 +116,8 @@ def stnzone_2_stn_tlc(
     # overwrite TLCs
     for i, row in overwrite_tlcs.iterrows():
         # get values
-        current_tlc = overwrite_tlcs.at[i, "NoRMS"]
-        overwrite_tlc = overwrite_tlcs.at[i, "Overwrite"]
+        current_tlc = row["NoRMS"]
+        overwrite_tlc = row["Overwrite"]
         # amend value
         zones_df.loc[zones_df["STATIONCODE"] == current_tlc, "STATIONCODE"] = overwrite_tlc
         # log overwritten station code
@@ -157,7 +131,7 @@ def export_mat_2_csv_via_omx(
     out_path: pathlib.Path,
     out_csv: str,
     segment: str,
-):
+) -> None:
     """Export Cube .MAT to .csv through .OMX.
 
     Parameters
@@ -172,52 +146,31 @@ def export_mat_2_csv_via_omx(
         name of the output file name
     segment: str
         segment of the overarching loop (e.g. purposes, periods, etc.)
-
-    Function
-    ----------
-    takes a cube .MAT file and export tabs to .csv files
-
-    Returns
-    -------
-    None.
     """
     # Export PT Demand
     c_m = CUBEMatConverter(cube_exe)
     c_m.mat_2_omx(in_mat, out_path, f"{out_csv}")
-    # open omx
-    omx_file = omx.open_file(pathlib.Path(out_path, f"{out_csv}.omx"))
-    # get list of tabs
-    omx_tabs = omx_file.list_matrices()
-    # loop over MX tabs
-    for single_mx in omx_tabs:
-        # convert omx to pd dataframe
-        mx_df = omx_2_df(omx_file[single_mx])
-        # export df to CSV
-        file_ops.write_df(
-            mx_df, pathlib.Path(out_path, f"{out_csv}_{single_mx}.csv", index=False)
-        )
+    # get omx levels
+    with omx_file.OMXFile(pathlib.Path(out_path, f"{out_csv}.omx")) as omx_mat:
+        for mx_lvl in omx_mat.matrix_levels:
+            # move matrix level to a dataframe
+            mat = omx_2_df(
+                omx_mat.get_matrix_level(mx_lvl)
+            )
+            # export matrix to csv
+            file_ops.write_df(mat, f"{out_path}/{out_csv}_{mx_lvl}.csv", index=False)
 
-    # with omx_file.OMXFile(pathlib.Path(out_path, f"{out_csv}.omx")) as omx_mat:
-    #     for mx in omx_mat.matrix_levels:
-    #         mat = pd.DataFrame(omx_mat.get_matrix_level(mx),
-    #                            index=omx_mat.zones,
-    #                            columns=omx_mat.zones)
-    #         file_ops.write_df(mat, f"{out_path}/{out_csv}_{mx}.csv", index=False)
-
-    # close omx
-    omx_file.close()
     # delete .omx file
     os.remove(f"{out_path}/{out_csv}.omx")
     # delete .MAT files
     os.remove(f"{out_path}/PT_{segment}.MAT")
-
 
 def pt_demand_from_to(
     exe_cube: pathlib.Path,
     cat_folder: pathlib.Path,
     run_folder: pathlib.Path,
     output_folder: pathlib.Path,
-):
+) -> None:
     """Create PA From/To Home matrices.
 
     Parameters
@@ -230,33 +183,24 @@ def pt_demand_from_to(
         full path top the folder containing the .mat input files.
     output_folder : Path
         full path top the folder where outputs to be saved.
-
-    Function
-    ----------
-    function produces PA From and To by time period
-
-    Returns
-    -------
-    None.
-
     """
     # create file paths
-    area_sectors = pathlib.Path(cat_folder, "Params/Demand/Sector_Areas_Zones.MAT")
-    pt_24hr_demand = pathlib.Path(run_folder, "Inputs/Demand/PT_24hr_Demand.MAT")
+    area_sectors = cat_folder / "Params/Demand/Sector_Areas_Zones.MAT"
+    pt_24hr_demand = run_folder / "Inputs/Demand/PT_24hr_Demand.MAT"
 
-    splittingfactors_ds1 = pathlib.Path(run_folder, "Inputs/Demand/SplitFactors_DS1.MAT")
-    splittingfactors_ds2 = pathlib.Path(run_folder, "Inputs/Demand/SplitFactors_DS2.MAT")
-    splittingfactors_ds3 = pathlib.Path(run_folder, "Inputs/Demand/SplitFactors_DS3.MAT")
+    splittingfactors_ds1 = run_folder / "Inputs/Demand/SplitFactors_DS1.MAT"
+    splittingfactors_ds2 = run_folder / "Inputs/Demand/SplitFactors_DS2.MAT"
+    splittingfactors_ds3 = run_folder / "Inputs/Demand/SplitFactors_DS3.MAT"
 
-    time_of_day_am = pathlib.Path(run_folder, "Inputs/Demand/Time_of_Day_Factors_Zonal_AM.MAT")
-    time_of_day_ip = pathlib.Path(run_folder, "Inputs/Demand/Time_of_Day_Factors_Zonal_IP.MAT")
-    time_of_day_pm = pathlib.Path(run_folder, "Inputs/Demand/Time_of_Day_Factors_Zonal_PM.MAT")
-    time_of_day_op = pathlib.Path(run_folder, "Inputs/Demand/Time_of_Day_Factors_Zonal_OP.MAT")
+    time_of_day_am = run_folder / "Inputs/Demand/Time_of_Day_Factors_Zonal_AM.MAT"
+    time_of_day_ip = run_folder / "Inputs/Demand/Time_of_Day_Factors_Zonal_IP.MAT"
+    time_of_day_pm = run_folder / "Inputs/Demand/Time_of_Day_Factors_Zonal_PM.MAT"
+    time_of_day_op = run_folder / "Inputs/Demand/Time_of_Day_Factors_Zonal_OP.MAT"
 
-    nhb_props_am = pathlib.Path(run_folder, "Inputs/Demand/OD_Prop_AM_PT.MAT")
-    nhb_props_ip = pathlib.Path(run_folder, "Inputs/Demand/OD_Prop_IP_PT.MAT")
-    nhb_props_pm = pathlib.Path(run_folder, "Inputs/Demand/OD_Prop_PM_PT.MAT")
-    nhb_props_op = pathlib.Path(run_folder, "Inputs/Demand/OD_Prop_OP_PT.MAT")
+    nhb_props_am = run_folder / "Inputs/Demand/OD_Prop_AM_PT.MAT"
+    nhb_props_ip = run_folder / "Inputs/Demand/OD_Prop_IP_PT.MAT"
+    nhb_props_pm = run_folder / "Inputs/Demand/OD_Prop_PM_PT.MAT"
+    nhb_props_op = run_folder / "Inputs/Demand/OD_Prop_OP_PT.MAT"
 
     # list of all files
     file_list = [
@@ -280,7 +224,7 @@ def pt_demand_from_to(
         file_ops.check_file_exists(file)
 
     to_write = [
-        f'RUN PGM=MATRIX PRNFILE="{output_folder}\\1st_Print.prn"',
+        "RUN PGM=MATRIX",
         f'FILEI MATI[1] = "{pt_24hr_demand}"',
         f'FILEI MATI[13] = "{nhb_props_op}"',
         f'FILEI MATI[12] = "{nhb_props_pm}"',
@@ -533,152 +477,21 @@ def pt_demand_from_to(
         "ENDRUN",
     ]
 
-    with open(pathlib.Path(output_folder, "PT_Periods_FT.s"), "w") as script:
+    # create script path
+    script_path = pathlib.Path(output_folder / "PT_Periods_FT.s")
+
+    with open(script_path, "w") as script:
         script.write("\n".join(to_write))
 
-    proc_single(
-        [
-            f'"{exe_cube}" "{output_folder}\\PT_Periods_FT.s" -Pvdmi /Start /Hide /HideScript',
-            f'del "{output_folder}\\*.prn"',
-            f'del "{output_folder}\\*.VAR"',
-            f'del "{output_folder}\\*.PRJ"',
-            f'del "{output_folder}\\PT_Periods_FT.s"',
-        ]
-    )
-
-
-def pa_2_od(exe_cube: str, mats_folder: str):
-    """Create Cube Script to convert NoRMS Matrices from PA to OD.
-
-    Parameters
-    ----------
-    exe_cube : str
-        path to the cube voyager executable.
-    mats_folder : str
-        full path to the input matrix files folder. this is uusually where matrices
-        from "PTDemandFromTo" are saved, it's also where output matrices will be saved
-
-
-    Function
-    ----------
-    transposes the T matrices to get Od matrices by period and demand segmnet
-
-    Returns
-    -------
-    None.
-
-    """
-    # create file paths
-    exe_cube = pathlib.Path(exe_cube)
-    exe_cube = pathlib.Path(mats_folder)
-    am_demand = pathlib.Path(mats_folder, "PT_AM.MAT")
-    ip_demand = pathlib.Path(mats_folder, "PT_IP.MAT")
-    pm_demand = pathlib.Path(mats_folder, "PT_PM.MAT")
-    op_demand = pathlib.Path(mats_folder, "PT_OP.MAT")
-
-    files_list = [exe_cube, am_demand, ip_demand, pm_demand, op_demand]
-    # check files exists
-    for file in files_list:
-        file_ops.check_file_exists(file)
-
-    to_write = [
-        f'RUN PGM=MATRIX PRNFILE="{mats_folder}2nd_Print.prn"',
-        f'FILEI MATI[1] = "{am_demand}"',
-        f'FILEI MATI[2] = "{ip_demand}"',
-        f'FILEI MATI[3] = "{pm_demand}"',
-        f'FILEI MATI[4] = "{op_demand}"',
-        ";--------------------------------",
-        ";output",
-        'FILEO MATO[1] = "{mats_folder}PT_AM_OD.MAT",',
-        "MO=1-10, 20-29,"
-        "NAME=HBEBCA_F,HBEBNCA_F,NHBEBCA_F,NHBEBNCA_F,HBWCA_F,HBWNCA_F,HBOCA_F,",
-        "HBONCA_F,NHBOCA_F,NHBONCA_F,",
-        "HBEBCA_T,HBEBNCA_T,NHBEBCA_T,NHBEBNCA_T,HBWCA_T,HBWNCA_T,HBOCA_T,",
-        "HBONCA_T,NHBOCA_T,NHBONCA_T,",
-        "DEC=20*D",
-        f'FILEO MATO[2] = "{mats_folder}PT_IP_OD.MAT",',
-        "MO=31-40, 50-59,"
-        "NAME=HBEBCA_F,HBEBNCA_F,NHBEBCA_F,NHBEBNCA_F,HBWCA_F,HBWNCA_F,HBOCA_F,",
-        "HBONCA_F,NHBOCA_F,NHBONCA_F,",
-        "HBEBCA_T,HBEBNCA_T,NHBEBCA_T,NHBEBNCA_T,HBWCA_T,HBWNCA_T,HBOCA_T,",
-        "HBONCA_T,NHBOCA_T,NHBONCA_T,",
-        "DEC=20*D",
-        f'FILEO MATO[3] = "{mats_folder}PT_PM_OD.MAT",',
-        "MO=61-70, 80-89,",
-        "NAME=HBEBCA_F,HBEBNCA_F,NHBEBCA_F,NHBEBNCA_F,HBWCA_F,HBWNCA_F,HBOCA_F,",
-        "HBONCA_F,NHBOCA_F,NHBONCA_F,",
-        "HBEBCA_T,HBEBNCA_T,NHBEBCA_T,NHBEBNCA_T,HBWCA_T,HBWNCA_T,HBOCA_T,",
-        "HBONCA_T,NHBOCA_T,NHBONCA_T,",
-        "DEC=20*D",
-        f'FILEO MATO[4] = "{mats_folder}PT_OP_OD.MAT",',
-        "MO=91-100, 110-119,",
-        "NAME=HBEBCA_F,HBEBNCA_F,NHBEBCA_F,NHBEBNCA_F,HBWCA_F,HBWNCA_F,HBOCA_F,",
-        "HBONCA_F,NHBOCA_F,NHBONCA_F,",
-        "HBEBCA_T,HBEBNCA_T,NHBEBCA_T,NHBEBNCA_T,HBWCA_T,HBWNCA_T,HBOCA_T,",
-        "HBONCA_T,NHBOCA_T,NHBONCA_T,",
-        "DEC=20*D",
-        ";P>A",
-        "FILLMW MW[01]=MI.1.1(19) ;AM 1-29",
-        "FILLMW MW[31]=MI.2.1(19) ;IP 30-59",
-        "FILLMW MW[61]=MI.3.1(19) ;PM 60-89",
-        "FILLMW MW[91]=MI.4.1(19) ;OP 91-119",
-        ";A>P (transpose)",
-        "FILLMW	MW[20]=Mi.1.20.T(10)",
-        "FILLMW	MW[50]=Mi.2.20.T(10)",
-        "FILLMW	MW[80]=Mi.3.20.T(10)",
-        "FILLMW	MW[110]=Mi.4.20.T(10)",
-        ";Add Externals  - AM",
-        "MW[1] = MW[1] + MW[11]    ;EBCA_F",
-        "MW[20] = MW[20] + MW[12]  ;EBCA_T",
-        "MW[4] = MW[4] + MW[13]    ;EBNCA",
-        "MW[5] = MW[5] + MW[14]    ;HBWCA_F",
-        "MW[24] = MW[24] + MW[15]  ;HBWCA_T",
-        "MW[6] = MW[6] + MW[16]    ;HBWNCA",
-        "MW[7] = MW[7] + MW[17]    ;OCA_F",
-        "MW[26] = MW[26] + MW[18]  ;OCA_T",
-        "MW[10] = MW[10] + MW[19]  ;ONCA",
-        ";Add Externals  - IP",
-        "MW[31] = MW[31] + MW[41] ;EBCA_F",
-        "MW[50] = MW[50] + MW[42] ;EBCA_T",
-        "MW[34] = MW[34] + MW[43] ;EBNCA",
-        "MW[35] = MW[35] + MW[44] ;HBWCA_F",
-        "MW[54] = MW[54] + MW[45] ;HBWCA_T",
-        "MW[36] = MW[36] + MW[46] ;HBWNCA",
-        "MW[37] = MW[37] + MW[47] ;OCA_F",
-        "MW[56] = MW[56] + MW[48] ;OCA_T",
-        "MW[40] = MW[40] + MW[49] ;ONCA",
-        ";Add Externals  - PM",
-        "MW[61] = MW[61] + MW[71] ;EBCA_F",
-        "MW[80] = MW[80] + MW[72] ;EBCA_T",
-        "MW[64] = MW[64] + MW[73] ;EBNCA",
-        "MW[65] = MW[65] + MW[74] ;HBWCA_F",
-        "MW[84] = MW[84] + MW[75] ;HBWCA_T",
-        "MW[66] = MW[66] + MW[76] ;HBWNCA",
-        "MW[87] = MW[67] + MW[77] ;OCA_F",
-        "MW[86] = MW[86] + MW[78] ;OCA_T",
-        "MW[70] = MW[70] + MW[79] ;ONCA",
-        ";Add Externals  - OP",
-        "MW[91] = MW[91] + MW[101]   ;EBCA_F",
-        "MW[110] = MW[110] + MW[102] ;EBCA_T",
-        "MW[94] = MW[94] + MW[103]   ;EBNCA",
-        "MW[95] = MW[95] + MW[104]   ;HBWCA_F",
-        "MW[114] = MW[114] + MW[105] ;HBWCA_T",
-        "MW[96] = MW[96] + MW[106]   ;HBWNCA",
-        "MW[97] = MW[97] + MW[107] ;OCA_F",
-        "MW[116] = MW[116] + MW[108] ;OCA_T",
-        "MW[100] = MW[100] + MW[109] ;ONCA",
-        "ENDRUN",
-    ]
-
-    with open(pathlib.Path(mats_folder, "PA2OD.s"), "w") as script:
-        script.write("\n".join(to_write))
-
-    proc_single(
-        [
-            f'"{exe_cube}" "{mats_folder}\\PA2OD.s" -Pvdmi /Start /Hide /HideScript',
-            f'del "{mats_folder}\\*.prn"',
-            f'del "{mats_folder}\\*.VAR"',
-            f'del "{mats_folder}\\*.PRJ"',
-            f'del "{mats_folder}\\PA2OD.s"',
-        ]
-    )
+    # create commands
+    command = f'"{exe_cube}" "{script_path}" ' "-Pvdmi /Start /Hide /HideScript"
+    # run commands
+    subprocess.run(command, capture_output=True, check=False)
+    # Cleanup files
+    script_path.unlink()
+    script_path.with_name("TPPL.PRJ").unlink()
+    del_pat = re.compile(r"(vdmi.*)\.(prn|var)", re.I)
+    for path in script_path.parent.iterdir():
+        match = del_pat.match(path.name)
+        if match:
+            path.unlink()

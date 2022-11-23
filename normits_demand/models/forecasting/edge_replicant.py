@@ -5,15 +5,14 @@
 import logging
 import itertools
 from datetime import datetime
+import pathlib
 
 # Third party imports
-from pathlib import Path
+from typing import Tuple
 import pandas as pd
 from tqdm import tqdm
 
 # Local imports
-# pylint: disable=import-error,wrong-import-position
-# pylint: enable=import-error,wrong-import-position
 from normits_demand.utils import file_ops
 from normits_demand.models.forecasting import forecast_cnfg
 from normits_demand.matrices.cube_mat_converter import CUBEMatConverter
@@ -26,23 +25,22 @@ LOG = logging.getLogger(__name__)
 # ## FUNCTIONS ## #
 
 
-def add_tls2stations_matrix(mx_df: pd.DataFrame, stn_tlc: pd.DataFrame):
+def add_tls2stations_matrix(
+    mx_df: pd.DataFrame,
+    stn_tlc: pd.DataFrame
+) -> pd.DataFrame:
     """Add station TLCs to the stations matrix.
 
     Parameters
     ----------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         stn 2 stn matrix dataframe.
-    stn_tlc : pandas dataframe
+    stn_tlc : pd.DataFrame
         sttion zone ID to TLC lookup.
-
-    Function
-    ---------
-    Adds TLC to stn2stn matrix based on stn zone ID
 
     Returns
     -------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         matrix with TLCs.
 
     """
@@ -98,28 +96,25 @@ def prepare_stn2stn_matrix(
     dist_mx: pd.DataFrame,
     stn_tlc: pd.DataFrame,
     to_home: bool = False,
-):
+) -> pd.DataFrame:
     """Prepare stn 2 stn matrix with TLCs and distacnes from ij matrix.
 
     Parameters
     ----------
-    demand_mx : pandas dataframe
+    demand_mx : pd.DataFrame
         demand matrix dataframe
-    irsj_props : pandas dataframe
+    irsj_props : pd.DataFrame
         iRSj split probabilities dataframe
-    dist_mx : pandas dataframe
+    dist_mx : pd.DataFrame
         stn2stn distance matrix
-    stn_tlc : pandas dataframe
+    stn_tlc : pd.DataFrame
         station zone id to TLC lookup dataframe
     to_home : bool
         True if the demand is a ToHome demand
-    Function
-    ---------
-    produce stn2stn demand matrix with distance and TLC codes
 
     Returns
     -------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         demand matrix with added attributes of Distacne and TLCs
 
     """
@@ -132,7 +127,6 @@ def prepare_stn2stn_matrix(
     )
     # calculate movement demand proportion
     mx_df.loc[:, "Demand"] = mx_df["Demand"] * mx_df["proportion"]
-    # mx_df["Demand"] = mx_df["Demand"] * mx_df["proportion"]
     # group by stn2stn
     mx_df = (
         mx_df.groupby(
@@ -172,26 +166,24 @@ def prepare_stn2stn_matrix(
 
 
 def assign_edge_flow(
-    flows_file: pd.DataFrame, flows_lookup: pd.DataFrame, mx_df: pd.DataFrame
-):
+    flows_file: pd.DataFrame,
+    flows_lookup: pd.DataFrame,
+    mx_df: pd.DataFrame
+) -> pd.DataFrame:
     """Assign EDGE flow to each stn2stn movement.
 
     Parameters
     ----------
-    flows_file : pandas dataframe
+    flows_file : pd.DataFrame
         EDGE flows lookup dataframe
-    flows_lookup: pandas dataframe
+    flows_lookup: pd.DataFrame
         lookup dataframe bwteen EDGE flows and TAG nondistance flows
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         stn2stn matrix to assign flows to
-
-    Function
-    ---------
-    assign EDGE flow based on stations movement, and match it to TAG non-distance flow
 
     Returns
     -------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         demand matrix with added EDGE flows
     """
     # rename column
@@ -208,29 +200,26 @@ def assign_edge_flow(
     return mx_df
 
 
-def assign_purposes(mx_df: pd.DataFrame):
+def assign_purposes(
+    mx_df: pd.DataFrame
+) -> pd.DataFrame:
     """Assign Journey Purpose based on userclass.
 
-    Parameters
-    ----------
-    mx_df : pandas dataframe
-        dataframe with userclass info to add purpose info to
-
-
-    Function
-    ---------
-    add purpose category to a dataframe based on userclass as below:
+    Add purpose category to a dataframe based on userclass as below:
         1-3: EB
         4-6: Com
         7-9: Oth
 
+    Parameters
+    ----------
+    mx_df : pd.DataFrame
+        dataframe with userclass info to add purpose info to
+
     Returns
     -------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         dataframe with added userclass info
     """
-    # create empty vector
-    mx_df["Purpose"] = ""
     # assign jurney purpose to userclasses
     userclass_lookup = {
         **dict.fromkeys((1, 2, 3), "Business"),
@@ -242,22 +231,19 @@ def assign_purposes(mx_df: pd.DataFrame):
     return mx_df
 
 
-def add_distance_band_tag_flow(mx_df: pd.DataFrame):
+def add_distance_band_tag_flow(
+    mx_df: pd.DataFrame
+) -> pd.DataFrame:
     """Add TAGs distance band based on distance.
 
     Parameters
     ----------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         prepared matrix with flows
-
-
-    Function
-    ---------
-    function creates new flow category vector that matches TAGs ticket/purpose split
 
     Returns
     -------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         dataframe with added new TAG flow
     """
     # set new flow to match the non-distance flow to begin with
@@ -286,32 +272,32 @@ def add_distance_band_tag_flow(mx_df: pd.DataFrame):
         & (mx_df["Distance"] >= 100),
         "TAG_Flow",
     ] = "Outside South East to/from London 100 + miles"
-
+    
     return mx_df
 
 
-def apply_ticket_splits(mx_df: pd.DataFrame):
+def apply_ticket_splits(
+    mx_df: pd.DataFrame
+) -> pd.DataFrame:
     """Split demand by ticket type.
 
     Parameters
     ----------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         prepared demand matrix with ticket split proportions
-
-
-    Function
-    ---------
-    function applies ticket split proportions to calculate the demand by ticket/prupose
 
     Returns
     -------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         demand matrix by flow, ticket type and purpose
     """
+    # rebalance proportion to adjust any possible loss due to precision
+    for c in ("F", "R", "S"):
+        mx_df.loc[:, c+"_Adj"] = mx_df[c] / (mx_df["F"] + mx_df["R"] + mx_df["S"])
+
     # apply split proportions by ticket type
-    mx_df.loc[:, "F"] = mx_df["F"] * mx_df["Demand"]
-    mx_df.loc[:, "R"] = mx_df["R"] * mx_df["Demand"]
-    mx_df.loc[:, "S"] = mx_df["S"] * mx_df["Demand"]
+    for c in ("F", "R", "S"):
+        mx_df.loc[:, c] = mx_df[c+"_Adj"] * mx_df["Demand"]
 
     # keep needed columns
     mx_df = mx_df[
@@ -338,34 +324,37 @@ def create_factors_for_missing_moira_movements(
     edge_factors: pd.DataFrame,
     other_tickets_df: pd.DataFrame,
     no_factors_df: pd.DataFrame,
-):
+    internal_zone_limit : int = 1157,
+) -> Tuple[pd.DataFrame,
+           pd.DataFrame,
+           pd.DataFrame]:
     """Produce Factors for missing movements/purposes/ticket types from other movments.
 
-    Parameters
-    ----------
-    mx_df : pandas dataframe
-        prepared stn2stn matrix by flow, ticket type and purpose
-    edge_factors : pandas dataframe
-        EDGE gowth factors by flow, ticket type and purpose
-    other_tickets_df : pandas dataframe
-        dataframe to record movements where other ticket types where used to fill
-        for missing ticket types
-    no_factors_df : pandas dataframe
-        dataframe to record movemetns where no factor was found at all
 
-    Function
-    ---------
     some movements don't have factors for specific ticket types or purposes given these do not
     appear in MOIRA, hence this function populate growth factor records for missing
     movments/ticket types with available ticket types/purposes for the same movement
 
+    Parameters
+    ----------
+    mx_df : pd.DataFrame
+        prepared stn2stn matrix by flow, ticket type and purpose
+    edge_factors : pd.DataFrame
+        EDGE gowth factors by flow, ticket type and purpose
+    other_tickets_df : pd.DataFrame
+        dataframe to record movements where other ticket types where used to fill
+        for missing ticket types
+    no_factors_df : pd.DataFrame
+        dataframe to record movemetns where no factor was found at all
+    internal_zone_limit : int
+        last zone in the internal range of zones
     Returns
     -------
-    upd_edge_factors : pandas dataframe
+    upd_edge_factors : pd.DataFrame
         updated edge factors daatframe with added records for missing movements/tickets
-    other_tickets_df: pandas dataframe
+    other_tickets_df: pd.DataFrame
         movements where factor of other tickets was used
-    no_factors_df: pandas dataframe
+    no_factors_df: pd.DataFrame
         movements with no factor at all
     """
     # keep needed columns
@@ -373,7 +362,7 @@ def create_factors_for_missing_moira_movements(
         ["ZoneCodeFrom", "ZoneCodeTo", "purpose", "TicketType", "Demand_rate", "Flag"]
     ]
     # remove records with growth of nan
-    edge_factors = edge_factors[~edge_factors["Demand_rate"].isna()].reset_index(drop=True)
+    edge_factors = edge_factors[~edge_factors["Demand_rate"].isna()]
     # copy of factors dataframe
     upd_edge_factors = edge_factors.copy()
     # melt Matrix
@@ -413,8 +402,8 @@ def create_factors_for_missing_moira_movements(
     # add internal flag
     missing_moira_zonal["Internal"] = 0
     missing_moira_zonal.loc[
-        (missing_moira_zonal["from_model_zone_id"] < 1158)
-        & (missing_moira_zonal["to_model_zone_id"] < 1158),
+        (missing_moira_zonal["from_model_zone_id"] <= internal_zone_limit)
+        & (missing_moira_zonal["to_model_zone_id"] <= internal_zone_limit),
         "Internal",
     ] = 1
 
@@ -444,7 +433,7 @@ def create_factors_for_missing_moira_movements(
     # keep those that have available records
     available_ticket = missing_moira[
         ~missing_moira["Available_TicketType"].isna()
-    ].reset_index(drop=True)
+    ]
     # keep one ticket type
     available_ticket = available_ticket.drop_duplicates(
         subset=["ZoneCodeFrom", "ZoneCodeTo", "Missing_TicketType", "purpose"]
@@ -471,7 +460,7 @@ def create_factors_for_missing_moira_movements(
     # keep those that have available records
     available_ticket_log = missing_moira_zonal[
         ~missing_moira_zonal["Available_TicketType"].isna()
-    ].reset_index(drop=True)
+    ]
     available_ticket_log = (
         available_ticket_log.groupby(
             [
@@ -492,7 +481,7 @@ def create_factors_for_missing_moira_movements(
     # check missing tickets for current purpsoe in different purposes
     missing_ticket = missing_moira_zonal[
         missing_moira_zonal["Available_TicketType"].isna()
-    ].reset_index(drop=True)
+    ]
     # keep needed columns
     missing_ticket = (
         missing_ticket.groupby(["ZoneCodeFrom", "ZoneCodeTo", "Internal"])["T_Demand"]
@@ -506,27 +495,26 @@ def create_factors_for_missing_moira_movements(
 
 
 def apply_edge_growth_method1(
-    mx_df: pd.DataFrame, edge_factors: pd.DataFrame, to_home: bool = False
-):
+    mx_df: pd.DataFrame,
+    edge_factors: pd.DataFrame,
+    to_home: bool = False
+) -> pd.DataFrame:
     """Grow demand by factoring it by EDGE factors using method 1.
+
+    using method 1 where the factors are applied on P=O and A=D level
 
     Parameters
     ----------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         prepared stn2stn matrix by flow, ticket type and purpose
-    edge_factors : pandas dataframe
+    edge_factors : pd.DataFrame
         EDGE gowth factors by flow, ticket type and purpose
     to_home : bool
         True if the matrix is a ToHome matrix
 
-    Function
-    ---------
-    applies EDGE growth to the stn2stn demand by flow, ticekt type and purpose
-    using method 1 where the factors are applied on P=O and A=D level
-
     Returns
     -------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         grown stn2stn demand matrix
     """
     # melt Matrix
@@ -576,7 +564,7 @@ def apply_edge_growth_method1(
             how="left",
             on=["ZoneCodeFrom", "ZoneCodeTo", "TicketType", "purpose"],
         )
-    # Records with nan means no factor was found hence no frowth therfore fill nan with 1
+    # Records with nan means no factor was found hence no growth therefore fill nan with 1
     mx_df.loc[:, "Demand_rate"] = mx_df["Demand_rate"].fillna(1)
     # fill nan flag with zero as it doesn;t exist in the inut EDGE factors
     mx_df.loc[:, "Flag"] = mx_df["Flag"].fillna(0)
@@ -602,25 +590,24 @@ def apply_edge_growth_method1(
     return mx_df
 
 
-def apply_edge_growth_method2(mx_df: pd.DataFrame, edge_factors: pd.DataFrame):
+def apply_edge_growth_method2(
+    mx_df: pd.DataFrame,
+    edge_factors: pd.DataFrame
+) -> pd.DataFrame:
     """Grow demand by factoring it by EDGE factors using method 2.
+
+    using method 2 where an avergae factor of the two directions is applied.
 
     Parameters
     ----------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         prepared stn2stn matrix by flow, ticket type and purpose
-    edge_factors : pandas dataframe
+    edge_factors : pd.DataFrame
         EDGE gowth factors by flow, ticket type and purpose
-
-
-    Function
-    ---------
-    applies EDGE growth to the stn2stn demand by flow, ticekt type and purpose
-    using method 2 where an avergae factor of the two directions is applied
 
     Returns
     -------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         grown stn2stn demand matrix
     """
     # melt Matrix
@@ -652,7 +639,7 @@ def apply_edge_growth_method2(mx_df: pd.DataFrame, edge_factors: pd.DataFrame):
     mx_df = mx_df.merge(
         edge_factors, how="left", on=["ZoneCodeFrom", "ZoneCodeTo", "TicketType", "purpose"]
     )
-    # rename growt column to indicate first merge
+    # rename growth column to indicate first merge
     # rename column
     mx_df = mx_df.rename(columns={"Demand_rate": "1st_Dir_Growth"})
     # merge new factors file to matrix on second direction O>D
@@ -662,7 +649,7 @@ def apply_edge_growth_method2(mx_df: pd.DataFrame, edge_factors: pd.DataFrame):
         left_on=["ZoneCodeFrom", "ZoneCodeTo", "TicketType", "purpose"],
         right_on=["ZoneCodeTo", "ZoneCodeFrom", "TicketType", "purpose"],
     )
-    # rename growt column to indicate first merge
+    # rename growth column to indicate second merge
     # rename column
     mx_df = mx_df.rename(
         columns={
@@ -673,7 +660,7 @@ def apply_edge_growth_method2(mx_df: pd.DataFrame, edge_factors: pd.DataFrame):
     )
     # get average growth for both directions
     mx_df.loc[:, "Demand_rate"] = mx_df[["1st_Dir_Growth", "2nd_Dir_Growth"]].mean(axis=1)
-    # Records with nan means no factor was found hence no growth therfore fill nan with 1
+    # Records with nan means no factor was found hence no growth therefore fill nan with 1
     mx_df.loc[:, "Demand_rate"] = mx_df[["Demand_rate"]].fillna(1)
     # fill nan flag with zero as it doesn;t exist in the inut EDGE factors
     mx_df.loc[:, "Flag_x"] = mx_df[["Flag_x"]].fillna(0)
@@ -703,30 +690,36 @@ def apply_edge_growth_method2(mx_df: pd.DataFrame, edge_factors: pd.DataFrame):
 
 
 def prepare_logging_info(
-    other_tickets_df: pd.DataFrame, no_factors_df: pd.DataFrame, demand_total: float
-):
+    other_tickets_df: pd.DataFrame,
+    no_factors_df: pd.DataFrame,
+    demand_total: float
+) -> Tuple[pd.DataFrame,
+           pd.DataFrame,
+           float,
+           float,
+           float,
+           float]:
     """Calculate logging stats and prepare to write to logfile.
+
+
+    Function calculates logging stats of the proportion of the demand each category
+    has and the proportion of theat demand that is internal
+    the fucntion also prepare the dataframe in a format ready to print to the logfile
 
     Parameters
     ----------
-    other_tickets_df : pandas dataframe
+    other_tickets_df : pd.DataFrame
         dataframe with movements that has used factors for other ticket types
-    no_factors_df : pandas dataframe
+    no_factors_df : pd.DataFrame
         dataframe with movements that has no factor at all
     demand_total : float
         sum of all input demand
 
-    Function
-    ---------
-    function calculates logging stats of the proportion of the demand each category
-    has and the proportion of theat demand that is internal
-    the fucntion also prepare the dataframe in a format ready to print to the logfile
-
     Returns
     -------
-    other_tickets_df : pandas dataframe
+    other_tickets_df : pd.DataFrame
         dataframe with movements that has used factors for other ticket types
-    no_factors_df : pandas dataframe
+    no_factors_df : pd.DataFrame
         dataframe with movements that has no factor at all
     no_factor_demand_prop: float
         proportion of total demand with no factors proportion
@@ -809,28 +802,27 @@ def prepare_logging_info(
 
 
 def sum_periods_demand(
-    am_df: pd.DataFrame, ip_df: pd.DataFrame, pm_df: pd.DataFrame, op_df: pd.DataFrame
-):
+    am_df: pd.DataFrame,
+    ip_df: pd.DataFrame,
+    pm_df: pd.DataFrame,
+    op_df: pd.DataFrame
+) -> pd.DataFrame:
     """Sum Periods demand to 24Hr demand.
 
     Parameters
     ----------
-    am_df : pandas dataframe
+    am_df : pd.DataFrame
         demand matrix for the AM period
-    ip_df : pandas dataframe
+    ip_df : pd.DataFrame
         demand matrix for the IP period
-    pm_df : pandas dataframe
+    pm_df : pd.DataFrame
         demand matrix for the PM period
-    op_df : pandas dataframe
+    op_df : pd.DataFrame
         demand matrix for the OP period
-
-    Function
-    ---------
-    sums time periods demand to 24Hr demand matrix
 
     Returns
     -------
-    comb_df : pandas dataframe
+    comb_df : pd.DataFrame
         24Hr demand matrix
     """
     comb_df = am_df.merge(ip_df, how="outer", on=["from_model_zone_id", "to_model_zone_id"])
@@ -839,7 +831,7 @@ def sum_periods_demand(
     # fill nans with zeros
     comb_df = comb_df.fillna(0)
     # sum 24Hr demand
-    comb_df["Demand"] = (
+    comb_df.loc[:, "Demand"] = (
         comb_df["AM_Demand"]
         + comb_df["IP_Demand"]
         + comb_df["PM_Demand"]
@@ -851,24 +843,25 @@ def sum_periods_demand(
     return comb_df
 
 
-def average_two_matrices(mx1_df: pd.DataFrame, mx2_df: pd.DataFrame, zones=1300):
+def average_two_matrices(
+    mx1_df: pd.DataFrame,
+    mx2_df: pd.DataFrame,
+    zones : int =1300
+) -> pd.DataFrame:
     """Calculate the average of two input matrices.
 
     Parameters
     ----------
-    mx1_df : pandas dataframe
+    mx1_df : pd.DataFrame
         first matrix
-    mx2_df : pandas dataframe
+    mx2_df : pd.DataFrame
         second matrix
     zones: int
         number of model zones, default = 1300
-    Function
-    ---------
-    average two matrices while expanding to full matrix dimensions
 
     Returns
     -------
-    avg_mx : pandas dataframe
+    avg_mx : pd.DataFrame
         averaged matrix
     """
     # create empty dataframe
@@ -885,28 +878,28 @@ def average_two_matrices(mx1_df: pd.DataFrame, mx2_df: pd.DataFrame, zones=1300)
         mx2_df, how="outer", on=["from_model_zone_id", "to_model_zone_id"]
     ).fillna(0)
     # sum demand
-    avg_mx["Demand"] = (avg_mx["Demand_x"] + avg_mx["Demand_y"]) / 2
+    avg_mx.loc[:, "Demand"] = (avg_mx["Demand_x"] + avg_mx["Demand_y"]) / 2
     # keep needed columns
     avg_mx = avg_mx[["from_model_zone_id", "to_model_zone_id", "Demand"]].fillna(0)
     return avg_mx
 
 
-def expand_matrix(mx_df: pd.DataFrame, zones=1300):
+def expand_matrix(
+    mx_df: pd.DataFrame,
+    zones : int =1300
+) -> pd.DataFrame:
     """Expand matrix to all possible movements (zones x zones).
 
     Parameters
     ----------
-    mx_df : pandas dataframe
+    mx_df : pd.DataFrame
         matrix
     zones: int
         number of model zones, default = 1300
-    Function
-    ---------
-    expand a matrix to the full dimensions
 
     Returns
     -------
-    eMx : pandas dataframe
+    expanded_mx : pd.DataFrame
         expanded matrix
     """
     # create empty dataframe
@@ -922,9 +915,15 @@ def expand_matrix(mx_df: pd.DataFrame, zones=1300):
 
 
 def fromto_2_from_by_averaging(
-    matrices_dict: dict, norms_segments: list, segments_method: dict
-):
+    matrices_dict: dict,
+    norms_segments: list,
+    segments_method: dict
+)  -> dict:
     """Get the FromHome demand by averaging FromHome and ToHome.
+
+
+    Function combines From/To by averaging the two directions to produce the 19
+    segments needed by NoRMS
 
     Parameters
     ----------
@@ -934,10 +933,6 @@ def fromto_2_from_by_averaging(
         list of NoRMS demand segments
     segments_method: dictionary
         all demand segments in a From/To format
-    Function
-    ---------
-    Function combines From/To by averaging the two directions to produce the 19
-    segments needed by NoRMS
 
     Returns
     -------
@@ -950,7 +945,7 @@ def fromto_2_from_by_averaging(
     # loop over all norms segments
     for segment in norms_segments:
         # check if the segment has a ToHome component or if it's a non-home based
-        if (segment + "_T" in segments_method) and (segment[:3] != "NHB"):
+        if (segment + "_T" in segments_method) and (segment[:3].lower() != "NHB".lower()):
             # average the FromHome and the transposition of the toHome
             matrices[segment] = average_two_matrices(
                 matrices_dict[segment], transpose_matrix(matrices_dict[segment + "_T"])
@@ -962,8 +957,15 @@ def fromto_2_from_by_averaging(
     return matrices
 
 
-def fromto_2_from_by_from(matrices_dict: dict, norms_segments: list):
+def fromto_2_from_by_from(
+    matrices_dict: dict,
+    norms_segments: list
+) -> dict:
     """Get the FromHome demand by using the FromHome only.
+
+
+    Function keeps the From home only when moving back to NoRMS segments for the
+    pd.DataFramel From/To
 
     Parameters
     ----------
@@ -971,10 +973,6 @@ def fromto_2_from_by_from(matrices_dict: dict, norms_segments: list):
         24Hr demand matrices dictionary
     norms_segments : list
         list of NoRMS demand segments
-    Function
-    ---------
-    Function keeps the From home only when moving back to NoRMS segments for the
-    internal From/To
 
     Returns
     -------
@@ -992,20 +990,19 @@ def fromto_2_from_by_from(matrices_dict: dict, norms_segments: list):
     return matrices
 
 
-def transpose_matrix(mx_df: pd.DataFrame):
+def transpose_matrix(
+    mx_df: pd.DataFrame
+) -> pd.DataFrame:
     """Transpose a matrix O<>D/P<>A.
 
     Parameters
     ----------
-    mx : pandas dataframe
+    mx : pd.DataFrame
         input matrix to transpose
-    Function
-    ---------
-    Function Transposes the matrix O<>D/P<>A
 
     Returns
     -------
-    mx : pandas dataframe
+    mx : pd.DataFrame
         transposed matrix
     """
     # transpose to-home PA to OD by renaming from <> to model zone id
@@ -1020,9 +1017,16 @@ def transpose_matrix(mx_df: pd.DataFrame):
 
 
 def convert_csv_2_mat(
-    norms_segments: list, cube_exe: Path, forecast_year: int, output_folder: Path
-):
+    norms_segments: list,
+    cube_exe: pathlib.Path,
+    forecast_year: int,
+    output_folder: pathlib.Path
+) -> None:
     """Convert CSV output matrices to Cube .MAT.
+
+
+    Function converts output CSV matrices into a signle Cube .MAT matrrix
+    in NoRMS input demand matrix format
 
     Parameters
     ----------
@@ -1035,27 +1039,24 @@ def convert_csv_2_mat(
     output_folder : Path
         path to folder where CSV matrices are saved. this is where the .MAT
         will also be saved to
-    Function
-    ---------
-    Function converts output CSV matrices into a signle Cube .MAT matrrix
-    in NoRMS input demand matrix format
 
-    Returns
-    -------
-    none
     """
     # empty dictionary
     mats_dict = {}
     # create a dictionary of matrices and their paths
     for segment in norms_segments:
-        mats_dict[segment] = Path(output_folder, f"{forecast_year}_24Hr_{segment}.csv")
+        mats_dict[segment] = pathlib.Path(output_folder,
+                                          f"{forecast_year}_24Hr_{segment}.csv")
 
     # call CUBE convertor class
     c_m = CUBEMatConverter(cube_exe)
-    c_m.csv_to_mat(1300, mats_dict, Path(output_folder, "PT_24hr_Demand.MAT"), 1)
+    c_m.csv_to_mat(1300, mats_dict, pathlib.Path(output_folder,
+                                                 "PT_24hr_Demand.MAT"), 1)
 
 
-def run_edge_growth(params: forecast_cnfg.EDGEParameters):
+def run_edge_growth(
+    params: forecast_cnfg.EDGEParameters
+) -> None:
     """Run Growth Process."""
     LOG.info("#" * 80)
     LOG.info("Started Process @ %s", datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"))
@@ -1169,7 +1170,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
     # loop over periods
     for period in tqdm(periods, desc="Time Periods Loop ", unit=" Period", colour="cyan"):
         LOG.info(
-            "-- Processing Time Period %s @" " %s",
+            "-- Processing Time Period %s @ %s",
             period,
             datetime.now().strftime("%d-%m-%Y,,,%H:%M:%S.%f"),
         )
@@ -1252,7 +1253,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
             )
             tot_output_demand = round(demand_mx["N_Demand"].sum())
             LOG.info(
-                "%s                 " "%s                   " "%s",
+                "%s                 %s                   %s",
                 segment,
                 tot_input_demand,
                 tot_output_demand,
@@ -1303,7 +1304,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
         "          Records below have missing factors for -Missing_TicketType- "
         "and therefore growth factors for"
     )
-    LOG.info("          Tickets from Availabkle_TicektType- have been used")
+    LOG.info("          Tickets from Available_TicektType- have been used")
     LOG.info(
         "          Total demand proportion for these movements = %s %% "
         "of which %s %% is Internal",
@@ -1342,7 +1343,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters):
     norms_matrices1 = fromto_2_from_by_averaging(
         factored_24hr_matrices, norms_segments, segments_method
     )
-    # norms_matrices2 = pFunc.fromto_2_from_by_from(factored_24Hr_matrices)
+    # norms_matrices2 = pFunc.fromto_2_from_by_from(factored_24Hr_matrices, norms_segments)
     # plot matrices
     for segment in norms_segments:
         # write out demand matrix
