@@ -1,0 +1,9 @@
+output_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Codebase\EDDIE\NPIER DDG Comparison
+npier_ddg_folder: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Drivers\Nov 21 NPIER
+npier_scenario: NPIER
+eddie_ddg_folder: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Drivers\Nov 21 central
+eddie_scenario: Central
+date: Nov21
+heatmap_years:
+  - 2018
+  - 2038
