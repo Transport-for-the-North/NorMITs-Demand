@@ -2,11 +2,21 @@ iteration: 1.0
 forecast_scenario: core
 export_folder: I:\NorMITs Demand
 assignment_model: NoRMS
-assignment_model_run_folder: I:\NorMITs Demand\norms
-assignment_run_id: 1
-base_matrix_folder: I:\NorMITs Demand\norms
 forecast_year: 2040
-pEDGE_folder: I:\NorMITs Demand\norms\pEDGE
-edge_flows_filename: FC_fullfat1819_NEW_DDG.csv
-edge_factors_filename: Out_Nov 21 Central - Growth_{forecast_year}_rate.csv
-lookups_folder: I:\NorMITs Demand\norms\pEDGE
+
+# Input paths
+matrices_to_grow_dir: E:\Norms\Edge growth\output
+
+# Custom inputs files
+segments_to_uc_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\Segments2UCs.csv
+flow_cat_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\FlowCats.csv
+ticket_type_splits_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\TicketTypeSplits.csv
+norms_to_edge_stns_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\norms_to_edge_tlc.csv
+cube_exe: C:\Program Files\Citilabs\CubeVoyager\VOYAGER.EXE
+
+# EDGE Inputs
+edge_flows_path: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Base and Mappings\FC_fullfat1819_NEW_DDG.csv
+
+# EDGE outputs
+edge_growth_dir: I:\NorMITs Demand\import\EDGE_growth\Nov 21 Central - Growth
+edge_growth_fname: Out_Nov 21 Central - Growth_{forecast_year}_rate.csv.bz2

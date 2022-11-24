@@ -202,59 +202,88 @@ class NTEMForecastParameters(ForecastParameters):
 class EDGEParameters(config_base.BaseConfig):
     """Parameters for the EDGE forecasting model."""
 
+    forecast_year: int
+
+    # Used to build output path
     iteration: str
     forecast_version: str = "1.0"
     forecast_scenario: str
     export_folder: Path
     assignment_model: nd.AssignmentModel = nd.AssignmentModel.NORMS
-    assignment_model_run_folder: Path
-    assignment_run_id: str
-    base_matrix_folder: Path
-    forecast_year: int
-    pEDGE_folder: Path
-    edge_flows_filename: str = "FC_fullfat1819_NEW_DDG.csv"
-    edge_factors_filename: str = "Out_Nov 21 Central - Growth_{forecast_year}_rate.csv"
-    lookups_folder: Path
+
+    # Input folders
+    matrices_to_grow_dir: Path
+
+    # Input files
+    segments_to_uc_path: Path
+    flow_cat_path: Path
+    ticket_type_splits_path: Path
+    norms_to_edge_stns_path: Path
+    cube_exe : Path
+
+    # EDGE file
+    edge_flows_path: Path
+
+    # EDGE outputs
+    edge_growth_dir: Path
+    edge_growth_fname: str
 
     _export_path_fmt: str = pydantic.PrivateAttr(EXPORT_PATH_FORMAT)
 
+    @classmethod
     @pydantic.validator(
-        "assignment_model_run_folder", "base_matrix_folder", "pEDGE_folder", "lookups_folder"
+        "edge_growth_dir", "matrices_to_grow_dir"
     )
-    def _check_folder(cls, value: Path) -> Path:  # pylint: disable=no-self-argument
+    def _check_folder(cls, value: Path) -> Path:
         if not value.is_dir():
             raise ValueError(f"folder doesn't exist: {value}")
         return value
 
+    @classmethod
+    @pydantic.validator(
+        "segments_to_uc_path",
+        "flow_cat_path",
+        "ticket_type_splits_path",
+        "norms_to_edge_stns_path",
+        "edge_flows_path",
+        "cube_exe",
+    )
+    def _check_file(cls, value: Path) -> Path:
+        if not value.is_file():
+            raise ValueError(f"file doesn't exist: {value}")
+        return value
+
     @pydantic.root_validator(skip_on_failure=True)
-    def _check_edge_files(  # pylint: disable=no-self-argument
+    def _check_factors_path(  # pylint: disable=no-self-argument
         cls, values: dict[str, Any]
     ) -> dict[str, Any]:
-        missing = []
-        for attr in ("edge_flows_filename", "edge_factors_filename"):
-            name = values[attr].format(**values)
-            path = values["pEDGE_folder"] / name
-            if not path.is_file():
-                missing.append(name)
-
-        if missing:
+        """Check the factors Path."""
+        path: Path = values["edge_growth_dir"]
+        if not path.is_dir():
             raise ValueError(
-                "EDGE files not found in folder ('{}'): {}".format(
-                    values["pEDGE_folder"], ", ".join(f"'{m}'" for m in missing)
-                )
+                f"EDGE factors folder doesn't exist: {path}"
+            )
+
+        return values
+    
+    @pydantic.root_validator(skip_on_failure=True)
+    def _check_factors_file(  # pylint: disable=no-self-argument
+        cls, values: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Check the factors file."""
+        path: Path = Path(values["edge_growth_dir"]) / values["edge_growth_fname"].format(**values)
+        if not path.is_file():
+            raise ValueError(
+                f"EDGE factors file doesn't exist: {path}"
             )
 
         return values
 
-    @property
-    def edge_flows_path(self) -> Path:
-        """Path to EDGE flows file."""
-        return self.pEDGE_folder / self.edge_flows_filename.format(**self.dict())
 
     @property
     def edge_factors_path(self) -> Path:
         """Path to EDGE factors file."""
-        return self.pEDGE_folder / self.edge_factors_filename.format(**self.dict())
+        return self.edge_growth_dir / self.edge_growth_fname.format(**self.dict())
 
     @property
     def export_path(self) -> Path:
