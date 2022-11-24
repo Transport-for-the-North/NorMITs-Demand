@@ -10,13 +10,10 @@ import re
 import subprocess
 
 # Third party imports
-import typing as typ
-import subprocess as sp
 
 # Local imports
 from normits_demand import logging as nd_log
-from normits_demand.utils import general
-from normits_demand.utils import file_ops
+from normits_demand.utils import general, file_ops
 
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
@@ -158,36 +155,31 @@ class CUBEMatConverter:
             path to folder where outputs to be saved.
         out_file : str
             name of the output omx file.
-
-        Function
-        ----------
-        function takes a Cube .MAT file and exports it to .OMX file
-
-        Returns
-        -------
-        None.
-
         """
+        #create script path
+        script_path = Path(out_path / "Mat2OMX.s")
+
         # check files exists
         file_ops.check_file_exists(mat_file)
 
-        to_write = [
-            f'convertmat from="{mat_file}" to="{out_path}\\{out_file}.omx" '
+        to_write = f'convertmat from="{mat_file}" to="{out_path}\\{out_file}.omx" '\
             'format=omx compression=4'
-        ]
-        with open(f"{out_path}\\Mat2OMX.s", "w") as script:
-            for line in to_write:
-                print(line, file=script)
+        with open(f"{out_path}\\Mat2OMX.s", "w") as file:
+            file.write(to_write)
 
-        proc_single(
-            [
-                f'"{self.voyager_path.resolve()}" "{out_path}\\Mat2OMX.s" -Pvdmi /Start /Hide /HideScript',
-                f'del "{out_path}\\*.prn"',
-                f'del "{out_path}\\*.VAR"',
-                f'del "{out_path}\\*.PRJ"',
-                f'del "{out_path}\\Mat2OMX.s"',
-            ]
-        )
+        #create commands
+        command = f'"{self.voyager_path.resolve()}" "{script_path}" '\
+            '-Pvdmi /Start /Hide /HideScript'
+        #run commands
+        subprocess.run(command, capture_output=True, check=False)
+        # Cleanup files
+        script_path.unlink()
+        script_path.with_name("TPPL.PRJ").unlink()
+        del_pat = re.compile(r"(vdmi.*)\.(prn|var)", re.I)
+        for path in script_path.parent.iterdir():
+            match = del_pat.match(path.name)
+            if match:
+                path.unlink()
 
 def _stdout_decode(stdout: bytes) -> str:
     """Convert bytes to string starting with a newline, or return empty string."""
@@ -195,25 +187,3 @@ def _stdout_decode(stdout: bytes) -> str:
     if stdout != "":
         stdout = "\n" + stdout
     return stdout
-
-# subprocess
-def proc_single(cmd_list: typ.List):
-    """Execute Single Process at a time.
-
-    Parameters
-    ----------
-    cmd_list : list
-        list of commands to execute.
-
-    Function
-    ----------
-    execute processes one after the other in the list order
-
-    Returns
-    -------
-    None.
-
-    """
-    for ts in cmd_list:
-        pr = sp.Popen(ts, creationflags=sp.CREATE_NEW_CONSOLE, shell=True)
-        pr.wait()
