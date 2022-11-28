@@ -7,3 +7,12 @@ date: Nov21
 heatmap_years:
   - 2018
   - 2038
+comparison_ddgs:
+  - Emp
+  - GDPpc
+  - Pop
+  - RTR EMPINDEX  
+  - RTR POPINDEX
+  - Tf L EMPINDEX
+  - Tf L POPINDEX
+base_year: 2018

@@ -501,8 +501,9 @@ def _heatmap_figure(
     analytical_area: Union[geometry.Polygon, geometry.MultiPolygon] = None,
     positive_negative_colormaps: bool = False,
     legend_label_fmt: str = "{:.1%}",
+    legend_title: Optional[str] = None,
 ):
-    LEGEND_KWARGS = dict(title_fontsize="large", fontsize="medium")
+    LEGEND_KWARGS = dict(title_fontsize="large", fontsize="medium", title=legend_title)
 
     fig, axes = plt.subplots(1, 2, figsize=(20, 15), frameon=False, constrained_layout=True)
     fig.suptitle(title, fontsize="xx-large", backgroundcolor="white")
