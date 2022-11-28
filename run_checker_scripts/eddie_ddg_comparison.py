@@ -247,7 +247,7 @@ def comparison_heatmap(
     geodata: gpd.GeoDataFrame,
     geom_id_column: str,
     years: list[str],
-    data_name: str,
+    title: str,
     output_file_base: pathlib.Path,
     plot_data_column: str,
     legend_label_fmt: str,
@@ -266,8 +266,8 @@ def comparison_heatmap(
         Name of the column which links `data` to `geodata`.
     years : list[str]
         Years to plot heatmaps for.
-    data_name : str
-        Name of DDG data being used.
+    title : str
+        Title for the plots.
     output_file_base : pathlib.Path
         Base file path for writing the heatmap images.
     plot_data_column : str
@@ -275,7 +275,7 @@ def comparison_heatmap(
     legend_label_fmt : str
         Format for the numbers in the legend.
     """
-    LOG.info("Creating heatmaps for %s", data_name)
+    LOG.info("Creating heatmaps for %s", title)
 
     data = data.loc[:, plot_data_column].reset_index()
     data = data.loc[:, [geom_id_column] + years]
@@ -292,7 +292,7 @@ def comparison_heatmap(
         fig = plots._heatmap_figure(
             geodata,
             yr,
-            f"EDDIE vs NPIER {data_name} Comparison - {yr}",
+            f"{title} - {yr}",
             n_bins=5,
             positive_negative_colormaps=True,
             legend_label_fmt=legend_label_fmt,
@@ -426,11 +426,8 @@ def main(params: DDGComparisonParameters, init_logger: bool = True):
 
         for plt_data in ("NPIER - EDDIE", "% NPIER - EDDIE"):
             plt_nm = plt_data.replace("%", "Percentage")
-            out_file = (
-                folders["comparison"]
-                / f"{plt_nm} Heatmaps"
-                / (out_file.stem + "_" + plt_nm.lower().replace(" ", "_"))
-            )
+            fname = out_file.stem + "_" + plt_nm.lower().replace(" - ", "-").replace(" ", "_")
+            out_file = folders["comparison"] / f"{plt_nm} Heatmaps" / fname
             out_file.parent.mkdir(exist_ok=True)
 
             comparison_heatmap(
@@ -438,7 +435,7 @@ def main(params: DDGComparisonParameters, init_logger: bool = True):
                 eddie_geom,
                 eddie_zone.col_name,
                 [str(i) for i in params.heatmap_years],
-                ddg_name,
+                f"EDDIE vs NPIER {ddg_name} Comparison",
                 out_file,
                 plt_data,
                 "{:.1%}" if "%" in plt_data else "{:.3g}",
@@ -449,7 +446,23 @@ def main(params: DDGComparisonParameters, init_logger: bool = True):
             comparison.loc[:, ["NPIER", "EDDIE"]], str(params.base_year), out_file, ddg_name
         )
 
-        # TODO Growth heatmaps for NPIER, EDDIE and NPIER - EDDIE
+        for plt_data in growth.columns.get_level_values(0).unique():
+            fname = (
+                out_file.stem + "_" + plt_data.lower().replace(" - ", "-").replace(" ", "_")
+            )
+            out_file = folders["growth"] / f"{plt_data} Heatmaps" / fname
+            out_file.parent.mkdir(exist_ok=True)
+
+            comparison_heatmap(
+                growth,
+                eddie_geom,
+                eddie_zone.col_name,
+                [str(i) for i in params.heatmap_years],
+                f"{plt_data} Growth",
+                out_file,
+                plt_data,
+                "{:.1%}",
+            )
 
 
 if __name__ == "__main__":

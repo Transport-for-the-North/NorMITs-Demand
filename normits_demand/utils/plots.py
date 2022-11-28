@@ -503,7 +503,7 @@ def _heatmap_figure(
     legend_label_fmt: str = "{:.1%}",
     legend_title: Optional[str] = None,
 ):
-    LEGEND_KWARGS = dict(title_fontsize="large", fontsize="medium", title=legend_title)
+    LEGEND_KWARGS = dict(title_fontsize="large", fontsize="medium")
 
     fig, axes = plt.subplots(1, 2, figsize=(20, 15), frameon=False, constrained_layout=True)
     fig.suptitle(title, fontsize="xx-large", backgroundcolor="white")
@@ -527,7 +527,7 @@ def _heatmap_figure(
         scheme="NaturalBreaks",
         k=7,
         legend_kwds=dict(
-            title=f"{str(column_name).title()}",
+            title=legend_title if legend_title else str(column_name).title(),
             **LEGEND_KWARGS,
             loc="upper right",
         ),
