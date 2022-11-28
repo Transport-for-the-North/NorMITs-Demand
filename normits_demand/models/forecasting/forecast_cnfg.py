@@ -202,7 +202,7 @@ class NTEMForecastParameters(ForecastParameters):
 class EDGEParameters(config_base.BaseConfig):
     """Parameters for the EDGE forecasting model."""
 
-    forecast_year: int
+    forecast_years: dict[int, Any]
 
     # Used to build output path
     iteration: str
@@ -219,21 +219,18 @@ class EDGEParameters(config_base.BaseConfig):
     flow_cat_path: Path
     ticket_type_splits_path: Path
     norms_to_edge_stns_path: Path
-    cube_exe : Path
+    cube_exe: Path
 
     # EDGE file
     edge_flows_path: Path
 
     # EDGE outputs
     edge_growth_dir: Path
-    edge_growth_fname: str
 
     _export_path_fmt: str = pydantic.PrivateAttr(EXPORT_PATH_FORMAT)
 
     @classmethod
-    @pydantic.validator(
-        "edge_growth_dir", "matrices_to_grow_dir"
-    )
+    @pydantic.validator("edge_growth_dir", "matrices_to_grow_dir")
     def _check_folder(cls, value: Path) -> Path:
         if not value.is_dir():
             raise ValueError(f"folder doesn't exist: {value}")
@@ -260,30 +257,23 @@ class EDGEParameters(config_base.BaseConfig):
         """Check the factors Path."""
         path: Path = values["edge_growth_dir"]
         if not path.is_dir():
-            raise ValueError(
-                f"EDGE factors folder doesn't exist: {path}"
-            )
+            raise ValueError(f"EDGE factors folder doesn't exist: {path}")
 
         return values
-    
+
     @pydantic.root_validator(skip_on_failure=True)
     def _check_factors_file(  # pylint: disable=no-self-argument
         cls, values: dict[str, Any]
     ) -> dict[str, Any]:
         """Check the factors file."""
-        path: Path = Path(values["edge_growth_dir"]) / values["edge_growth_fname"].format(**values)
-        if not path.is_file():
-            raise ValueError(
-                f"EDGE factors file doesn't exist: {path}"
-            )
+        for forecast_year in values["forecast_years"]:
+            path: Path = Path(values["edge_growth_dir"]) / values["forecast_years"][
+                forecast_year
+            ].format(**values)
+            if not path.is_file():
+                raise ValueError(f"EDGE factors file doesn't exist: {path}")
 
         return values
-
-
-    @property
-    def edge_factors_path(self) -> Path:
-        """Path to EDGE factors file."""
-        return self.edge_growth_dir / self.edge_growth_fname.format(**self.dict())
 
     @property
     def export_path(self) -> Path:

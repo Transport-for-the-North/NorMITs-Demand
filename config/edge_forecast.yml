@@ -2,7 +2,6 @@ iteration: 1.0
 forecast_scenario: core
 export_folder: I:\NorMITs Demand
 assignment_model: NoRMS
-forecast_year: 2040
 
 # Input paths
 matrices_to_grow_dir: E:\Norms\Edge growth\output
@@ -19,4 +18,8 @@ edge_flows_path: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Base and Ma
 
 # EDGE outputs
 edge_growth_dir: I:\NorMITs Demand\import\EDGE_growth\Nov 21 Central - Growth
-edge_growth_fname: Out_Nov 21 Central - Growth_{forecast_year}_rate.csv.bz2
+# Forecast years dictionary
+# forecast year: EDGE growth factors file
+forecast_years:
+  2040: Out_Nov 21 Central - Growth_2040_rate_EDGE.csv
+  2043: Out_Nov 21 Central - Growth_2043_rate_EDGE.csv
