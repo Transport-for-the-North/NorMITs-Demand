@@ -1162,6 +1162,14 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 unit=" Segment",
                 colour="cyan",
             ):
+                # get segment's userclass
+                segment_uc = segments_to_uc[segments_to_uc["MX"] == segment].iloc[0][
+                    "userclass"
+                ]
+                # filter probabilities dataframe to the current userclass
+                irsj_props_segment = irsj_props.loc[
+                    irsj_props["userclass"] == segment_uc
+                ].reset_index(drop=True)
                 # check if ToHome segment
                 to_home = bool(segment in internal_to_home)
                 # demand matrices
@@ -1172,9 +1180,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 # sum total demand
                 demand_total = demand_total + tot_input_demand
                 # add UCs to demand based on demand segment
-                demand_mx.loc[:, "userclass"] = segments_to_uc[
-                    segments_to_uc["MX"] == segment
-                ].iloc[0]["userclass"]
+                demand_mx.loc[:, "userclass"] = segment_uc
                 # keep needed columns
                 demand_mx = demand_mx[
                     ["from_model_zone_id", "to_model_zone_id", "userclass", "Demand"]
@@ -1183,7 +1189,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 demand_mx = demand_mx.loc[demand_mx["Demand"] > 0].reset_index(drop=True)
                 # prepare demand matrix
                 demand_mx = prepare_stn2stn_matrix(
-                    demand_mx, irsj_props, dist_mx, norms_to_edge_stns, to_home
+                    demand_mx, irsj_props_segment, dist_mx, norms_to_edge_stns, to_home
                 )
                 # assign EDGE flows
                 demand_mx = assign_edge_flow(edge_flows_file, flow_cats, demand_mx)
