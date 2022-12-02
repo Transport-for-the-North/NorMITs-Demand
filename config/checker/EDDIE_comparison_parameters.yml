@@ -1,4 +1,4 @@
-eddie_file: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Codebase\EDDIE\Nov21_EDDIE_Proper_DN_v3.xlsm
+eddie_file: I:\Data\EDDIE Inputs\Nov21_EDDIE_Proper_DN_v3.xlsm
 workbook_parameters:
   landuse:
     sheet_name: I; CEBR_LA_EMP_POP_GDP
@@ -15,9 +15,15 @@ workbook_parameters:
   employment_occupation:
     sheet_name: I; CEBR_LA_EMPbyOccupation
     header_row: 13
-tfn_base_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Inputs\NorMITs Land Use\import\scenarios
-scenario: SC04_UZC
+npier_input: npier_scenario_landuse
+npier_scenario_landuse:
+  base_folder: I:\NorMITs Land Use\import\scenarios
+  scenario: SC04_UZC
+npier_raw_transformational:
+  npier_data_workbook: I:\Data\EDDIE Inputs\NPIER Transformational\NPIER Transformational Raw Inputs\NPIER Technical Update database (November 2019).xlsx
+  npier_regions_workbook: I:\Data\EDDIE Inputs\NPIER Transformational\NPIER Transformational Raw Inputs\NPIER 2019 Rest of UK regions .xlsx
 output_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Codebase\EDDIE\TfN Land Use Comparison
 map_years:
-- 2018
-- 2038
+  - 2018
+  - 2038
+  # - 2042

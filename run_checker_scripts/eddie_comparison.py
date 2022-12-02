@@ -8,16 +8,18 @@ Flowchart detailing the methodolgy in the module is given here:
 
 ##### IMPORTS #####
 # Standard imports
+import enum
 import pathlib
 import re
 import sys
-from typing import NamedTuple
+from typing import Any, NamedTuple, Optional
 
 # Third party imports
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 import pydantic
+from pydantic import fields
 import geopandas as gpd
 
 # Local imports
@@ -27,6 +29,7 @@ sys.path.append(".")
 import normits_demand as nd
 from normits_demand import logging as nd_log
 from normits_demand.utils import config_base, file_ops, plots, pandas_utils
+from normits_demand.core import enumerations
 from normits_demand.core.enumerations import LandUseType
 
 # pylint: enable=import-error, wrong-import-position
@@ -59,15 +62,110 @@ class EDDIEWorkbookParams(pydantic.BaseModel):
     employment_occupation: WorksheetParams
 
 
+class NPIERScenarioLandUseParameters(pydantic.BaseModel):
+    """Parameters for the land use data from a NPIER scenario."""
+
+    base_folder: pathlib.Path
+    scenario: nd.Scenario
+
+    _land_use_files: dict[LandUseType, pathlib.Path] = pydantic.PrivateAttr(None)
+
+    @pydantic.validator("base_folder")
+    def _check_folder(  # pylint: disable=no-self-argument
+        cls, value: pathlib.Path
+    ) -> pathlib.Path:
+        """Raise ValueError if `value` isn't a folder."""
+        if not value.is_dir():
+            raise ValueError(f"folder doesn't exist: {value}")
+        return value
+
+    @staticmethod
+    def _build_landuse_paths(
+        base_folder: pathlib.Path, scenario: nd.Scenario
+    ) -> dict[LandUseType, pathlib.Path]:
+        folder = base_folder / scenario.value
+        return {
+            pop_emp: folder / pop_emp.value / "future_growth_values.csv"
+            for pop_emp in LandUseType
+        }
+
+    @pydantic.root_validator(skip_on_failure=True)
+    def _check_files(  # pylint: disable=no-self-argument
+        cls, values: dict[str, Any]
+    ) -> dict[str, Any]:
+        missing = []
+        for path in cls._build_landuse_paths(
+            values.get("base_folder"), values.get("scenario")
+        ).values():
+            if not path.is_file:
+                missing.append(f'"{path}"')
+
+        if missing:
+            raise ValueError("cannot find land use files:{}".format("\n\t".join(missing)))
+
+        return values
+
+    @property
+    def land_use_files(self) -> dict[LandUseType, pathlib.Path]:
+        """Paths to the NPIER land use files."""
+        if self._land_use_files is None:
+            self._land_use_files = self._build_landuse_paths(self.base_folder, self.scenario)
+        return self._land_use_files.copy()
+
+
+class RawTransformationalParameters(pydantic.BaseModel):
+    npier_data_workbook: pathlib.Path
+    npier_regions_workbook: pathlib.Path
+
+    @pydantic.validator("npier_data_workbook", "npier_regions_workbook")
+    def _check_workbook_paths(  # pylint: disable=no-self-argument
+        cls, value: pathlib.Path
+    ) -> pathlib.Path:
+        if not value.is_file():
+            raise ValueError(f"file doesn't exist: {value}")
+        if value.suffix.lower() != ".xlsx":
+            raise ValueError(f"file isn't an existing Excel Workbook: {value}")
+
+        return value
+
+
+class NPIERInputType(enumerations.IsValidEnumWithAutoNameLower):
+    NPIER_SCENARIO_LANDUSE = enum.auto()
+    NPIER_RAW_TRANSFORMATIONAL = enum.auto()
+
+
 class EDDIEComparisonParameters(config_base.BaseConfig):
     """Parameters for running EDDIE comparison script."""
 
     eddie_file: pathlib.Path
     workbook_parameters: EDDIEWorkbookParams
-    tfn_base_folder: pathlib.Path
-    scenario: nd.Scenario
+    npier_input: NPIERInputType
+    npier_scenario_landuse: Optional[NPIERScenarioLandUseParameters] = None
+    npier_raw_transformational: Optional[RawTransformationalParameters] = None
     output_folder: pathlib.Path
     map_years: list[int]
+
+    @pydantic.validator(
+        "npier_scenario_landuse", "npier_raw_transformational", pre=True, always=True
+    )
+    def _validate_npier_input(  # pylint: disable=no-self-argument
+        cls, value: Any, field: fields.ModelField, values: dict[str, Any]
+    ) -> Any:
+        """Check if the required parameters are given for the NPIER input type."""
+        # Ignore any data given if not using that input type
+        npier_input: NPIERInputType = values.get("npier_input")
+        if npier_input is None:
+            raise ValueError("missing value npier_input")
+
+        if field.name != npier_input.value:
+            if value is not None:
+                LOG.debug("ignoring %s value", field.name)
+            return None
+
+        if value is None:
+            raise ValueError(f"required when {npier_input.value=}")
+
+        return value
 
 
 class EDDIELandUseData(NamedTuple):
@@ -240,16 +338,13 @@ def translate_tfn_landuse(
     return translated.groupby([to_zone.col_name] + index_columns).sum()
 
 
-def load_landuse_tfn(folder: pathlib.Path, scenario: nd.Scenario) -> LandUseData:
+def load_landuse_tfn(npier_parameters: NPIERScenarioLandUseParameters) -> LandUseData:
     """Load NPIER landuse data.
 
     Parameters
     ----------
-    folder : pathlib.Path
-        Folder to find land use CSVs in, files are expected to be in population
-        / employment sub-folders and named 'future_growth_values.csv'.
-    scenario : nd.Scenario
-        Scenario of land use data being used.
+    npier_parameters : NPIERScenarioLandUseParameters
+        Parameters for the NPIER land use files.
 
     Returns
     -------
@@ -265,7 +360,7 @@ def load_landuse_tfn(folder: pathlib.Path, scenario: nd.Scenario) -> LandUseData
     landuse_indices = {LandUseType.POPULATION: [], LandUseType.EMPLOYMENT: []}
 
     for pop_emp, index_columns in landuse_indices.items():
-        file = folder / pop_emp.value / "future_growth_values.csv"
+        file = npier_parameters.land_use_files[pop_emp]
         LOG.info("Loading %s land use data from '%s'", pop_emp.value, file)
         data = file_ops.read_df(file)
 
@@ -285,7 +380,7 @@ def load_landuse_tfn(folder: pathlib.Path, scenario: nd.Scenario) -> LandUseData
             years,
         )
 
-    return LandUseData(scenario, landuse)
+    return LandUseData(npier_parameters.scenario, landuse)
 
 
 def _load_wor_wap(path: pathlib.Path, sheet_params: WorksheetParams) -> pd.DataFrame:
@@ -773,22 +868,21 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
     init_logger : bool, default True
         Whether to initialise a logger.
     """
-    if not params.output_folder.is_dir():
-        params.output_folder.mkdir(parents=True)
+    output_folder = params.output_folder / params.npier_input.value
+    if not output_folder.is_dir():
+        output_folder.mkdir(parents=True)
 
     if init_logger:
         nd_log.get_logger(
             nd_log.get_package_logger_name(),
-            params.output_folder / LOG_FILE,
+            output_folder / LOG_FILE,
             "Running EDDIE Inputs Comparison",
             log_version=True,
         )
-        nd_log.capture_warnings(
-            file_handler_args=dict(log_file=params.output_folder / LOG_FILE)
-        )
+        nd_log.capture_warnings(file_handler_args=dict(log_file=output_folder / LOG_FILE))
 
     LOG.debug("Input parameters:\n%s", params.to_yaml())
-    params_out_file = params.output_folder / "EDDIE_comparison_parameters.yml"
+    params_out_file = output_folder / "EDDIE_comparison_parameters.yml"
     LOG.info("Written input parameters to %s", params_out_file)
     params.save_yaml(params_out_file)
 
@@ -797,10 +891,12 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
         params.workbook_parameters.landuse,
         params.workbook_parameters.lad_lookup,
     )
-    tfn_folder = params.tfn_base_folder / params.scenario.value
-    tfn = load_landuse_tfn(tfn_folder, params.scenario)
+    if params.npier_input == NPIERInputType.NPIER_SCENARIO_LANDUSE:
+        tfn = load_landuse_tfn(params.npier_scenario_landuse)
+    else:
+        raise NotImplementedError(f"Not implemented processing {params.npier_input.value}")
 
-    output_file_base = params.output_folder / "EDDIE_TfN_landuse_comparison"
+    output_file_base = output_folder / "EDDIE_TfN_landuse_comparison"
     comparisons = compare_landuse(eddie, tfn, output_file_base)
 
     # Load other land use data and use it to split the TfN totals
@@ -810,7 +906,7 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
     )
 
     write_eddie_format(
-        comparisons, disaggregated, params.output_folder / "TfN_landuse-EDDIE_format.xlsx"
+        comparisons, disaggregated, output_folder / "TfN_landuse-EDDIE_format.xlsx"
     )
 
     eddie_zone = nd.get_zoning_system(EDDIE_ZONE_SYSTEM)
