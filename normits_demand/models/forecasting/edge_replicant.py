@@ -2,6 +2,7 @@
 """EDGE Replicant process to grow demand."""
 # ## IMPORTS ## #
 # Standard imports
+import os
 import logging
 import itertools
 import pathlib
@@ -16,6 +17,7 @@ from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.models.forecasting import forecast_cnfg
 from normits_demand.matrices.cube_mat_converter import CUBEMatConverter
+from normits_demand.concurrency import multiprocessing
 
 # ## CONSTANTS ## #
 LOG = logging.getLogger(__name__)
@@ -1010,6 +1012,212 @@ def convert_csv_2_mat(
     )
 
 
+def process_segment_growth(
+    forecast_year: int,
+    output_folder: pathlib.Path,
+    segments_to_uc: pd.DataFrame,
+    norms_to_edge_stns: pd.DataFrame,
+    edge_flows_file: pd.DataFrame,
+    flow_cats: pd.DataFrame,
+    ticket_type_splits: pd.DataFrame,
+    matrices_to_grow_dir: pathlib.Path,
+    internal_to_home: list,
+    segments_method: dict,
+    period: str,
+    dist_mx: pd.DataFrame,
+    segment: str,
+    irsj_props_segment: pd.DataFrame,
+    growth_summary: pd.DataFrame,
+    demand_total: float,
+    other_tickets_df: pd.DataFrame,
+    no_factors_df: pd.DataFrame,
+    edge_growth_factors: pd.DataFrame,
+) -> Tuple[float, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Apply Growth prcoess for each demand segment.
+
+    Parameters
+    ----------
+        forecast_year : int
+            forecast year
+        output_folder : pathlib.Path
+            folder where matrices are saved
+        segments_to_uc : pd.DataFrame
+            demand segment to userclass lookup dataframe
+        norms_to_edge_stns : pd.DataFrame
+            NoRMS TLC to EDGE TLC lookup dataframe
+        edge_flows_file : pd.DataFrame
+            EDGE flows lookup dataframe
+        flow_cats : pd.DataFrame
+            Flow Categories lookup dataframe
+        ticket_type_splits : pd.DataFrame
+            Journey purpose to TicketType demand split proportions dataframe
+        matrices_to_grow_dir : pathlib.Path
+            Path to directory where matrices, iRSj and distance matrices are stored
+        internal_to_home : list
+            list of internbal ToHome demand segments
+        segments_method : dict
+            dictionary of all segments and their growth method
+        period : str
+            time period
+        dist_mx : pd.DataFrame
+            stn2stn distance matrix
+        segment : str
+            demand segment
+        irsj_props_segment : pd.DataFrame
+            iRSj probabilities dataframe
+        growth_summary : pd.DataFrame
+            dataframe to store growth summary
+        demand_total : float
+            cumulative sum of demand segments
+        other_tickets_df : pd.DataFrame
+            dataframe of movements where factor of other tickettype is used
+        no_factors_df : pd.DataFrame
+            dataframe of movements where no factor is found
+        edge_growth_factors : pd.DataFrame
+            EDGE Growth factors dataframe
+    Returns
+    -------
+        demand_total : float
+            cumulative sum of demand segments
+        growth_summary : pd.DataFrame
+            dataframe to store growth summary
+        other_tickets_df : pd.DataFrame
+            dataframe of movements where factor of other tickettype is used
+        no_factors_df : pd.DataFrame
+            dataframe of movements where no factor is found
+    """
+    # get segment's userclass
+    segment_uc = segments_to_uc[segments_to_uc["MX"] == segment].iloc[0]["userclass"]
+    # check if ToHome segment
+    to_home = bool(segment in internal_to_home)
+    # demand matrices
+    demand_mx = file_ops.read_df(matrices_to_grow_dir / f"{period}_{segment}.csv")
+    tot_input_demand = round(demand_mx["Demand"].sum())
+    # sum total demand
+    demand_total = demand_total + tot_input_demand
+    # add UCs to demand based on demand segment
+    demand_mx.loc[:, "userclass"] = segment_uc
+    # keep needed columns
+    demand_mx = demand_mx[["from_model_zone_id", "to_model_zone_id", "userclass", "Demand"]]
+    # keep non-zero demand records
+    demand_mx = demand_mx.loc[demand_mx["Demand"] > 0].reset_index(drop=True)
+    # prepare demand matrix
+    demand_mx = prepare_stn2stn_matrix(
+        demand_mx, irsj_props_segment, dist_mx, norms_to_edge_stns, to_home
+    )
+    # assign EDGE flows
+    demand_mx = assign_edge_flow(edge_flows_file, flow_cats, demand_mx)
+    # add TAG flows
+    demand_mx = add_distance_band_tag_flow(demand_mx)
+    # add prupsoes to matrix
+    demand_mx = assign_purposes(demand_mx)
+    # add ticket splits props
+    demand_mx = demand_mx.merge(ticket_type_splits, how="left", on=["TAG_Flow", "Purpose"])
+    # apply Ticket Splits
+    demand_mx = apply_ticket_splits(demand_mx)
+    # Get factors for missing movements if any
+    (
+        edge_growth_factors,
+        other_tickets_df,
+        no_factors_df,
+    ) = create_factors_for_missing_moira_movements(
+        demand_mx, edge_growth_factors, other_tickets_df, no_factors_df
+    )
+    # get factoring method
+    method = segments_method[segment]
+    # apply factoring based on demand segment
+    if method == 1:
+        demand_mx = apply_edge_growth_method1(demand_mx, edge_growth_factors, to_home)
+    else:
+        demand_mx = apply_edge_growth_method2(demand_mx, edge_growth_factors)
+    # move back to zone2zone matrix
+    demand_mx = (
+        demand_mx.groupby(["from_model_zone_id", "to_model_zone_id"])[["T_Demand", "N_Demand"]]
+        .sum()
+        .reset_index()
+    )
+    tot_output_demand = round(demand_mx["N_Demand"].sum())
+    # create logging line
+    log_line = "{:>12} {:>15}  {:>12}  {:>12}".format(
+        period, segment, tot_input_demand, tot_output_demand
+    )
+    LOG.info(log_line)
+    # empty dataframe for growth summary
+    temp_growth_summary = pd.DataFrame(
+        {
+            "Time_Period": [period],
+            "Demand_Segment": [segment],
+            "Base_Demand": [tot_input_demand],
+            f"{forecast_year}_Demand": [tot_output_demand],
+        }
+    )
+    # add growth stats to growth summary df
+    growth_summary = pd.concat([growth_summary, temp_growth_summary], axis=0)
+    # ammend forecast matrix to main dictionary
+    demand_mx = demand_mx[["from_model_zone_id", "to_model_zone_id", "N_Demand"]]
+    demand_mx = demand_mx.rename(columns={"N_Demand": f"{period}_Demand"})
+    file_ops.write_df(
+        demand_mx, pathlib.Path(output_folder / f"{period}_{segment}.csv"), index=False
+    )
+
+    return demand_total, growth_summary, other_tickets_df, no_factors_df, edge_growth_factors
+
+
+def process_mp_returned_objects(
+    return_files: Tuple,
+) -> Tuple[float, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Combine reuturned objects from multiprocessing.
+
+    Args:
+        return_files : Tuple
+            tuple of returned objects from multiprocessing containing:
+            demand_total, growth_summary, other_tickets_df, no_factors_df, edge_growth_factors
+
+    Returns:
+        demand_total : float
+            sum of all demand
+        growth_summary : pd.DataFrame
+            summary of growth for each segment
+        other_tickets_df : pd.DataFrame
+            dataframe of movements where other tickets have been used
+        no_factors_df : pd.DataFrame
+            dataframe of movements where no factor was found
+        edge_growth_factors : pd.DataFrame
+            dataframe of all EDGE factors including filled factors
+    """
+    # create combined objects
+    demand_total = 0
+    growth_summary = pd.DataFrame()
+    other_tickets_df = pd.DataFrame()
+    no_factors_df = pd.DataFrame()
+    edge_growth_factors = pd.DataFrame()
+    # loop over returned objects in each segment
+    for (
+        demand_total_mp,
+        growth_summary_mp,
+        other_tickets_df_mp,
+        no_factors_df_mp,
+        edge_growth_factors_mp,
+    ) in return_files:
+        # sum total demand
+        demand_total = demand_total + demand_total_mp
+        # combine dataframes and drop duplicates where exist
+        # demand summary
+        growth_summary = pd.concat([growth_summary, growth_summary_mp], axis=0)
+        growth_summary = growth_summary.drop_duplicates().reset_index(drop=True)
+        # other tickets df
+        other_tickets_df = pd.concat([other_tickets_df, other_tickets_df_mp], axis=0)
+        other_tickets_df = other_tickets_df.drop_duplicates().reset_index(drop=True)
+        # no factors df
+        no_factors_df = pd.concat([no_factors_df, no_factors_df_mp], axis=0)
+        no_factors_df = no_factors_df.drop_duplicates().reset_index(drop=True)
+        # edge factors df
+        edge_growth_factors = pd.concat([edge_growth_factors, edge_growth_factors_mp], axis=0)
+        edge_growth_factors = edge_growth_factors.drop_duplicates().reset_index(drop=True)
+
+    return demand_total, growth_summary, other_tickets_df, no_factors_df, edge_growth_factors
+
+
 def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
     """Run Growth Process."""
     LOG.info("#" * 80)
@@ -1018,6 +1226,9 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
 
     # Process Fixed objects
     periods = ["AM", "IP", "PM", "OP"]
+
+    # cores count
+    process_count = 2
 
     # ## READ INPUT FILES ## #
     # Custom input files
@@ -1155,6 +1366,26 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 "Time_Period", "Demand_Segment", "Base_Demand", f"{forecast_year}_Demand"
             )
             LOG.info(log_line)
+
+            #! set kwargs list for multiprocessing of segments
+            unchanging_kwargs = {
+                "forecast_year": forecast_year,
+                "output_folder": params.export_path,
+                "segments_to_uc": segments_to_uc,
+                "norms_to_edge_stns": norms_to_edge_stns,
+                "edge_flows_file": edge_flows_file,
+                "flow_cats": flow_cats,
+                "ticket_type_splits": ticket_type_splits,
+                "matrices_to_grow_dir": params.matrices_to_grow_dir,
+                "internal_to_home": internal_to_home,
+                "segments_method": segments_method,
+                "period": period,
+                "dist_mx": dist_mx,
+            }
+
+            #! create kwargs list
+            kwargs_list = list()
+
             # loop over demand segments
             for segment in tqdm(
                 demand_segment_list,
@@ -1170,88 +1401,37 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 irsj_props_segment = irsj_props.loc[
                     irsj_props["userclass"] == segment_uc
                 ].reset_index(drop=True)
-                # check if ToHome segment
-                to_home = bool(segment in internal_to_home)
-                # demand matrices
-                demand_mx = file_ops.read_df(
-                    params.matrices_to_grow_dir / f"{period}_{segment}.csv"
-                )
-                tot_input_demand = round(demand_mx["Demand"].sum())
-                # sum total demand
-                demand_total = demand_total + tot_input_demand
-                # add UCs to demand based on demand segment
-                demand_mx.loc[:, "userclass"] = segment_uc
-                # keep needed columns
-                demand_mx = demand_mx[
-                    ["from_model_zone_id", "to_model_zone_id", "userclass", "Demand"]
-                ]
-                # keep non-zero demand records
-                demand_mx = demand_mx.loc[demand_mx["Demand"] > 0].reset_index(drop=True)
-                # prepare demand matrix
-                demand_mx = prepare_stn2stn_matrix(
-                    demand_mx, irsj_props_segment, dist_mx, norms_to_edge_stns, to_home
-                )
-                # assign EDGE flows
-                demand_mx = assign_edge_flow(edge_flows_file, flow_cats, demand_mx)
-                # add TAG flows
-                demand_mx = add_distance_band_tag_flow(demand_mx)
-                # add prupsoes to matrix
-                demand_mx = assign_purposes(demand_mx)
-                # add ticket splits props
-                demand_mx = demand_mx.merge(
-                    ticket_type_splits, how="left", on=["TAG_Flow", "Purpose"]
-                )
-                # apply Ticket Splits
-                demand_mx = apply_ticket_splits(demand_mx)
-                # Get factors for missing movements if any
-                (
-                    edge_growth_factors,
-                    other_tickets_df,
-                    no_factors_df,
-                ) = create_factors_for_missing_moira_movements(
-                    demand_mx, edge_growth_factors, other_tickets_df, no_factors_df
-                )
-                # get factoring method
-                method = segments_method[segment]
-                # apply factoring based on demand segment
-                if method == 1:
-                    demand_mx = apply_edge_growth_method1(
-                        demand_mx, edge_growth_factors, to_home
-                    )
-                else:
-                    demand_mx = apply_edge_growth_method2(demand_mx, edge_growth_factors)
-
-                # move back to zone2zone matrix
-                demand_mx = (
-                    demand_mx.groupby(["from_model_zone_id", "to_model_zone_id"])[
-                        ["T_Demand", "N_Demand"]
-                    ]
-                    .sum()
-                    .reset_index()
-                )
-                tot_output_demand = round(demand_mx["N_Demand"].sum())
-                # create logging line
-                log_line = "{:>12} {:>15}  {:>12}  {:>12}".format(
-                    period, segment, tot_input_demand, tot_output_demand
-                )
-                LOG.info(log_line)
-
-                # empty dataframe for growth summary
-                temp_growth_summary = pd.DataFrame(
+                #! MP kwargs
+                kwargs = unchanging_kwargs.copy()
+                kwargs.update(
                     {
-                        "Time_Period": [period],
-                        "Demand_Segment": [segment],
-                        "Base_Demand": [tot_input_demand],
-                        f"{forecast_year}_Demand": [tot_output_demand],
+                        "segment": segment,
+                        "irsj_props_segment": irsj_props_segment,
+                        "growth_summary": growth_summary,
+                        "demand_total": demand_total,
+                        "other_tickets_df": other_tickets_df,
+                        "no_factors_df": no_factors_df,
+                        "edge_growth_factors": edge_growth_factors,
                     }
                 )
-                # add growth stats to growth summary df
-                growth_summary = pd.concat([growth_summary, temp_growth_summary], axis=0)
+                kwargs_list.append(kwargs)
+            # MP run process
+            return_files = multiprocessing.multiprocess(
+                fn=process_segment_growth,
+                kwargs=kwargs_list,
+                process_count=process_count,
+            )
 
-                # ammend forecast matrix to main dictionary
-                demand_mx = demand_mx[["from_model_zone_id", "to_model_zone_id", "N_Demand"]]
-                demand_mx = demand_mx.rename(columns={"N_Demand": f"{period}_Demand"})
-                factored_matrices[period][segment] = demand_mx
+            # combine returned objects
+            (
+                demand_total,
+                growth_summary,
+                other_tickets_df,
+                no_factors_df,
+                edge_growth_factors,
+            ) = process_mp_returned_objects(
+                return_files,
+            )
 
         # get logging stats
         (
@@ -1324,10 +1504,10 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         # write out matrices
         for segment in segments_method:
             # get demand for each period
-            am_mx = factored_matrices["AM"][segment]
-            ip_mx = factored_matrices["IP"][segment]
-            pm_mx = factored_matrices["PM"][segment]
-            op_mx = factored_matrices["OP"][segment]
+            am_mx = file_ops.read_df(pathlib.Path(params.export_path / f"AM_{segment}.csv"))
+            ip_mx = file_ops.read_df(pathlib.Path(params.export_path / f"IP_{segment}.csv"))
+            pm_mx = file_ops.read_df(pathlib.Path(params.export_path / f"PM_{segment}.csv"))
+            op_mx = file_ops.read_df(pathlib.Path(params.export_path / f"OP_{segment}.csv"))
             # get 24Hr demand amtrix
             demand_mx = sum_periods_demand(am_mx, ip_mx, pm_mx, op_mx)
             # add to 24Hr matrices dict
