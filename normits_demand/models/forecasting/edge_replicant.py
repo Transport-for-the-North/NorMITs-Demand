@@ -1522,7 +1522,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             factored_24hr_matrices, norms_segments, segments_method
         )
         # norms_matrices2 = fromto_2_from_by_from(factored_24Hr_matrices, norms_segments)
-        # plot matrices
+        # export matrices
         for segment in norms_segments:
             # write out demand matrix
             file_ops.write_df(
