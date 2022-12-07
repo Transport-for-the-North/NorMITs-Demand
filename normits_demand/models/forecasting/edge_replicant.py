@@ -1513,6 +1513,9 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             demand_mx = sum_periods_demand(am_mx, ip_mx, pm_mx, op_mx)
             # add to 24Hr matrices dict
             factored_24hr_matrices[segment] = demand_mx
+            # remove files
+            for period in periods:
+                (pathlib.Path(params.export_path / f"{period}_{segment}.csv")).unlink()
 
         # Combine matrices into NoRMS segments
         norms_matrices1 = fromto_2_from_by_averaging(
