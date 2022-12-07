@@ -1228,6 +1228,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
     periods = ["AM", "IP", "PM", "OP"]
 
     # cores count
+    # process_count = os.cpu_count() - 2
     process_count = 2
 
     # ## READ INPUT FILES ## #
