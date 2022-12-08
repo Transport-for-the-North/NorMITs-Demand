@@ -1163,6 +1163,7 @@ def tidy_dataframe(
     drop_unnamed: bool = True,
     nan_columns: bool = True,
     nan_rows: bool = True,
+    nan_index: bool = True
 ) -> pd.DataFrame:
     """Drop Nans and normalise column names.
 
@@ -1178,6 +1179,8 @@ def tidy_dataframe(
         Whether to drop columns with all Nans.
     nan_rows : bool, default True
         Whether to drop rows with all Nans.
+    nan_index : bool, default True
+        Whether to drop rows with Nan index value.
 
     Returns
     -------
@@ -1196,5 +1199,8 @@ def tidy_dataframe(
 
     if nan_rows:
         df = df.dropna(axis=0, how="all")
+
+    if nan_index:
+        df = df.loc[~df.index.isna()]
 
     return df

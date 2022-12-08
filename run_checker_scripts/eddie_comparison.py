@@ -3,7 +3,7 @@
 Module for creating inputs for EDDIE from TfN land use data.
 
 Flowchart detailing the methodolgy in the module is given here:
-`docs\op_models\Misc\EDDIE_inputs.drawio`.
+`docs\op_modelser\Misc\EDDIE_inputs.drawio`.
 """
 
 ##### IMPORTS #####
@@ -49,7 +49,9 @@ class WorksheetParams(pydantic.BaseModel):
     """Parameters for an individual worksheet."""
 
     sheet_name: str
-    header_row: int
+    header_row: int = 0
+    index_columns: Optional[list[int]] = None
+    column_letters: Optional[str] = None
 
 
 class EDDIEWorkbookParams(pydantic.BaseModel):
@@ -114,8 +116,40 @@ class NPIERScenarioLandUseParameters(pydantic.BaseModel):
 
 
 class RawTransformationalParameters(pydantic.BaseModel):
+    """Parameters for the NPIER raw land use data from the Oxford economics workbooks."""
+
     npier_data_workbook: pathlib.Path
     npier_regions_workbook: pathlib.Path
+    local_demographics_sheet: WorksheetParams = WorksheetParams(
+        sheet_name="TRA - Local demog",
+        header_row=5,
+        index_columns=[0],
+        column_letters="B,M:BA",
+    )
+    local_economics_sheet: WorksheetParams = WorksheetParams(
+        sheet_name="TRA - Local econ head",
+        header_row=5,
+        index_columns=[0],
+        column_letters="B, M:BA",
+    )
+    industry_employment_sheet: WorksheetParams = WorksheetParams(
+        sheet_name="TRA - Industry detail, emp",
+        header_row=5,
+        index_columns=[0],
+        column_letters="B, M:BA",
+    )
+    north_demographics_sheet: WorksheetParams = WorksheetParams(
+        sheet_name="TRA - North demog",
+        header_row=5,
+        index_columns=[0],
+        column_letters="B, M:BA",
+    )
+    regions_population_sheet: WorksheetParams = WorksheetParams(
+        sheet_name="Population", header_row=5, index_columns=[0], column_letters="B, M:BA"
+    )
+    regions_employment_sheet: WorksheetParams = WorksheetParams(
+        sheet_name="Employment", header_row=5, index_columns=[0], column_letters="B, M:BA"
+    )
 
     @pydantic.validator("npier_data_workbook", "npier_regions_workbook")
     def _check_workbook_paths(  # pylint: disable=no-self-argument
@@ -190,6 +224,24 @@ class DisaggregatedLandUse(NamedTuple):
     wor: pd.DataFrame
     employment_industry: pd.DataFrame
     employment_occupation: pd.DataFrame
+
+
+class NPIERNorthernLandUse(NamedTuple):
+    """Land use data from NPIER Oxford economics forecasts in the North."""
+
+    population: pd.DataFrame
+    employment: pd.DataFrame
+    wap: pd.Series
+    wor: pd.Series
+    industry_employment: pd.DataFrame
+
+
+class NPIERRegionsLandUse(NamedTuple):
+    """Land use data from NPIER Oxford economics region forecasts."""
+
+    population: pd.DataFrame
+    employment: pd.DataFrame
+    industry_employment: pd.DataFrame
 
 
 ##### FUNCTIONS #####
@@ -381,6 +433,161 @@ def load_landuse_tfn(npier_parameters: NPIERScenarioLandUseParameters) -> LandUs
         )
 
     return LandUseData(npier_parameters.scenario, landuse)
+
+
+def read_excel_sheet(
+    file: pathlib.Path, parameters: WorksheetParams, **kwargs
+) -> pd.DataFrame:
+    tidy_args = ["rename", "drop_unnamed", "nan_columns", "nan_rows", "nan_index"]
+    tidy_argument_values = {}
+    for arg in tidy_args:
+        if arg in kwargs:
+            tidy_argument_values[arg] = kwargs.pop(arg)
+
+    df = pd.read_excel(
+        file,
+        sheet_name=parameters.sheet_name,
+        header=parameters.header_row,
+        index_col=parameters.index_columns,
+        usecols=parameters.column_letters,
+        **kwargs,
+    )
+
+    return pandas_utils.tidy_dataframe(df, **tidy_argument_values)
+
+
+def _read_raw_demographics(
+    file: pathlib.Path, sheet_params: WorksheetParams
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    demographics = read_excel_sheet(file, sheet_params, nan_rows=False)
+    # All values in demographics have units thousands
+    demographics *= 1000
+
+    population_index = "Local area total population (thousands)"
+    labour_index = "Local area labour force (thousands)"
+
+    population = demographics.loc[population_index:labour_index].dropna(axis=0, how="all")
+    labour = demographics.loc[labour_index:].dropna(axis=0, how="all")
+
+    return population, labour
+
+
+def _read_raw_economics(
+    file: pathlib.Path, sheet_params: WorksheetParams
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    economics = read_excel_sheet(file, sheet_params, nan_rows=False)
+    gva_index = "GVA (£ million, constant 2016 prices)"
+    employment_index = "Employment (thousands, jobs)"
+    productivity_index = "Productivity (£ thousands constant 2016 prices, GVA per job)"
+
+    gva = economics.loc[gva_index:employment_index].dropna(axis=0, how="all")
+    gva *= 1e6
+    employment = economics.loc[employment_index:productivity_index].dropna(axis=0, how="all")
+    employment *= 1000
+    productivity = economics.loc[productivity_index:].dropna(axis=0, how="all")
+    productivity *= 1000
+
+    return gva, employment, productivity
+
+
+def _read_north_wor_wap(
+    file: pathlib.Path, sheet_params: WorksheetParams
+) -> tuple[pd.Series, pd.Series]:
+    wor_wap = read_excel_sheet(file, sheet_params, nan_rows=False)
+    wor_wap *= 1000
+    wap = wor_wap.loc["16-64 population"]
+    wap.name = "North"
+
+    wor = wor_wap.loc[
+        "Labour force by age and gender":"Participation rate by age and gender"
+    ].dropna(axis=0, how="all")
+    working_ages = ["16-19", "20-24", "25-34", "35-49", "50-64"]
+    working_ages = [f"All persons - {i}" for i in working_ages]
+    wor = wor.loc[working_ages].sum(axis=0)
+    wor.name = "North"
+    return wor, wap
+
+
+def _read_employment_industries(
+    file: pathlib.Path, sheet_params: WorksheetParams, zone_names: list[str]
+) -> pd.DataFrame:
+    industries = read_excel_sheet(file, sheet_params, nan_rows=False)
+    industries *= 1000
+
+    indices: dict[int, str] = {}
+    for zone in zone_names:
+        i = industries.index.get_loc(zone)
+        indices[i] = zone
+
+    all_industries = []
+    int_indices = sorted(indices)
+    for i, j in zip(int_indices, int_indices[1:] + [np.inf]):
+        zone = indices[i]
+
+        if np.isinf(j):
+            zone_industries = industries.iloc[i:]
+        else:
+            zone_industries = industries.iloc[i:j]
+        zone_industries = zone_industries.loc["Industry section":].dropna(axis=0, how="all")
+        zone_industries.index = pd.MultiIndex.from_product(((zone,), zone_industries.index))
+        all_industries.append(zone_industries)
+
+    return pd.concat(all_industries, axis=0)
+
+
+def _read_npier_regions(
+    file: pathlib.Path, population_sheet: WorksheetParams, employment_sheet: WorksheetParams
+) -> NPIERRegionsLandUse:
+    population = read_excel_sheet(file, population_sheet)
+    population *= 1000
+
+    region_names = population.index.tolist()
+    # UK is named differently in the employment workbook
+    region_names.remove("UK")
+    region_names.append("United Kingdom (mainland)")
+
+    industry_employment = _read_employment_industries(file, employment_sheet, region_names)
+    employment = industry_employment.groupby(level=0).sum()
+
+    return NPIERRegionsLandUse(population, employment, industry_employment)
+
+
+def load_raw_transformational(
+    params: RawTransformationalParameters,
+) -> tuple[NPIERNorthernLandUse, NPIERRegionsLandUse]:
+    """Load raw NPIER land use data from Oxford economics workbook.
+
+    Parameters
+    ----------
+    params : RawTransformationalParameters
+        Parameters for the workbook.
+
+    Returns
+    -------
+    NPIERNorthernLandUse
+        Land use data at LAD level for the North.
+    NPIERRegionsLandUse
+        Land use data for all other regions.
+    """
+    population, _ = _read_raw_demographics(
+        params.npier_data_workbook, params.local_demographics_sheet
+    )
+    _, employment, _ = _read_raw_economics(
+        params.npier_data_workbook, params.local_economics_sheet
+    )
+    wor, wap = _read_north_wor_wap(params.npier_data_workbook, params.north_demographics_sheet)
+    industries = _read_employment_industries(
+        params.npier_data_workbook, params.industry_employment_sheet, employment.index.tolist()
+    )
+
+    northern_land_use = NPIERNorthernLandUse(population, employment, wap, wor, industries)
+    regions_land_use = _read_npier_regions(
+        params.npier_regions_workbook,
+        params.regions_population_sheet,
+        params.regions_employment_sheet,
+    )
+
+    return northern_land_use, regions_land_use
 
 
 def _load_wor_wap(path: pathlib.Path, sheet_params: WorksheetParams) -> pd.DataFrame:
@@ -891,35 +1098,40 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
         params.workbook_parameters.landuse,
         params.workbook_parameters.lad_lookup,
     )
+
     if params.npier_input == NPIERInputType.NPIER_SCENARIO_LANDUSE:
         tfn = load_landuse_tfn(params.npier_scenario_landuse)
+
+        output_file_base = output_folder / "EDDIE_TfN_landuse_comparison"
+        comparisons = compare_landuse(eddie, tfn, output_file_base)
+
+        # Load other land use data and use it to split the TfN totals
+        disaggregated = load_disaggregated_eddie(params.eddie_file, params.workbook_parameters)
+        disaggregated = disaggregate_tfn_landuse(
+            eddie.data, {k: v.loc[:, "TfN"] for k, v in comparisons.items()}, disaggregated
+        )
+
+        write_eddie_format(
+            comparisons, disaggregated, output_folder / "TfN_landuse-EDDIE_format.xlsx"
+        )
+
+        eddie_zone = nd.get_zoning_system(EDDIE_ZONE_SYSTEM)
+        eddie_zone_meta = eddie_zone.get_metadata()
+        eddie_geom = gpd.read_file(eddie_zone_meta.shapefile_path)
+        eddie_geom = eddie_geom.loc[:, [eddie_zone_meta.shapefile_id_col, "geometry"]]
+        eddie_geom = eddie_geom.rename(
+            columns={eddie_zone_meta.shapefile_id_col: eddie_zone.col_name}
+        )
+
+        comparison_heatmaps(
+            comparisons, eddie_geom, eddie_zone.col_name, params.map_years, output_file_base
+        )
+
     else:
-        raise NotImplementedError(f"Not implemented processing {params.npier_input.value}")
-
-    output_file_base = output_folder / "EDDIE_TfN_landuse_comparison"
-    comparisons = compare_landuse(eddie, tfn, output_file_base)
-
-    # Load other land use data and use it to split the TfN totals
-    disaggregated = load_disaggregated_eddie(params.eddie_file, params.workbook_parameters)
-    disaggregated = disaggregate_tfn_landuse(
-        eddie.data, {k: v.loc[:, "TfN"] for k, v in comparisons.items()}, disaggregated
-    )
-
-    write_eddie_format(
-        comparisons, disaggregated, output_folder / "TfN_landuse-EDDIE_format.xlsx"
-    )
-
-    eddie_zone = nd.get_zoning_system(EDDIE_ZONE_SYSTEM)
-    eddie_zone_meta = eddie_zone.get_metadata()
-    eddie_geom = gpd.read_file(eddie_zone_meta.shapefile_path)
-    eddie_geom = eddie_geom.loc[:, [eddie_zone_meta.shapefile_id_col, "geometry"]]
-    eddie_geom = eddie_geom.rename(
-        columns={eddie_zone_meta.shapefile_id_col: eddie_zone.col_name}
-    )
-
-    comparison_heatmaps(
-        comparisons, eddie_geom, eddie_zone.col_name, params.map_years, output_file_base
-    )
+        npier_raw_north, npier_raw_regions = load_raw_transformational(
+            params.npier_raw_transformational
+        )
+        raise NotImplementedError("Not yet implemented the raw tranformational comparisons")
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ workbook_parameters:
   employment_occupation:
     sheet_name: I; CEBR_LA_EMPbyOccupation
     header_row: 13
-npier_input: npier_scenario_landuse
+npier_input: npier_raw_transformational
 npier_scenario_landuse:
   base_folder: I:\NorMITs Land Use\import\scenarios
   scenario: SC04_UZC
