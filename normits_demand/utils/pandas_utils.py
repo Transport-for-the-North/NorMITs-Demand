@@ -1204,3 +1204,54 @@ def tidy_dataframe(
         df = df.loc[~df.index.isna()]
 
     return df
+
+
+def fuzzy_merge(
+    left: pd.DataFrame,
+    right: pd.DataFrame,
+    left_column: str,
+    right_column: str,
+    drop_fuzzy: bool = True,
+    **kwargs,
+) -> pd.DataFrame:
+    """Wrapper around `pd.merge` which normalises column values before merging.
+
+    Converts the column values to lowercase then removes all
+    whitespace and punctuation before performing the join.
+
+    Parameters
+    ----------
+    left, right : pd.DataFrame
+        DataFrames to merge together.
+    left_column, right_column : str
+        Name of the column in the DataFrame's to do the merge on.
+    drop_fuzzy : bool, default True
+        Whether or not to drop the fuzzy column created for this function.
+    kawrgs : keyword arguments
+        Keyword arguments passed to `pandas.DataFrame.merge`.
+
+    Returns
+    -------
+    pd.DataFrame
+        Merged DataFrame.
+    """
+    FUZZY_JOIN_COL = "_fuzzy_join_column"
+    PATTERN = r"""[!"#$%&'()*+,\-./:;<=>?@\\[\]^_`{|}~\s]+"""
+
+    left.loc[:, FUZZY_JOIN_COL] = (
+        left[left_column].str.lower().str.replace(PATTERN, "", regex=True)
+    )
+    right.loc[:, FUZZY_JOIN_COL] = (
+        right[right_column].str.lower().str.replace(PATTERN, "", regex=True)
+    )
+
+    for arg in ("on", "left_on", "right_on", "left_index", "right_index"):
+        if arg in kwargs:
+            raise ValueError(f"argument {arg} not allowed")
+    merged = left.merge(right, on="_fuzzy_join_column", **kwargs)
+
+    left.drop(columns=FUZZY_JOIN_COL, inplace=True)
+    right.drop(columns=FUZZY_JOIN_COL, inplace=True)
+    if drop_fuzzy:
+        merged.drop(columns=FUZZY_JOIN_COL, inplace=True)
+    return merged
