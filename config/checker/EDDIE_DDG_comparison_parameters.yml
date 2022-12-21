@@ -1,5 +1,5 @@
-output_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Codebase\EDDIE\NPIER DDG Comparison
-npier_ddg_folder: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Drivers\Nov 21 NPIER
+output_folder: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Drivers\Nov 21 NPIER - North factored\Central Comparison
+npier_ddg_folder: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Drivers\Nov 21 NPIER - North factored
 npier_scenario: NPIER
 eddie_ddg_folder: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Drivers\Nov 21 central
 eddie_scenario: Central
@@ -9,10 +9,5 @@ heatmap_years:
   - 2038
 comparison_ddgs:
   - Emp
-  - GDPpc
   - Pop
-  - RTR EMPINDEX  
-  - RTR POPINDEX
-  - Tf L EMPINDEX
-  - Tf L POPINDEX
 base_year: 2018

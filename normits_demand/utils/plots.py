@@ -138,6 +138,12 @@ class CustomCmap:
         )
 
 
+class Bounds(NamedTuple):
+    min_x: int
+    min_y: int
+    max_x: int
+    max_y: int
+
 ##### FUNCTIONS #####
 def match_files(folder: Path, pattern: re.Pattern) -> Iterator[tuple[dict[str, str], Path]]:
     """Iterate through all files in folder which match `pattern`.
@@ -502,6 +508,7 @@ def _heatmap_figure(
     positive_negative_colormaps: bool = False,
     legend_label_fmt: str = "{:.1%}",
     legend_title: Optional[str] = None,
+    zoomed_bounds: Bounds = Bounds(300000, 150000, 600000, 500000),
 ):
     LEGEND_KWARGS = dict(title_fontsize="large", fontsize="medium")
 
@@ -614,8 +621,8 @@ def _heatmap_figure(
                 text = f"{lower:.0%} - {upper:.0%}"
             label.set_text(text)
 
-    axes[1].set_xlim(300000, 600000)
-    axes[1].set_ylim(150000, 500000)
+    axes[1].set_xlim(zoomed_bounds.min_x, zoomed_bounds.max_x)
+    axes[1].set_ylim(zoomed_bounds.min_y, zoomed_bounds.max_y)
     axes[1].annotate(
         "Source: NorMITs Demand",
         xy=(0.9, 0.01),

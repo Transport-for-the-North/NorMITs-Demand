@@ -298,6 +298,7 @@ def comparison_heatmap(
             legend_label_fmt=legend_label_fmt,
             legend_title=f"{plot_data_column} {yr}",
             # bins=np.concatenate([neg_bins, pos_bins]),
+            zoomed_bounds=plots.Bounds(290000, 340000, 550000, 670000),
         )
 
         file = output_file_base.with_name(output_file_base.stem + f"-{yr}.png")
