@@ -8,11 +8,12 @@ Flowchart detailing the methodolgy in the module is given here:
 
 ##### IMPORTS #####
 # Standard imports
+from __future__ import annotations
 import enum
 import pathlib
 import re
 import sys
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple, Optional, TypeVar
 
 # Third party imports
 from matplotlib import pyplot as plt
@@ -42,6 +43,30 @@ EDDIE_ZONE_SYSTEM = "lad_2017"
 CONFIG_FILE = pathlib.Path(r"config\checker\EDDIE_comparison_parameters.yml")
 EDDIE_EMPLOYMENT_HEADER_SKIP = 9
 """Number of header rows to skip in the occupation and industry sheets."""
+CEBR_INDUSTRY_LOOKUP = {
+    "Agriculture, forestry & fishing": "Agriculture & fishing",
+    "Mining & Quarrying": "Other services",
+    "Manufacturing": "Manufacturing",
+    "Electricity, gas, steam and air ": "Energy & water",
+    "Water supply": "Energy & water",
+    "Construction": "Construction",
+    "Wholesale and retail trade": "Distribution, hotels & restaurants",
+    "Transportation and storage": "Transport & communication",
+    "Accommodation and food service": "Distribution, hotels & restaurants",
+    "Information and communication": "Transport & communication",
+    "Financial and insurance ": "Banking, finance & insurance",
+    "Real estate activities": "Other services",
+    "Professional, scientific and tech": "Other services",
+    "Administrative and support ": "Public admin, education & health",
+    "Public administration and defence": "Public admin, education & health",
+    "Education": "Public admin, education & health",
+    "Human health and social work ": "Public admin, education & health",
+    "Arts, entertainment and rec": "Other services",
+    "Other service activities": "Other services",
+}
+"Lookup from NPIER industries to EDDIE industries."
+OUTPUT_YEARS = range(2011, 2051)
+NORTH_REGIONS = ["North East", "North West", "Yorks & Hum"]
 
 
 ##### CLASSES #####
@@ -242,6 +267,28 @@ class NPIERRegionsLandUse(NamedTuple):
     population: pd.DataFrame
     employment: pd.DataFrame
     industry_employment: pd.DataFrame
+
+
+NPIERLandUseType = TypeVar("NPIERLandUseType", NPIERRegionsLandUse, NPIERNorthernLandUse)
+
+
+class NPIEREDDIEFormatLandUse(NamedTuple):
+    population: pd.DataFrame
+    employment: pd.DataFrame
+    wap: pd.DataFrame
+    wor: pd.DataFrame
+    industry_employment: pd.DataFrame
+    occupation_employment: Optional[pd.DataFrame] = None
+
+    def copy(self) -> NPIEREDDIEFormatLandUse:
+        return NPIEREDDIEFormatLandUse(
+            population=self.population.copy(),
+            employment=self.employment.copy(),
+            wap=self.wap.copy(),
+            wor=self.wor.copy(),
+            industry_employment=self.industry_employment.copy(),
+            occupation_employment=self.occupation_employment.copy(),
+        )
 
 
 ##### FUNCTIONS #####
@@ -462,6 +509,7 @@ def _read_raw_demographics(
     demographics = read_excel_sheet(file, sheet_params, nan_rows=False)
     # All values in demographics have units thousands
     demographics *= 1000
+    demographics.index.names = ["npier_lad"]
 
     population_index = "Local area total population (thousands)"
     labour_index = "Local area labour force (thousands)"
@@ -476,6 +524,7 @@ def _read_raw_economics(
     file: pathlib.Path, sheet_params: WorksheetParams
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     economics = read_excel_sheet(file, sheet_params, nan_rows=False)
+    economics.index.names = ["npier_lad"]
     gva_index = "GVA (£ million, constant 2016 prices)"
     employment_index = "Employment (thousands, jobs)"
     productivity_index = "Productivity (£ thousands constant 2016 prices, GVA per job)"
@@ -496,7 +545,7 @@ def _read_north_wor_wap(
     wor_wap = read_excel_sheet(file, sheet_params, nan_rows=False)
     wor_wap *= 1000
     wap = wor_wap.loc["16-64 population"]
-    wap.name = "North"
+    wap.name = "NPIER"
 
     wor = wor_wap.loc[
         "Labour force by age and gender":"Participation rate by age and gender"
@@ -504,7 +553,7 @@ def _read_north_wor_wap(
     working_ages = ["16-19", "20-24", "25-34", "35-49", "50-64"]
     working_ages = [f"All persons - {i}" for i in working_ages]
     wor = wor.loc[working_ages].sum(axis=0)
-    wor.name = "North"
+    wor.name = "NPIER"
     return wor, wap
 
 
@@ -532,7 +581,9 @@ def _read_employment_industries(
         zone_industries.index = pd.MultiIndex.from_product(((zone,), zone_industries.index))
         all_industries.append(zone_industries)
 
-    return pd.concat(all_industries, axis=0)
+    industries = pd.concat(all_industries, axis=0)
+    industries.index.names = ["npier_lad", "cebr_industry"]
+    return industries
 
 
 def _read_npier_regions(
@@ -620,7 +671,11 @@ def _load_wor_wap(path: pathlib.Path, sheet_params: WorksheetParams) -> pd.DataF
     wor_wap = wor_wap.dropna(axis=1, how="all")
     wor_wap = wor_wap.set_index(index_columns)
 
-    return wor_wap
+    numeric_wor_wap = []
+    for c in wor_wap.columns:
+        numeric_wor_wap.append(pd.to_numeric(wor_wap[c]))
+
+    return pd.concat(numeric_wor_wap, axis=1)
 
 
 def load_disaggregated_eddie(
@@ -680,7 +735,7 @@ def load_disaggregated_eddie(
 
     return DisaggregatedLandUse(
         wap=wor_wap.loc["Working-Age Population"],
-        wor=wor_wap.loc["Employment (Residence-based)"],
+        wor=wor_wap.loc["Employment (Residence-based)"] * 1000,
         employment_industry=emp_data["industry"],
         employment_occupation=emp_data["occupation"],
     )
@@ -811,13 +866,14 @@ def _calculate_yearly_quarters(data: pd.DataFrame) -> pd.DataFrame:
     All quarters for a single year are identical to the
     original year column.
     """
-    drop = []
+    quarters = []
     for yr in data.columns:
         for q in range(1, 5):
-            data.loc[:, f"{yr}_q{q}"] = data[yr]
-        drop.append(yr)
+            col = data[yr].copy()
+            col.name = f"{yr}_q{q}"
+            quarters.append(col)
 
-    return data.drop(columns=drop)
+    return pd.concat(quarters, axis=1)
 
 
 def _disaggregate_tfn_wor_wap(
@@ -1065,6 +1121,384 @@ def write_eddie_format(
     LOG.info("Written: %s", output_file)
 
 
+def convert_to_eddie_years(landuse: NPIERLandUseType) -> NPIERLandUseType:
+    """Convert some data to year quarters to match EDDIE format.
+
+    Population, employment, WAP and WOR are converted to year quarters
+    (the values are identical to the full year but the column is
+    duplicated for the 4 quarters). Employment by industry and
+    employment by occupation are left as full years.
+
+    Parameters
+    ----------
+    landuse : NPIERLandUseType
+        Land use data to be converted.
+
+    Returns
+    -------
+    NPIERLandUseType
+        Converted land use data.
+    """
+    quarterly_frames = ("population", "employment")
+    quarterly_series = ("wap", "wor")
+
+    reformatted = {}
+    for nm, df in landuse._asdict().items():
+        if nm in quarterly_frames:
+            df = _calculate_yearly_quarters(df)
+        elif nm in quarterly_series:
+            df = _calculate_yearly_quarters(df.to_frame().T)
+            df = df.T.iloc[:, 0]
+        reformatted[nm] = df
+
+    return type(landuse)(**reformatted)
+
+
+def _get_index_names(df: pd.DataFrame) -> list[str]:
+    names = df.index.names
+    if len(names) == 1 and names[0] is None:
+        return ["index"]
+    return list(names)
+
+
+def merge_with_eddie(
+    eddie: pd.DataFrame,
+    north: pd.DataFrame,
+    eddie_cols: list[str],
+    north_cols: list[str],
+    **kwargs,
+) -> pd.DataFrame:
+    lad_rename = {"kingston upon hull, city of": "kingston upon hull"}
+
+    eddie = eddie.copy()
+    eddie.columns = [f"{c}_eddie" for c in eddie.columns]
+    north = north.copy()
+    north.columns = [f"{c}_north" for c in north.columns]
+
+    index = _get_index_names(eddie) + _get_index_names(north)
+    eddie = eddie.reset_index()
+    eddie_merge_columns = []
+    for col in eddie_cols:
+        eddie_merge_col = col + "_merge_col"
+        eddie.loc[:, eddie_merge_col] = eddie[col].str.lower().replace(lad_rename)
+        eddie_merge_columns.append(eddie_merge_col)
+    north = north.reset_index()
+
+    merged = pandas_utils.fuzzy_merge(eddie, north, eddie_merge_columns, north_cols, **kwargs)
+    if "_merge" in merged.columns:
+        merged.loc[:, "_merge"] = merged["_merge"].replace(
+            {"left_only": "eddie_only", "right_only": "npier_only"}
+        )
+
+    merged.drop(columns=eddie_merge_col, inplace=True)
+    return merged.set_index(index)
+
+
+def _infill_columns(
+    data: pd.DataFrame,
+    columns: list[str],
+    eddie_suffix: str = "_eddie",
+    npier_suffix: str = "_north",
+) -> pd.DataFrame:
+    eddie_mask = data["_merge"] == "eddie_only"
+    new_columns = [data["_merge"]]
+
+    for col_nm in columns:
+        eddie_col = col_nm + eddie_suffix
+        npier_col = col_nm + npier_suffix
+
+        if npier_col in data.columns and eddie_col in data.columns:
+            col = data[npier_col].copy()
+            col.loc[eddie_mask] = data.loc[eddie_mask, eddie_col]
+
+        elif npier_col in data.columns:
+            col = data[npier_col].copy()
+
+        else:
+            col = pd.Series(np.nan, index=data.index)
+
+        col.name = col_nm
+        new_columns.append(col)
+
+    return pd.concat(new_columns, axis=1)
+
+
+def output_eddie_format(
+    land_use_dataframes: NPIEREDDIEFormatLandUse, output_file: pathlib.Path
+) -> None:
+    with pd.ExcelWriter(output_file) as excel:
+        for nm, df in land_use_dataframes._asdict().items():
+            if df is None:
+                continue
+            # Output spreadsheet is in 000s
+            df = df.copy()
+            numeric_columns = df.select_dtypes((int, float)).columns
+            if nm == "wor":
+                df.loc[:, numeric_columns] = df[numeric_columns] / 1000
+            df.to_excel(excel, sheet_name=nm)
+
+    LOG.info("Written %s", output_file)
+
+
+def split_column_names(
+    name: str, eddie_suffix: str = "eddie", npier_suffix: str = "north"
+) -> tuple[str, str]:
+    pattern = rf"^(.*?)(?:_({eddie_suffix}|{npier_suffix}))?$"
+    match = re.match(pattern, name)
+    if match is None:
+        raise ValueError(f"something's wrong with '{name}'")
+
+    if match.group(2) is None:
+        return ("", match.group(1))
+
+    return (match.group(2), match.group(1))
+
+
+def write_north_only_eddie_format(
+    eddie: EDDIELandUseData,
+    disaggregated_eddie: DisaggregatedLandUse,
+    npier_north: NPIERNorthernLandUse,
+    output_file: pathlib.Path,
+) -> NPIEREDDIEFormatLandUse:
+    LOG.info("Creating NPIER North only EDDIE format")
+    # Add in Northern values from NPIER raw but don't change the external areas
+    kwargs = dict(
+        how="left",
+        validate="1:1",
+        indicator=True,
+    )
+
+    merged_population = merge_with_eddie(
+        eddie.data[LandUseType.POPULATION],
+        npier_north.population,
+        eddie_cols=["local_authority"],
+        north_cols=["npier_lad"],
+        **kwargs,
+    )
+    columns = [f"{i}_q{j}" for i in OUTPUT_YEARS for j in "1234"]
+    merged_population = _infill_columns(merged_population, columns)
+
+    merged_employment = merge_with_eddie(
+        eddie.data[LandUseType.EMPLOYMENT],
+        npier_north.employment,
+        eddie_cols=["local_authority"],
+        north_cols=["npier_lad"],
+        **kwargs,
+    )
+    merged_employment = _infill_columns(merged_employment, columns)
+
+    merged_wor_wap: dict[str, pd.DataFrame] = {}
+    for w in ("wor", "wap"):
+        eddie_wor_wap = getattr(disaggregated_eddie, w)
+        eddie_factors = (
+            eddie_wor_wap.loc[NORTH_REGIONS] / eddie_wor_wap.loc[NORTH_REGIONS].sum()
+        )
+        # Add additional columns using split from final column
+        eddie_factors = eddie_factors.reindex(columns=columns, method="ffill")
+
+        npier_wor_wap = eddie_factors.multiply(getattr(npier_north, w), axis=1).loc[:, columns]
+        merged_wor_wap[w] = eddie_wor_wap.reindex(columns=columns)
+        merged_wor_wap[w].loc[NORTH_REGIONS] = npier_wor_wap
+
+    # Industry doesn't have the same LADs as pop / emp in EDDIE for some reason
+    north_industry = npier_north.industry_employment.copy()
+    north_industry_index = ["npier_lad", "cebr_industry_npier"]
+    north_industry.index.names = north_industry_index
+    # Update NPIER industries to EDDIE ones as they're different
+    north_industry.index = pd.MultiIndex.from_arrays(
+        [
+            north_industry.index.get_level_values("npier_lad"),
+            north_industry.index.get_level_values("cebr_industry_npier")
+            .to_series()
+            .replace(CEBR_INDUSTRY_LOOKUP),
+        ]
+    )
+    north_industry = north_industry.groupby(level=[0, 1]).sum()
+
+    merged_industry = merge_with_eddie(
+        disaggregated_eddie.employment_industry,
+        north_industry,
+        eddie_cols=["local_authority", "cebr_industry"],
+        north_cols=north_industry_index,
+        **kwargs,
+    )
+    merged_industry = _infill_columns(merged_industry, [str(i) for i in OUTPUT_YEARS])
+
+    occupation_totals = disaggregated_eddie.employment_occupation.groupby(
+        level="local_authority"
+    ).sum()
+    occupation_totals = merge_with_eddie(
+        occupation_totals,
+        npier_north.industry_employment.groupby(level="npier_lad").sum(),
+        eddie_cols=["local_authority"],
+        north_cols=["npier_lad"],
+        **kwargs,
+    )
+    occupation_totals = occupation_totals.loc[occupation_totals["_merge"] == "both"]
+
+    occupation_totals.columns = pd.MultiIndex.from_tuples(
+        map(split_column_names, occupation_totals.columns)
+    )
+    occupation_factors = occupation_totals.loc[:, "eddie"] / occupation_totals.loc[:, "north"]
+    occupation_factors.index = occupation_factors.index.get_level_values("local_authority")
+    merged_occupation = disaggregated_eddie.employment_occupation.multiply(
+        occupation_factors, level="local_authority"
+    )
+
+    landuse_data = NPIEREDDIEFormatLandUse(
+        population=merged_population,
+        employment=merged_employment,
+        wap=merged_wor_wap["wap"],
+        wor=merged_wor_wap["wor"],
+        industry_employment=merged_industry,
+        occupation_employment=merged_occupation,
+    )
+    output_eddie_format(landuse_data, output_file)
+    return landuse_data
+
+
+def _factor_npier_eddie(
+    eddie_format_npier_data: NPIEREDDIEFormatLandUse,
+    population_factors: pd.DataFrame,
+    employment_factors: pd.DataFrame,
+    min_year: int,
+    max_year: int,
+    factor_join_col: str,
+) -> NPIEREDDIEFormatLandUse:
+    quarterly_columns = []
+    yearly_columns = []
+    for yr in range(min_year, max_year + 1):
+        yr = str(yr)
+        if yr in employment_factors.columns:
+            yearly_columns.append(yr)
+
+        for q in "1234":
+            quarter = f"{yr}_q{q}"
+            if quarter in population_factors.columns:
+                quarterly_columns.append(quarter)
+
+    factored_population = eddie_format_npier_data.population.drop(columns="_merge").multiply(
+        population_factors.loc[:, quarterly_columns], level=factor_join_col, fill_value=1
+    )
+    factored_employment = eddie_format_npier_data.employment.drop(columns="_merge").multiply(
+        employment_factors.loc[:, quarterly_columns], level=factor_join_col, fill_value=1
+    )
+
+    factored_wap = eddie_format_npier_data.wap.multiply(
+        population_factors.loc[:, quarterly_columns], level=factor_join_col, fill_value=1
+    )
+    factored_wor = eddie_format_npier_data.wor.multiply(
+        employment_factors.loc[:, quarterly_columns], level=factor_join_col, fill_value=1
+    )
+
+    factored_industry = eddie_format_npier_data.industry_employment.drop(
+        columns="_merge"
+    ).multiply(employment_factors.loc[:, yearly_columns], level=factor_join_col, fill_value=1)
+    factored_occupation = eddie_format_npier_data.occupation_employment.multiply(
+        employment_factors.loc[:, yearly_columns], level=factor_join_col, fill_value=1
+    )
+
+    return NPIEREDDIEFormatLandUse(
+        population=factored_population,
+        employment=factored_employment,
+        wap=factored_wap,
+        wor=factored_wor,
+        industry_employment=factored_industry,
+        occupation_employment=factored_occupation,
+    )
+
+
+def write_factored_external_eddie_format(
+    eddie: EDDIELandUseData,
+    npier_regions: NPIERRegionsLandUse,
+    eddie_format_npier_north: NPIEREDDIEFormatLandUse,
+    output_file: pathlib.Path,
+):
+    # Add in Northern values from NPIER raw and factor external areas to match NPIER external regions
+    npier_regions.population.index.names = ["npier_region"]
+    population_by_region = merge_with_eddie(
+        eddie.data[LandUseType.POPULATION].groupby("region").sum(),
+        npier_regions.population,
+        eddie_cols=["region"],
+        north_cols=["npier_region"],
+    )
+    population_by_region.columns = pd.MultiIndex.from_tuples(
+        map(split_column_names, population_by_region.columns)
+    )
+    population_factors = (
+        population_by_region.loc[:, "north"] / population_by_region.loc[:, "eddie"]
+    )
+    population_factors.index = population_factors.index.get_level_values("region")
+    population_factors.drop(columns="_merge", inplace=True, errors="ignore")
+
+    npier_regions.employment.index.names = ["npier_region"]
+    employment_by_region = merge_with_eddie(
+        eddie.data[LandUseType.EMPLOYMENT].groupby("region").sum(),
+        npier_regions.employment,
+        eddie_cols=["region"],
+        north_cols=["npier_region"],
+    )
+    employment_by_region.columns = pd.MultiIndex.from_tuples(
+        map(split_column_names, employment_by_region.columns)
+    )
+    employment_factors = (
+        employment_by_region.loc[:, "north"] / employment_by_region.loc[:, "eddie"]
+    )
+    employment_factors.index = employment_factors.index.get_level_values("region")
+    employment_factors.drop(columns="_merge", inplace=True, errors="ignore")
+
+    landuse_data = _factor_npier_eddie(
+        eddie_format_npier_north, population_factors, employment_factors, 2011, 2050, "region"
+    )
+    output_eddie_format(landuse_data, output_file)
+
+
+def write_factored_north_eddie_format(
+    eddie: EDDIELandUseData,
+    eddie_format_npier_north: NPIEREDDIEFormatLandUse,
+    output_file: pathlib.Path,
+):
+    # Add in Northern values from NPIER factored to EDDIE region totals and leave external area alone
+    eddie_region_pop = eddie_format_npier_north.population.groupby("region").sum()
+    eddie_region_pop.index.names = ["npier_region"]
+    population_by_region = merge_with_eddie(
+        eddie.data[LandUseType.POPULATION].groupby("region").sum(),
+        eddie_region_pop,
+        eddie_cols=["region"],
+        north_cols=["npier_region"],
+    ).loc[NORTH_REGIONS]
+    population_by_region.columns = pd.MultiIndex.from_tuples(
+        map(split_column_names, population_by_region.columns)
+    )
+    population_factors = (
+        population_by_region.loc[:, "north"] / population_by_region.loc[:, "eddie"]
+    )
+    population_factors.index = population_factors.index.get_level_values("region")
+    population_factors.drop(columns="_merge", inplace=True, errors="ignore")
+
+    eddie_region_emp = eddie_format_npier_north.employment.groupby("region").sum()
+    eddie_region_emp.index.names = ["npier_region"]
+    employment_by_region = merge_with_eddie(
+        eddie.data[LandUseType.EMPLOYMENT].groupby("region").sum(),
+        eddie_region_emp,
+        eddie_cols=["region"],
+        north_cols=["npier_region"],
+    ).loc[NORTH_REGIONS]
+    employment_by_region.columns = pd.MultiIndex.from_tuples(
+        map(split_column_names, employment_by_region.columns)
+    )
+    employment_factors = (
+        employment_by_region.loc[:, "north"] / employment_by_region.loc[:, "eddie"]
+    )
+    employment_factors.index = employment_factors.index.get_level_values("region")
+    employment_factors.drop(columns="_merge", inplace=True, errors="ignore")
+
+    landuse_data = _factor_npier_eddie(
+        eddie_format_npier_north, population_factors, employment_factors, 2011, 2050, "region"
+    )
+    output_eddie_format(landuse_data, output_file)
+
+
 def main(params: EDDIEComparisonParameters, init_logger: bool = True):
     """Compare EDDIE land use inputs to NPIER.
 
@@ -1098,6 +1532,9 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
         params.workbook_parameters.landuse,
         params.workbook_parameters.lad_lookup,
     )
+    disaggregated_eddie = load_disaggregated_eddie(
+        params.eddie_file, params.workbook_parameters
+    )
 
     if params.npier_input == NPIERInputType.NPIER_SCENARIO_LANDUSE:
         tfn = load_landuse_tfn(params.npier_scenario_landuse)
@@ -1106,9 +1543,10 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
         comparisons = compare_landuse(eddie, tfn, output_file_base)
 
         # Load other land use data and use it to split the TfN totals
-        disaggregated = load_disaggregated_eddie(params.eddie_file, params.workbook_parameters)
         disaggregated = disaggregate_tfn_landuse(
-            eddie.data, {k: v.loc[:, "TfN"] for k, v in comparisons.items()}, disaggregated
+            eddie.data,
+            {k: v.loc[:, "TfN"] for k, v in comparisons.items()},
+            disaggregated_eddie,
         )
 
         write_eddie_format(
@@ -1131,7 +1569,27 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
         npier_raw_north, npier_raw_regions = load_raw_transformational(
             params.npier_raw_transformational
         )
-        raise NotImplementedError("Not yet implemented the raw tranformational comparisons")
+
+        reformatted_north = convert_to_eddie_years(npier_raw_north)
+        reformatted_regions = convert_to_eddie_years(npier_raw_regions)
+
+        npier_north_only_eddie = write_north_only_eddie_format(
+            eddie,
+            disaggregated_eddie,
+            reformatted_north,
+            output_folder / "NPIER_Raw_EDDIE_format-North_only.xlsx",
+        )
+        write_factored_external_eddie_format(
+            eddie,
+            reformatted_regions,
+            npier_north_only_eddie.copy(),
+            output_folder / "NPIER_Raw_EDDIE_format-North_with_factored_external.xlsx",
+        )
+        write_factored_north_eddie_format(
+            eddie,
+            npier_north_only_eddie,
+            output_folder / "NPIER_Raw_EDDIE_format-factored_North.xlsx",
+        )
 
 
 if __name__ == "__main__":
