@@ -17,7 +17,7 @@ import re
 import warnings
 import functools
 
-from typing import Any
+from typing import Any, Union
 from typing import Dict
 from typing import List
 from typing import Callable
@@ -1209,8 +1209,8 @@ def tidy_dataframe(
 def fuzzy_merge(
     left: pd.DataFrame,
     right: pd.DataFrame,
-    left_column: str,
-    right_column: str,
+    left_columns: Union[list[str], str],
+    right_columns: Union[list[str], str],
     drop_fuzzy: bool = True,
     **kwargs,
 ) -> pd.DataFrame:
@@ -1223,8 +1223,8 @@ def fuzzy_merge(
     ----------
     left, right : pd.DataFrame
         DataFrames to merge together.
-    left_column, right_column : str
-        Name of the column in the DataFrame's to do the merge on.
+    left_columns, right_columns : Union[list[str], str]
+        Name(s) of the column in the DataFrame's to do the merge on.
     drop_fuzzy : bool, default True
         Whether or not to drop the fuzzy column created for this function.
     kawrgs : keyword arguments
@@ -1235,23 +1235,36 @@ def fuzzy_merge(
     pd.DataFrame
         Merged DataFrame.
     """
-    FUZZY_JOIN_COL = "_fuzzy_join_column"
-    PATTERN = r"""[!"#$%&'()*+,\-./:;<=>?@\\[\]^_`{|}~\s]+"""
-
-    left.loc[:, FUZZY_JOIN_COL] = (
-        left[left_column].str.lower().str.replace(PATTERN, "", regex=True)
-    )
-    right.loc[:, FUZZY_JOIN_COL] = (
-        right[right_column].str.lower().str.replace(PATTERN, "", regex=True)
-    )
-
     for arg in ("on", "left_on", "right_on", "left_index", "right_index"):
         if arg in kwargs:
             raise ValueError(f"argument {arg} not allowed")
-    merged = left.merge(right, on="_fuzzy_join_column", **kwargs)
 
-    left.drop(columns=FUZZY_JOIN_COL, inplace=True)
-    right.drop(columns=FUZZY_JOIN_COL, inplace=True)
+    PATTERN = r"""[!"#$%&'()*+,\-./:;<=>?@\\[\]^_`{|}~\s]+"""
+    dataframes = {"left": left, "right": right}
+    fuzzy_columns = {"left": [], "right": []}
+
+    for side, columns in (("left", left_columns), ("right", right_columns)):
+        if isinstance(columns, str):
+            columns = [columns]
+
+        for col in columns:
+            fuzzy_col = f"{col}_fuzzy_join_column"
+            dataframes[side].loc[:, fuzzy_col] = (
+                dataframes[side][col].str.lower().str.replace(PATTERN, "", regex=True)
+            )
+            fuzzy_columns[side].append(fuzzy_col)
+
+    merged = dataframes["left"].merge(
+        dataframes["right"],
+        left_on=fuzzy_columns["left"],
+        right_on=fuzzy_columns["right"],
+        **kwargs,
+    )
+
+    for side, df in dataframes.items():
+        df.drop(columns=fuzzy_columns[side], inplace=True)
+
     if drop_fuzzy:
-        merged.drop(columns=FUZZY_JOIN_COL, inplace=True)
+        merged.drop(columns=fuzzy_columns["left"] + fuzzy_columns["right"], inplace=True)
+
     return merged
