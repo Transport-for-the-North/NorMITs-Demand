@@ -22,7 +22,7 @@ npier_scenario_landuse:
 npier_raw_transformational:
   npier_data_workbook: I:\Data\EDDIE Inputs\NPIER Transformational\NPIER Transformational Raw Inputs\NPIER Technical Update database (November 2019).xlsx
   npier_regions_workbook: I:\Data\EDDIE Inputs\NPIER Transformational\NPIER Transformational Raw Inputs\NPIER 2019 Rest of UK regions .xlsx
-output_folder: C:\WSP_Projects\TfN Secondment\NorMITs-Demand\Codebase\EDDIE\TfN Land Use Comparison
+output_folder: $PROJECTS_FOLDER\TfN Secondment\NorMITs-Demand\Outputs\EDDIE\TfN Land Use Comparison
 map_years:
   - 2018
   - 2038

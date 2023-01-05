@@ -10,8 +10,10 @@ Flowchart detailing the methodolgy in the module is given here:
 # Standard imports
 from __future__ import annotations
 import enum
+import os
 import pathlib
 import re
+import string
 import sys
 from typing import Any, NamedTuple, Optional, TypeVar
 
@@ -225,6 +227,19 @@ class EDDIEComparisonParameters(config_base.BaseConfig):
             raise ValueError(f"required when {npier_input.value=}")
 
         return value
+
+    # Makes a classmethod not recognised by pylint, hence disabling self check
+    @pydantic.validator("eddie_file", "output_folder")
+    def _expand_path(  # pylint: disable=no-self-argument
+        cls, value: pathlib.Path
+    ) -> pathlib.Path:
+        """Expand environment variables in path and resolve."""
+        try:
+            expanded = string.Template(str(value)).substitute(os.environ)
+        except KeyError as err:
+            raise ValueError(f"missing environment variable {err}") from err
+
+        return pathlib.Path(expanded).resolve()
 
 
 class EDDIELandUseData(NamedTuple):
