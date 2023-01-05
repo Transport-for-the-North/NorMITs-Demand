@@ -1329,10 +1329,10 @@ def run_edge_growth(
     )  ####LOG PYLINT
     LOG.warning("Total records: %s", len(no_factors_df))
 
-    path = params.export_path / "no_factors_movements"
+    path = params.export_path / "no_factors_movements.csv"
     file_ops.write_df(no_factors_df, path, index=False)
     LOG.warning("Full dataframe written out to: %s", path)
-    LOG.warning("%s", no_factors_df.to_string(index=False))
+    # LOG.warning("%s", no_factors_df.to_string(index=False))
 
     # write out matrices
     for segment in segments_method:
