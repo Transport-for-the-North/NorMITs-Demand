@@ -1289,10 +1289,10 @@ def run_edge_growth(
     if no_factor_demand_prop > 1:
         LOG.warning(
             f"          Demand with no factors  = {no_factor_demand_prop}% "
-            / "exceeding the 1% threshold of the total demand hence the process terminated"
+            "exceeding the 1% threshold of the total demand hence the process terminated"
         )
-        LOG.warning("           Table Below lists all movements with no factors:")
-        LOG.warning("          %s", no_factors_df.to_string(index=False))
+        LOG.warning("Table Below lists all movements with no factors:")
+        LOG.warning("%s", no_factors_df.to_string(index=False))
         LOG.info(
             "Process was interrupted @ %s", timing.get_datetime()
         )
@@ -1304,30 +1304,34 @@ def run_edge_growth(
         )
 
     LOG.info(
-        "          Records below have missing factors for -Missing_TicketType- "
+        "Records below have missing factors for -Missing_TicketType- "
         "and therefore growth factors for"
     )
-    LOG.info("          Tickets from Available_TicektType- have been used")
+    LOG.info("Tickets from Available_TicketType- have been used")
     LOG.info(
-        "          Total demand proportion for these movements = %s %% "
+        "Total demand proportion for these movements = %s %% "
         "of which %s %% is Internal",
         tickets_demand_prop,
         tickets_internal_prop,
     )
-    LOG.info("          -----------------------------------")
+    LOG.info("-----------------------------------")
     LOG.info("%s", other_tickets_df.to_string(index=False))
     # log info
     LOG.warning(
-        "          Records below have no factors at all for these movements "
+        "Records below have no factors at all for these movements "
         "hence no growth have been applied:"
     )
     LOG.warning(
-        "          Total demand proportion for these movements = "
+        "Total demand proportion for these movements = "
         "%s %% of which %s %% is Internal",
         no_factor_demand_prop,
         factors_internal_prop,
     )  ####LOG PYLINT
-    LOG.warning("          -----------------------------------")
+    LOG.warning("Total records: %s", len(no_factors_df))
+
+    path = params.export_path / "no_factors_movements"
+    file_ops.write_df(no_factors_df, path, index=False)
+    LOG.warning("Full dataframe written out to: %s", path)
     LOG.warning("%s", no_factors_df.to_string(index=False))
 
     # write out matrices
