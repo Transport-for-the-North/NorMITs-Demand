@@ -18,18 +18,17 @@ sys.path.append(".")
 # Local imports
 # pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
-from normits_demand.models.forecasting import (
-    edge_replicant,
-    tem_forecast,
-    ntem_forecast,
-    tempro_trip_ends,
-    forecast_cnfg
-)
 from normits_demand import logging as nd_log
-from normits_demand.reports import ntem_forecast_checks
-from normits_demand.utils import timing
 
+from normits_demand.utils import timing
+from normits_demand.reports import ntem_forecast_checks
+from normits_demand.models.forecasting import edge_replicant
+from normits_demand.models.forecasting import tem_forecast
+from normits_demand.models.forecasting import ntem_forecast
+from normits_demand.models.forecasting import tempro_trip_ends
+from normits_demand.models.forecasting import forecast_cnfg
 # pylint: enable=import-error,wrong-import-position
+
 
 ##### CONSTANTS #####
 LOG_FILE = "Forecast.log"
