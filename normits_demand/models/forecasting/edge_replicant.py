@@ -7,8 +7,10 @@ import logging
 import itertools
 import pathlib
 
-# Third party imports
 from typing import Tuple
+from typing import Iterable
+
+# Third party imports
 import pandas as pd
 from tqdm import tqdm
 
@@ -1027,7 +1029,6 @@ def process_segment_growth(
     dist_mx: pd.DataFrame,
     segment: str,
     irsj_props_segment: pd.DataFrame,
-    growth_summary: pd.DataFrame,
     demand_total: float,
     other_tickets_df: pd.DataFrame,
     no_factors_df: pd.DataFrame,
@@ -1137,13 +1138,16 @@ def process_segment_growth(
         .reset_index()
     )
     tot_output_demand = round(demand_mx["N_Demand"].sum())
-    # create logging line
-    log_line = "{:>12} {:>15}  {:>12}  {:>12}".format(
-        period, segment, tot_input_demand, tot_output_demand
+
+    LOG.debug(
+        f"{period:>12}"
+        f"{segment:>15}"
+        f"{tot_input_demand:>12}"
+        f"{tot_output_demand:>12}"
     )
-    LOG.info(log_line)
+
     # empty dataframe for growth summary
-    temp_growth_summary = pd.DataFrame(
+    growth_summary = pd.DataFrame(
         {
             "Time_Period": [period],
             "Demand_Segment": [segment],
@@ -1151,9 +1155,8 @@ def process_segment_growth(
             f"{forecast_year}_Demand": [tot_output_demand],
         }
     )
-    # add growth stats to growth summary df
-    growth_summary = pd.concat([growth_summary, temp_growth_summary], axis=0)
-    # ammend forecast matrix to main dictionary
+
+    # amend forecast matrix to main dictionary
     demand_mx = demand_mx[["from_model_zone_id", "to_model_zone_id", "N_Demand"]]
     demand_mx = demand_mx.rename(columns={"N_Demand": f"{period}_Demand"})
     file_ops.write_df(
@@ -1164,58 +1167,52 @@ def process_segment_growth(
 
 
 def process_mp_returned_objects(
-    return_files: Tuple,
+    return_files: list[tuple[float, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]],
 ) -> Tuple[float, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Combine reuturned objects from multiprocessing.
+    """Combine returned objects from multiprocessing.
 
     Args:
-        return_files : Tuple
+        return_files
             tuple of returned objects from multiprocessing containing:
             demand_total, growth_summary, other_tickets_df, no_factors_df, edge_growth_factors
 
     Returns:
-        demand_total : float
+        demand_total
             sum of all demand
-        growth_summary : pd.DataFrame
+
+        growth_summary
             summary of growth for each segment
-        other_tickets_df : pd.DataFrame
+
+        other_tickets_df
             dataframe of movements where other tickets have been used
-        no_factors_df : pd.DataFrame
+
+        no_factors_df
             dataframe of movements where no factor was found
-        edge_growth_factors : pd.DataFrame
+
+        edge_growth_factors
             dataframe of all EDGE factors including filled factors
     """
-    # create combined objects
-    demand_total = 0
-    growth_summary = pd.DataFrame()
-    other_tickets_df = pd.DataFrame()
-    no_factors_df = pd.DataFrame()
-    edge_growth_factors = pd.DataFrame()
-    # loop over returned objects in each segment
-    for (
-        demand_total_mp,
-        growth_summary_mp,
-        other_tickets_df_mp,
-        no_factors_df_mp,
-        edge_growth_factors_mp,
-    ) in return_files:
-        # sum total demand
-        demand_total = demand_total + demand_total_mp
-        # combine dataframes and drop duplicates where exist
-        # demand summary
-        growth_summary = pd.concat([growth_summary, growth_summary_mp], axis=0)
-        growth_summary = growth_summary.drop_duplicates().reset_index(drop=True)
-        # other tickets df
-        other_tickets_df = pd.concat([other_tickets_df, other_tickets_df_mp], axis=0)
-        other_tickets_df = other_tickets_df.drop_duplicates().reset_index(drop=True)
-        # no factors df
-        no_factors_df = pd.concat([no_factors_df, no_factors_df_mp], axis=0)
-        no_factors_df = no_factors_df.drop_duplicates().reset_index(drop=True)
-        # edge factors df
-        edge_growth_factors = pd.concat([edge_growth_factors, edge_growth_factors_mp], axis=0)
-        edge_growth_factors = edge_growth_factors.drop_duplicates().reset_index(drop=True)
+    def df_combine(df_list: Iterable[pd.DataFrame]) -> pd.DataFrame:
+        df = pd.concat(df_list, ignore_index=True)
+        return df.drop_duplicates.reset_index(drop=True)
 
-    return demand_total, growth_summary, other_tickets_df, no_factors_df, edge_growth_factors
+    # Split into individual lists
+    (
+        demand_total_list,
+        growth_summary_list,
+        other_tickets_df_list,
+        no_factors_df_list,
+        edge_growth_factors_list,
+    ) = zip(*return_files)
+
+    # Combine each
+    return (
+        sum(demand_total_list),
+        df_combine(growth_summary_list),
+        df_combine(other_tickets_df_list),
+        df_combine(no_factors_df_list),
+        df_combine(edge_growth_factors_list),
+    )
 
 
 def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
@@ -1229,7 +1226,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
 
     # cores count
     # process_count = os.cpu_count() - 2
-    process_count = 2
+    process_count = 4
 
     # ## READ INPUT FILES ## #
     # Custom input files
@@ -1326,7 +1323,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         #    i.e. Flag = 1 if the factor comes directly from EDGE
         edge_growth_factors.loc[:, "Flag"] = 1
 
-        # factored matricies dictionary
+        # factored matrices dictionary
         factored_matrices = {}
         factored_24hr_matrices = {}
 
@@ -1343,7 +1340,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             }
         )
         # set demand total to 0
-        demand_total = 0
+        demand_total = 0.0
 
         # loop over periods
         for period in tqdm(periods, desc="Time Periods Loop ", unit=" Period", colour="cyan"):
@@ -1388,12 +1385,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
 
             # loop over demand segments
             kwargs_list = list()
-            for segment in tqdm(
-                demand_segment_list,
-                desc="Demand Segments Loop",
-                unit="Segment",
-                colour="cyan",
-            ):
+            for segment in demand_segment_list:
                 # get segment's userclass
                 mask = segments_to_uc["MX"] == segment
                 segment_uc = segments_to_uc[mask].iloc[0]["userclass"]
@@ -1408,7 +1400,6 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                     {
                         "segment": segment,
                         "irsj_props_segment": irsj_props_segment,
-                        "growth_summary": growth_summary,
                         "demand_total": demand_total,
                         "other_tickets_df": other_tickets_df,
                         "no_factors_df": no_factors_df,
@@ -1418,13 +1409,20 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 kwargs_list.append(kwargs)
 
             # MP run process
+            pbar_kwargs = {
+                "desc": "Demand Segments Loop",
+                "unit": " Segment",
+                "colour": "cyan",
+            }
+
             return_files = multiprocessing.multiprocess(
                 fn=process_segment_growth,
                 kwargs=kwargs_list,
                 process_count=process_count,
+                pbar_kwargs=pbar_kwargs,
             )
 
-            # combine returned objects
+            # Combine returned objects
             (
                 demand_total,
                 growth_summary,
@@ -1433,6 +1431,9 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 edge_growth_factors,
             ) = process_mp_returned_objects(return_files)
 
+        # END OF TIME PERIOD LOOP
+
+        LOG.info("Matrices grown. Generating analysis...")
         # get logging stats
         (
             other_tickets_df,
