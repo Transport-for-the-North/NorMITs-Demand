@@ -1033,7 +1033,7 @@ def process_segment_growth(
     no_factors_df: pd.DataFrame,
     edge_growth_factors: pd.DataFrame,
 ) -> Tuple[float, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Apply Growth prcoess for each demand segment.
+    """Apply Growth process for each demand segment.
 
     Parameters
     ----------
@@ -1086,21 +1086,21 @@ def process_segment_growth(
         no_factors_df : pd.DataFrame
             dataframe of movements where no factor is found
     """
-    # get segment's userclass
+    # Init info
     segment_uc = segments_to_uc[segments_to_uc["MX"] == segment].iloc[0]["userclass"]
-    # check if ToHome segment
     to_home = bool(segment in internal_to_home)
-    # demand matrices
+
     demand_mx = file_ops.read_df(matrices_to_grow_dir / f"{period}_{segment}.csv")
+
+    # Get the total demand
     tot_input_demand = round(demand_mx["Demand"].sum())
-    # sum total demand
     demand_total = demand_total + tot_input_demand
-    # add UCs to demand based on demand segment
-    demand_mx.loc[:, "userclass"] = segment_uc
-    # keep needed columns
+
+    # Tidy up the demand matrix
+    demand_mx["userclass"] = segment_uc
     demand_mx = demand_mx[["from_model_zone_id", "to_model_zone_id", "userclass", "Demand"]]
-    # keep non-zero demand records
-    demand_mx = demand_mx.loc[demand_mx["Demand"] > 0].reset_index(drop=True)
+    demand_mx = demand_mx[demand_mx["Demand"] > 0].reset_index(drop=True)
+
     # prepare demand matrix
     demand_mx = prepare_stn2stn_matrix(
         demand_mx, irsj_props_segment, dist_mx, norms_to_edge_stns, to_home
@@ -1363,12 +1363,14 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             # period dictionary
             factored_matrices[period] = {}
             # create logging line
-            log_line = "{:>12} {:>15}  {:>12}  {:>12}".format(
-                "Time_Period", "Demand_Segment", "Base_Demand", f"{forecast_year}_Demand"
+            LOG.info(
+                f"{'Time_Period':>12}"
+                f"{'Demand_Segment':>15}"
+                f"{'Base_Demand':>12}"
+                f"{f'{forecast_year}_Demand':>12}"
             )
-            LOG.info(log_line)
 
-            #! set kwargs list for multiprocessing of segments
+            # set kwargs list for multiprocessing of segments
             unchanging_kwargs = {
                 "forecast_year": forecast_year,
                 "output_folder": params.export_path,
@@ -1384,25 +1386,23 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 "dist_mx": dist_mx,
             }
 
-            #! create kwargs list
-            kwargs_list = list()
-
             # loop over demand segments
+            kwargs_list = list()
             for segment in tqdm(
                 demand_segment_list,
-                desc="    Demand Segments Loop ",
-                unit=" Segment",
+                desc="Demand Segments Loop",
+                unit="Segment",
                 colour="cyan",
             ):
                 # get segment's userclass
-                segment_uc = segments_to_uc[segments_to_uc["MX"] == segment].iloc[0][
-                    "userclass"
-                ]
+                mask = segments_to_uc["MX"] == segment
+                segment_uc = segments_to_uc[mask].iloc[0]["userclass"]
+
                 # filter probabilities dataframe to the current userclass
-                irsj_props_segment = irsj_props.loc[
-                    irsj_props["userclass"] == segment_uc
-                ].reset_index(drop=True)
-                #! MP kwargs
+                mask = irsj_props["userclass"] == segment_uc
+                irsj_props_segment = irsj_props.loc[mask].reset_index(drop=True)
+
+                # MP kwargs
                 kwargs = unchanging_kwargs.copy()
                 kwargs.update(
                     {
@@ -1416,6 +1416,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                     }
                 )
                 kwargs_list.append(kwargs)
+
             # MP run process
             return_files = multiprocessing.multiprocess(
                 fn=process_segment_growth,
@@ -1430,9 +1431,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 other_tickets_df,
                 no_factors_df,
                 edge_growth_factors,
-            ) = process_mp_returned_objects(
-                return_files,
-            )
+            ) = process_mp_returned_objects(return_files)
 
         # get logging stats
         (
