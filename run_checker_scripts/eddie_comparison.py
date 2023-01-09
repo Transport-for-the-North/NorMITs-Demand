@@ -205,6 +205,8 @@ class EDDIEComparisonParameters(config_base.BaseConfig):
     npier_raw_transformational: Optional[RawTransformationalParameters] = None
     output_folder: pathlib.Path
     map_years: list[int]
+    lad_geospatial_file: Optional[plots.GeoSpatialFile] = None
+    regions_geospatial_file: Optional[plots.GeoSpatialFile] = None
 
     @pydantic.validator(
         "npier_scenario_landuse", "npier_raw_transformational", pre=True, always=True
@@ -240,6 +242,14 @@ class EDDIEComparisonParameters(config_base.BaseConfig):
             raise ValueError(f"missing environment variable {err}") from err
 
         return pathlib.Path(expanded).resolve()
+
+    # Makes a classmethod not recognised by pylint, hence disabling self check
+    @pydantic.validator("lad_geospatial_file", "regions_geospatial_file", pre=True)
+    def _dict_to_tuple(cls, value: dict) -> tuple:  # pylint: disable=no-self-argument
+        try:
+            return value["path"], value["id_column"]
+        except KeyError as err:
+            raise TypeError(f"missing {err} value") from err
 
 
 class EDDIELandUseData(NamedTuple):
@@ -1428,7 +1438,7 @@ def write_factored_external_eddie_format(
     npier_regions: NPIERRegionsLandUse,
     eddie_format_npier_north: NPIEREDDIEFormatLandUse,
     output_file: pathlib.Path,
-):
+) -> NPIEREDDIEFormatLandUse:
     # Add in Northern values from NPIER raw and factor external areas to match NPIER external regions
     npier_regions.population.index.names = ["npier_region"]
     population_by_region = merge_with_eddie(
@@ -1466,13 +1476,14 @@ def write_factored_external_eddie_format(
         eddie_format_npier_north, population_factors, employment_factors, 2011, 2050, "region"
     )
     output_eddie_format(landuse_data, output_file)
+    return landuse_data
 
 
 def write_factored_north_eddie_format(
     eddie: EDDIELandUseData,
     eddie_format_npier_north: NPIEREDDIEFormatLandUse,
     output_file: pathlib.Path,
-):
+) -> NPIEREDDIEFormatLandUse:
     # Add in Northern values from NPIER factored to EDDIE region totals and leave external area alone
     eddie_region_pop = eddie_format_npier_north.population.groupby("region").sum()
     eddie_region_pop.index.names = ["npier_region"]
@@ -1512,6 +1523,208 @@ def write_factored_north_eddie_format(
         eddie_format_npier_north, population_factors, employment_factors, 2011, 2050, "region"
     )
     output_eddie_format(landuse_data, output_file)
+    return landuse_data
+
+
+def _npier_eddie_comparison(
+    eddie: pd.DataFrame, npier: pd.DataFrame, join_columns: list[str]
+) -> pd.DataFrame:
+    for col in join_columns:
+        if col not in eddie.index.names:
+            raise KeyError(f"column '{col}' missing from EDDIE index")
+        if col not in npier.index.names:
+            raise KeyError(f"column '{col}' missing from NPIER index")
+
+    eddie = eddie.copy()
+    npier = npier.copy()
+
+    indices = [c for c in eddie.index.names if c not in join_columns]
+    if indices:
+        eddie.index = eddie.index.droplevel(indices)
+
+    columns = [c for c in npier.columns if c in eddie.columns]
+    eddie = eddie.loc[:, columns]
+
+    npier.columns = pd.MultiIndex.from_product((("NPIER",), npier.columns))
+    eddie.columns = pd.MultiIndex.from_product((("EDDIE",), eddie.columns))
+
+    merged = npier.merge(
+        eddie, how="outer", left_index=True, right_index=True, validate="1:1", indicator=True
+    )
+    missing = merged["_merge"] != "both"
+    if missing.any():
+        raise ValueError(f"merging NPIER to EDDIE found {missing.sum()} missing LAs")
+    merged = merged.drop(columns="_merge")
+
+    diff = merged.loc[:, "NPIER"].subtract(merged.loc[:, "EDDIE"])
+    diff = diff.dropna(axis=1, how="all")
+    diff.columns = pd.MultiIndex.from_product((("NPIER - EDDIE",), diff.columns))
+
+    perc_diff = merged.loc[:, "NPIER"].divide(merged.loc[:, "EDDIE"]) - 1
+    perc_diff = perc_diff.dropna(axis=1, how="all")
+    perc_diff.columns = pd.MultiIndex.from_product((("NPIER / EDDIE (%)",), perc_diff.columns))
+
+    return pd.concat([merged, diff, perc_diff], axis=1)
+
+
+def _npier_eddie_heatmap(
+    geospatial: gpd.GeoSeries,
+    data: pd.DataFrame,
+    join_column: str,
+    plot_column: str,
+    title: str,
+    output_file: pathlib.Path,
+    legend_label_fmt: str,
+):
+    geodata = data.merge(
+        geospatial, left_on=join_column, right_index=True, how="right", validate="1:1"
+    )
+    geodata = gpd.GeoDataFrame(geodata, geometry=geospatial.geometry.name, crs=geospatial.crs)
+    fig = plots._heatmap_figure(
+        geodata.reset_index(drop=True),
+        plot_column,
+        title,
+        n_bins=5,
+        positive_negative_colormaps=True,
+        legend_label_fmt=legend_label_fmt,
+    )
+
+    fig.savefig(output_file)
+    LOG.info("Written: %s", output_file)
+
+
+def _npier_eddie_comparisons_heatmaps_plot(
+    comparisons: dict[str, pd.DataFrame],
+    plot_years: list[int],
+    output_folder: pathlib.Path,
+    regions: Optional[gpd.GeoSeries] = None,
+    lads: Optional[gpd.GeoSeries] = None,
+) -> None:
+    def get_grouped_data(key: str) -> tuple[pd.DataFrame, str]:
+        data = comparisons[key].loc[:, (plot_type, data_years)]
+        data = data.groupby(level=join_column).sum()
+        data.columns = data.columns.droplevel(0)
+        return data.reset_index(), key.replace("_", " ").title()
+
+    for plot_type in ("NPIER - EDDIE", "NPIER / EDDIE (%)"):
+        fname = plot_type.replace("/", "div")
+        plot_folder = output_folder / fname
+        plot_folder.mkdir(exist_ok=True)
+        legend_fmt = "{:.1%}" if "%" in plot_type else "{:.0f}"
+
+        if lads is not None:
+            join_column = "lad_2017_zone_id"
+            for data_key in (
+                "population",
+                "employment",
+                "industry_employment",
+                "occupation_employment",
+            ):
+                if data_key in ("industry_employment", "occupation_employment"):
+                    data_years = [str(y) for y in plot_years]
+                else:
+                    # Use Q1 data for heatmaps
+                    data_years = [f"{y}_q1" for y in plot_years]
+
+                data, data_name = get_grouped_data(data_key)
+
+                for yr in data_years:
+                    _npier_eddie_heatmap(
+                        lads,
+                        data,
+                        join_column,
+                        str(yr),
+                        f"{plot_type} {data_name} - {yr}",
+                        plot_folder / (fname + f" {data_name} {yr}.png"),
+                        legend_label_fmt=legend_fmt,
+                    )
+
+        if regions is not None:
+            join_column = "region"
+            # Use Q1 data for heatmaps
+            data_years = [f"{y}_q1" for y in plot_years]
+
+            for data_key in ("wap", "wor"):
+                data, data_name = get_grouped_data(data_key)
+
+                for yr in data_years:
+                    _npier_eddie_heatmap(
+                        regions,
+                        data,
+                        join_column,
+                        str(yr),
+                        f"{plot_type} {data_name} - {yr}",
+                        plot_folder / (fname + f" {data_name} {yr}.png"),
+                        legend_label_fmt=legend_fmt,
+                    )
+
+
+def _simplify_strings(data: pd.Series) -> pd.Series:
+    return data.str.lower().str.replace("\s+", "", regex=True)
+
+
+def npier_eddie_comparison_heatmaps(
+    eddie: EDDIELandUseData,
+    disaggregated_eddie: DisaggregatedLandUse,
+    npier: NPIEREDDIEFormatLandUse,
+    output_folder: pathlib.Path,
+    plot_years: list[int],
+    regions: Optional[gpd.GeoSeries] = None,
+    lads: Optional[gpd.GeoSeries] = None,
+):
+    LOG.info("Creating %s", output_folder.stem)
+    output_folder.mkdir(exist_ok=True)
+
+    comparisons: dict[str, pd.DataFrame] = dict(
+        population=_npier_eddie_comparison(
+            eddie.data[LandUseType.POPULATION], npier.population, ["local_authority"]
+        ),
+        employment=_npier_eddie_comparison(
+            eddie.data[LandUseType.EMPLOYMENT], npier.employment, ["local_authority"]
+        ),
+        industry_employment=_npier_eddie_comparison(
+            disaggregated_eddie.employment_industry,
+            npier.industry_employment,
+            ["local_authority", "cebr_industry"],
+        ),
+        occupation_employment=_npier_eddie_comparison(
+            disaggregated_eddie.employment_occupation,
+            npier.occupation_employment,
+            ["local_authority", "cebr_occupation"],
+        ),
+        wap=_npier_eddie_comparison(disaggregated_eddie.wap, npier.wap, ["region"]),
+        wor=_npier_eddie_comparison(disaggregated_eddie.wor, npier.wor, ["region"]),
+    )
+
+    # Add LAD IDs to disaggregated employment
+    lad_id_column = "lad_2017_zone_id"
+    lad_id_lookup = dict(
+        zip(
+            _simplify_strings(
+                comparisons["employment"].index.get_level_values("local_authority")
+            ),
+            comparisons["employment"].index.get_level_values(lad_id_column),
+        )
+    )
+    for nm in ("industry_employment", "occupation_employment"):
+        lad_ids = _simplify_strings(
+            comparisons[nm].index.get_level_values("local_authority").to_series()
+        ).replace(lad_id_lookup)
+        comparisons[nm][lad_id_column] = lad_ids.values
+        comparisons[nm].set_index(lad_id_column, append=True, inplace=True)
+
+    LOG.info("Writing comparison spreadsheets & heatmaps")
+    for nm, df in comparisons.items():
+        excel_file = output_folder / f"NPIER_EDDIE_inputs_comparison-{nm}.xlsx"
+        with pd.ExcelWriter(excel_file, engine="openpyxl") as excel:
+            for sheet in df.columns.get_level_values(0).unique():
+                df.loc[:, sheet].to_excel(excel, sheet_name=sheet.replace("/", "div"))
+
+        LOG.info("Written: %s", excel_file)
+
+    _npier_eddie_comparisons_heatmaps_plot(
+        comparisons, plot_years, output_folder, regions, lads
+    )
 
 
 def main(params: EDDIEComparisonParameters, init_logger: bool = True):
@@ -1588,22 +1801,56 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
         reformatted_north = convert_to_eddie_years(npier_raw_north)
         reformatted_regions = convert_to_eddie_years(npier_raw_regions)
 
+        heatmap_kwargs = dict(plot_years=parameters.map_years)
+        if parameters.regions_geospatial_file is None:
+            LOG.warning("Regions geospatial file not given")
+            heatmap_kwargs["regions"] = None
+        else:
+            heatmap_kwargs["regions"] = plots.get_geo_data(parameters.regions_geospatial_file)
+
+        if parameters.lad_geospatial_file is None:
+            LOG.warning("LADs geospatial file not given")
+            heatmap_kwargs["lads"] = None
+        else:
+            heatmap_kwargs["lads"] = plots.get_geo_data(parameters.lad_geospatial_file)
+
         npier_north_only_eddie = write_north_only_eddie_format(
             eddie,
             disaggregated_eddie,
             reformatted_north,
             output_folder / "NPIER_Raw_EDDIE_format-North_only.xlsx",
         )
-        write_factored_external_eddie_format(
+        npier_eddie_comparison_heatmaps(
+            eddie,
+            disaggregated_eddie,
+            npier_north_only_eddie,
+            output_folder / "NPIER North Only Comparison",
+            **heatmap_kwargs,
+        )
+        npier_factored_external = write_factored_external_eddie_format(
             eddie,
             reformatted_regions,
             npier_north_only_eddie.copy(),
             output_folder / "NPIER_Raw_EDDIE_format-North_with_factored_external.xlsx",
         )
-        write_factored_north_eddie_format(
+        npier_eddie_comparison_heatmaps(
+            eddie,
+            disaggregated_eddie,
+            npier_factored_external,
+            output_folder / "NPIER North with Factored External Comparison",
+            **heatmap_kwargs,
+        )
+        npier_factored_north = write_factored_north_eddie_format(
             eddie,
             npier_north_only_eddie,
             output_folder / "NPIER_Raw_EDDIE_format-factored_North.xlsx",
+        )
+        npier_eddie_comparison_heatmaps(
+            eddie,
+            disaggregated_eddie,
+            npier_factored_north,
+            output_folder / "NPIER Factored North Comparison",
+            **heatmap_kwargs,
         )
 
 

@@ -27,3 +27,9 @@ map_years:
   - 2018
   - 2038
   # - 2042
+lad_geospatial_file:
+  path: Y:\Data Strategy\GIS Shapefiles\LAD GB 2017\Local_Authority_Districts_December_2017_Full_Clipped_Boundaries_in_Great_Britain.shp
+  id_column: lad17cd
+regions_geospatial_file:
+  path: C:\Users\ukmjb018\OneDrive - WSP O365\WSP_Projects\TfN Secondment\NorMITs-Demand\GIS\UK Regions\ITL1_MAY_2021_UK_BFC.shp
+  id_column: region_nm
