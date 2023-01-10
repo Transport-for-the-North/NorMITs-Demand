@@ -1021,6 +1021,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
 
     # ## READ INPUT FILES ## #
     # Custom input files
+    demand_segments = file_ops.read_df(params.demand_segments)
     segments_to_uc = file_ops.read_df(params.segments_to_uc_path)
     ticket_type_splits = file_ops.read_df(params.ticket_type_splits_path)
     flow_cats = file_ops.read_df(params.flow_cat_path)
@@ -1028,75 +1029,29 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
 
     # demand segment list groups
     # NoRMS demand segments
-    norms_segments = [
-        "HBEBCA_Int",
-        "HBEBNCA_Int",
-        "NHBEBCA_Int",
-        "NHBEBNCA_Int",
-        "HBWCA_Int",
-        "HBWNCA_Int",
-        "HBOCA_Int",
-        "HBONCA_Int",
-        "NHBOCA_Int",
-        "NHBONCA_Int",
-        "EBCA_Ext_FM",
-        "EBCA_Ext_TO",
-        "EBNCA_Ext",
-        "HBWCA_Ext_FM",
-        "HBWCA_Ext_TO",
-        "HBWNCA_Ext",
-        "OCA_Ext_FM",
-        "OCA_Ext_TO",
-        "ONCA_Ext",
-    ]
+    norms_segments = (
+        demand_segments.loc[demand_segments["ModelSegment"] == 1][["Segment"]]
+        .drop_duplicates()
+        .values.tolist()
+    )
+    norms_segments = [segment for sublist in norms_segments for segment in sublist]
 
     # these demand segments need to have the iRSj probabilities transposed
-    internal_to_home = [
-        "HBEBCA_Int_T",
-        "HBEBNCA_Int_T",
-        "NHBEBCA_Int_T",
-        "NHBEBNCA_Int_T",
-        "HBWCA_Int_T",
-        "HBWNCA_Int_T",
-        "HBOCA_Int_T",
-        "HBONCA_Int_T",
-        "NHBOCA_Int_T",
-        "NHBONCA_Int_T",
-    ]
+    internal_to_home = (
+        demand_segments.loc[demand_segments["ToHome"] == 1][["Segment"]]
+        .drop_duplicates()
+        .values.tolist()
+    )
+    internal_to_home = [segment for sublist in internal_to_home for segment in sublist]
+
     # below dictionary sets out the factoring method for each demand segment where:
     #           1: Apply P=O and A=D (i.e. PA factoring as it is)
     #           2: Apply Average of both directions
-    segments_method = {
-        "HBEBCA_Int": 1,
-        "HBEBNCA_Int": 1,
-        "NHBEBCA_Int": 2,
-        "NHBEBNCA_Int": 2,
-        "HBWCA_Int": 1,
-        "HBWNCA_Int": 1,
-        "HBOCA_Int": 1,
-        "HBONCA_Int": 1,
-        "NHBOCA_Int": 2,
-        "NHBONCA_Int": 2,
-        "HBEBCA_Int_T": 1,
-        "HBEBNCA_Int_T": 1,
-        "NHBEBCA_Int_T": 2,
-        "NHBEBNCA_Int_T": 2,
-        "HBWCA_Int_T": 1,
-        "HBWNCA_Int_T": 1,
-        "HBOCA_Int_T": 1,
-        "HBONCA_Int_T": 1,
-        "NHBOCA_Int_T": 2,
-        "NHBONCA_Int_T": 2,
-        "EBCA_Ext_FM": 1,
-        "EBNCA_Ext": 2,
-        "HBWCA_Ext_FM": 1,
-        "HBWNCA_Ext": 2,
-        "OCA_Ext_FM": 1,
-        "ONCA_Ext": 2,
-        "EBCA_Ext_TO": 1,
-        "HBWCA_Ext_TO": 1,
-        "OCA_Ext_TO": 1,
-    }
+    segments_method = {}
+    for i, row in demand_segments.iterrows():
+        segment = row["Segment"]
+        method = row["Growth_Method"]
+        segments_method[segment] = method
 
     # get list of demand segments
     demand_segment_list = segments_to_uc["MX"].tolist()

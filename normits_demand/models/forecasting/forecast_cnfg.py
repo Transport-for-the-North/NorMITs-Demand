@@ -215,6 +215,7 @@ class EDGEParameters(config_base.BaseConfig):
     matrices_to_grow_dir: Path
 
     # Input files
+    demand_segments: Path
     segments_to_uc_path: Path
     flow_cat_path: Path
     ticket_type_splits_path: Path
@@ -238,6 +239,7 @@ class EDGEParameters(config_base.BaseConfig):
 
     @classmethod
     @pydantic.validator(
+        "demand_segments",
         "segments_to_uc_path",
         "flow_cat_path",
         "ticket_type_splits_path",
