@@ -309,6 +309,7 @@ def apply_ticket_splits(mx_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def create_factors_for_missing_moira_movements(
+    to_home: bool,
     mx_df: pd.DataFrame,
     edge_factors: pd.DataFrame,
     other_tickets_df: pd.DataFrame,
@@ -324,6 +325,8 @@ def create_factors_for_missing_moira_movements(
 
     Parameters
     ----------
+    to_home : bool
+        bool to flag whether or not the segment is a ToHome segment
     mx_df : pd.DataFrame
         prepared stn2stn matrix by flow, ticket type and purpose
     edge_factors : pd.DataFrame
@@ -377,6 +380,15 @@ def create_factors_for_missing_moira_movements(
             "Purpose": "purpose",
         }
     )
+    # for ToHome segments, transpose the stations directionality
+    if to_home:
+        # rename column
+        mx_df = mx_df.rename(
+            columns={
+                "ZoneCodeFrom": "ZoneCodeTo",
+                "ZoneCodeTo": "ZoneCodeFrom",
+            }
+        )
     # merge factors to matrix
     mx_df = mx_df.merge(
         edge_factors, how="left", on=["ZoneCodeFrom", "ZoneCodeTo", "TicketType", "purpose"]
@@ -1164,7 +1176,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                     other_tickets_df,
                     no_factors_df,
                 ) = create_factors_for_missing_moira_movements(
-                    demand_mx, edge_growth_factors, other_tickets_df, no_factors_df
+                    to_home, demand_mx, edge_growth_factors, other_tickets_df, no_factors_df
                 )
                 # get factoring method
                 method = segments_method[segment]

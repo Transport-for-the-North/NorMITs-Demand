@@ -25,7 +25,3 @@ edge_growth_dir: I:\NorMITs Demand\import\EDGE_growth\Moira distance\Nov 21 Cent
 forecast_years:
   2040: Out_Nov 21 Central - Growth_2040_rate.csv.bz2
   2043: Out_Nov 21 Central - Growth_2043_rate.csv.bz2
-
-
-#edge_growth_dir: I:\NorMITs Demand\import\EDGE_growth\Moira distance\Nov 21 Central - Growth
-#edge_growth_fname: Out_Nov 21 Central - Growth_{forecast_year}_rate.csv.bz2
