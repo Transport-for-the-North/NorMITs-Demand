@@ -509,6 +509,8 @@ def apply_edge_growth_method1(
     -------
     mx_df : pd.DataFrame
         grown stn2stn demand matrix
+    reporting_df : pd.DataFrame
+        stn2stn level grouped demand or reporting purposes
     """
     # melt Matrix
     mx_df = pd.melt(
@@ -563,6 +565,14 @@ def apply_edge_growth_method1(
     mx_df.loc[:, "Flag"] = mx_df["Flag"].fillna(0)
     # apply growth
     mx_df.loc[:, "N_Demand"] = mx_df["T_Demand"] * mx_df["Demand_rate"]
+    # create reporting dataframe by grouping the demand to stn2stn level
+    reporting_df = (
+        mx_df.groupby(
+            ["from_stn_zone_id", "to_stn_zone_id", "userclass", "purpose", "TicketType"]
+        )[["T_Demand", "N_Demand"]]
+        .sum()
+        .reset_index()
+    )
     # keep needed columns
     mx_df = mx_df[
         [
@@ -580,7 +590,7 @@ def apply_edge_growth_method1(
         ]
     ]
 
-    return mx_df
+    return mx_df, reporting_df
 
 
 def apply_edge_growth_method2(mx_df: pd.DataFrame, edge_factors: pd.DataFrame) -> pd.DataFrame:
@@ -599,6 +609,8 @@ def apply_edge_growth_method2(mx_df: pd.DataFrame, edge_factors: pd.DataFrame) -
     -------
     mx_df : pd.DataFrame
         grown stn2stn demand matrix
+    reporting_df : pd.DataFrame
+        stn2stn level grouped demand or reporting purposes
     """
     # melt Matrix
     mx_df = pd.melt(
@@ -659,6 +671,14 @@ def apply_edge_growth_method2(mx_df: pd.DataFrame, edge_factors: pd.DataFrame) -
     mx_df.loc[(mx_df["Flag_x"] == 1) & (mx_df["Flag_y"] == 1), "Flag"] = 1
     # apply growth
     mx_df.loc[:, "N_Demand"] = mx_df["T_Demand"] * mx_df["Demand_rate"]
+    # create reporting dataframe by grouping the demand to stn2stn level
+    reporting_df = (
+        mx_df.groupby(
+            ["from_stn_zone_id", "to_stn_zone_id", "userclass", "purpose", "TicketType"]
+        )[["T_Demand", "N_Demand"]]
+        .sum()
+        .reset_index()
+    )
     # keep needed columns
     mx_df = mx_df[
         [
@@ -676,7 +696,7 @@ def apply_edge_growth_method2(mx_df: pd.DataFrame, edge_factors: pd.DataFrame) -
         ]
     ]
 
-    return mx_df
+    return mx_df, reporting_df
 
 
 def prepare_logging_info(
@@ -1084,6 +1104,8 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         # factored matricies dictionary
         factored_matrices = {}
         factored_24hr_matrices = {}
+        # empty stn2stn demand reporting dataframe
+        stn2stn_reporting_df = pd.DataFrame()
 
         # empty DFs for recording missing factors
         other_tickets_df = pd.DataFrame()
@@ -1182,12 +1204,21 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 method = segments_method[segment]
                 # apply factoring based on demand segment
                 if method == 1:
-                    demand_mx = apply_edge_growth_method1(
+                    demand_mx, stn2stn_rep_df = apply_edge_growth_method1(
                         demand_mx, edge_growth_factors, to_home
                     )
                 else:
-                    demand_mx = apply_edge_growth_method2(demand_mx, edge_growth_factors)
+                    demand_mx, stn2stn_rep_df = apply_edge_growth_method2(
+                        demand_mx, edge_growth_factors
+                    )
 
+                # add id columns to reporting df
+                stn2stn_rep_df["Period"] = period
+                stn2stn_rep_df["Segment"] = segment
+                # append to main reporting dataframe
+                stn2stn_reporting_df = pd.concat(
+                    [stn2stn_reporting_df, stn2stn_rep_df], axis=0
+                )
                 # move back to zone2zone matrix
                 demand_mx = (
                     demand_mx.groupby(["from_model_zone_id", "to_model_zone_id"])[
@@ -1240,6 +1271,12 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         file_ops.write_df(
             growth_summary,
             params.export_path / f"Growth_Summary_{forecast_year}.csv",
+            index=False,
+        )
+        # write stn2stn reporting dataframe
+        file_ops.write_df(
+            stn2stn_reporting_df,
+            params.export_path / f"stn2stn_growth_report_{forecast_year}.csv",
             index=False,
         )
         # if the proportion of the demand that has no factor at all in EDGE exceeds 1%
