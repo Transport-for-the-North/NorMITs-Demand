@@ -910,7 +910,7 @@ def expand_matrix(mx_df: pd.DataFrame, zones: int = 1300) -> pd.DataFrame:
 
 
 def fromto_2_from_by_averaging(
-    matrices_dict: dict, norms_segments: list, segments_method: dict
+    matrices_dict: dict, norms_segments: list, all_segments: list
 ) -> dict:
     """Get the FromHome demand by averaging FromHome and ToHome.
 
@@ -924,7 +924,7 @@ def fromto_2_from_by_averaging(
         24Hr demand matrices dictionary
     norms_segments : list
         list of NoRMS demand segments
-    segments_method: dictionary
+    all_segments: list
         all demand segments in a From/To format
 
     Returns
@@ -938,7 +938,7 @@ def fromto_2_from_by_averaging(
     # loop over all norms segments
     for segment in norms_segments:
         # check if the segment has a ToHome component or if it's a non-home based
-        if (segment + "_T" in segments_method) and (segment[:3].lower() != "NHB".lower()):
+        if (segment + "_T" in all_segments) and (segment[:3].lower() != "NHB".lower()):
             # average the FromHome and the transposition of the toHome
             matrices[segment] = average_two_matrices(
                 matrices_dict[segment], transpose_matrix(matrices_dict[segment + "_T"])
@@ -1054,7 +1054,6 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
     # ## READ INPUT FILES ## #
     # Custom input files
     demand_segments = file_ops.read_df(params.demand_segments)
-    segments_to_uc = file_ops.read_df(params.segments_to_uc_path)
     ticket_type_splits = file_ops.read_df(params.ticket_type_splits_path)
     flow_cats = file_ops.read_df(params.flow_cat_path)
     norms_to_edge_stns = file_ops.read_df(params.norms_to_edge_stns_path)
@@ -1067,26 +1066,8 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         .values.tolist()
     )
     norms_segments = [segment for sublist in norms_segments for segment in sublist]
-
-    # these demand segments need to have the iRSj probabilities transposed
-    internal_to_home = (
-        demand_segments.loc[demand_segments["ToHome"] == 1][["Segment"]]
-        .drop_duplicates()
-        .values.tolist()
-    )
-    internal_to_home = [segment for sublist in internal_to_home for segment in sublist]
-
-    # below dictionary sets out the factoring method for each demand segment where:
-    #           1: Apply P=O and A=D (i.e. PA factoring as it is)
-    #           2: Apply Average of both directions
-    segments_method = {}
-    for i, row in demand_segments.iterrows():
-        segment = row["Segment"]
-        method = row["Growth_Method"]
-        segments_method[segment] = method
-
-    # get list of demand segments
-    demand_segment_list = segments_to_uc["MX"].tolist()
+    # all segments
+    all_segments = demand_segments["Segment"].to_list()
 
     # lop over forecast years
     for forecast_year in params.forecast_years:
@@ -1096,7 +1077,13 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         edge_growth_factors = file_ops.read_df(
             params.edge_growth_dir / params.forecast_years[forecast_year]
         )
-
+        # create list of used stations
+        used_stations = norms_to_edge_stns["STATIONCODE"].to_list()
+        # filter factors file to keep only used stations
+        edge_growth_factors = edge_growth_factors.loc[
+            (edge_growth_factors["ZoneCodeFrom"].isin(used_stations))
+            & (edge_growth_factors["ZoneCodeTo"].isin(used_stations))
+        ]
         # Add Flag = 1 for all input factors in EDGE
         #    i.e. Flag = 1 if the factor comes directly from EDGE
         edge_growth_factors.loc[:, "Flag"] = 1
@@ -1139,38 +1126,43 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             )
             # period dictionary
             factored_matrices[period] = {}
-
             LOG.debug(
                 f"{'Time_Period':>12}{'Demand_Segment':>15}"
                 f"{'Base_Demand':>12}{f'{forecast_year}_Demand':>12}"
             )
-
             # loop over demand segments
-            for segment in tqdm(
-                demand_segment_list,
+            for i, row in tqdm(
+                demand_segments.iterrows(),
                 desc="    Demand Segments Loop ",
                 unit=" Segment",
                 colour="cyan",
             ):
-                # get segment's userclass
-                segment_uc = segments_to_uc[segments_to_uc["MX"] == segment].iloc[0][
-                    "userclass"
-                ]
+                # get current segment's details
+                segment = row["Segment"]
+                to_home = row["ToHome"]
+                growth_method = row["Growth_Method"]
+                userclass = row["Userclass"]
+                purpose = row["Purpose"]
+
                 # filter probabilities dataframe to the current userclass
                 irsj_props_segment = irsj_props.loc[
-                    irsj_props["userclass"] == segment_uc
+                    irsj_props["userclass"] == userclass
                 ].reset_index(drop=True)
-                # check if ToHome segment
-                to_home = bool(segment in internal_to_home)
                 # demand matrices
                 demand_mx = file_ops.read_df(
                     params.matrices_to_grow_dir / f"{period}_{segment}.csv"
                 )
                 tot_input_demand = round(demand_mx["Demand"].sum())
+                # if demand matrix is zero, move on
+                if tot_input_demand == 0:
+                    demand_mx = demand_mx.rename(columns={"Demand": f"{period}_Demand"})
+                    factored_matrices[period][segment] = demand_mx
+                    LOG.debug(f"{period:>12}{segment:>15}" f"{0:>12}{0:>12}")
+                    continue
                 # sum total demand
                 demand_total = demand_total + tot_input_demand
                 # add UCs to demand based on demand segment
-                demand_mx.loc[:, "userclass"] = segment_uc
+                demand_mx.loc[:, "userclass"] = userclass
                 # keep needed columns
                 demand_mx = demand_mx[
                     ["from_model_zone_id", "to_model_zone_id", "userclass", "Demand"]
@@ -1186,7 +1178,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 # add TAG flows
                 demand_mx = add_distance_band_tag_flow(demand_mx)
                 # add prupsoes to matrix
-                demand_mx = assign_purposes(demand_mx)
+                demand_mx.loc[:, "Purpose"] = purpose
                 # add ticket splits props
                 demand_mx = demand_mx.merge(
                     ticket_type_splits, how="left", on=["TAG_Flow", "Purpose"]
@@ -1201,10 +1193,8 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 ) = create_factors_for_missing_moira_movements(
                     to_home, demand_mx, edge_growth_factors, other_tickets_df, no_factors_df
                 )
-                # get factoring method
-                method = segments_method[segment]
                 # apply factoring based on demand segment
-                if method == 1:
+                if growth_method == 1:
                     demand_mx, stn2stn_rep_df = apply_edge_growth_method1(
                         demand_mx, edge_growth_factors, to_home
                     )
@@ -1327,7 +1317,9 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         LOG.warning("%s", no_factors_df.to_string(index=False))
 
         # write out matrices
-        for segment in segments_method:
+        for i, row in demand_segments.iterrows():
+            # get current segment's details
+            segment = row["Segment"]
             # get demand for each period
             am_mx = factored_matrices["AM"][segment]
             ip_mx = factored_matrices["IP"][segment]
@@ -1340,7 +1332,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
 
         # Combine matrices into NoRMS segments
         norms_matrices1 = fromto_2_from_by_averaging(
-            factored_24hr_matrices, norms_segments, segments_method
+            factored_24hr_matrices, norms_segments, all_segments
         )
         # norms_matrices2 = fromto_2_from_by_from(factored_24Hr_matrices, norms_segments)
         # plot matrices

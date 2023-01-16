@@ -216,7 +216,6 @@ class EDGEParameters(config_base.BaseConfig):
 
     # Input files
     demand_segments: Path
-    segments_to_uc_path: Path
     flow_cat_path: Path
     ticket_type_splits_path: Path
     norms_to_edge_stns_path: Path
@@ -240,7 +239,6 @@ class EDGEParameters(config_base.BaseConfig):
     @classmethod
     @pydantic.validator(
         "demand_segments",
-        "segments_to_uc_path",
         "flow_cat_path",
         "ticket_type_splits_path",
         "norms_to_edge_stns_path",

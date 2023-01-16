@@ -8,7 +8,6 @@ matrices_to_grow_dir: E:\Norms\Edge growth\output
 
 # Custom inputs files
 demand_segments: I:\NorMITs Demand\import\edge_replicant\apply_growth\demand_segments.csv
-segments_to_uc_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\Segments2UCs.csv
 flow_cat_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\FlowCats.csv
 ticket_type_splits_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\TicketTypeSplits.csv
 norms_to_edge_stns_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\TLCs_MOIRA.csv
