@@ -1139,11 +1139,12 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             )
             # period dictionary
             factored_matrices[period] = {}
-            # create logging line
-            log_line = "{:>12} {:>15}  {:>12}  {:>12}".format(
-                "Time_Period", "Demand_Segment", "Base_Demand", f"{forecast_year}_Demand"
+
+            LOG.debug(
+                f"{'Time_Period':>12}{'Demand_Segment':>15}"
+                f"{'Base_Demand':>12}{f'{forecast_year}_Demand':>12}"
             )
-            LOG.info(log_line)
+
             # loop over demand segments
             for segment in tqdm(
                 demand_segment_list,
@@ -1229,10 +1230,10 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 )
                 tot_output_demand = round(demand_mx["N_Demand"].sum())
                 # create logging line
-                log_line = "{:>12} {:>15}  {:>12}  {:>12}".format(
-                    period, segment, tot_input_demand, tot_output_demand
+                LOG.debug(
+                    f"{period:>12}{segment:>15}"
+                    f"{tot_input_demand:>12}{tot_output_demand:>12}"
                 )
-                LOG.info(log_line)
 
                 # empty dataframe for growth summary
                 temp_growth_summary = pd.DataFrame(
@@ -1246,7 +1247,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 # add growth stats to growth summary df
                 growth_summary = pd.concat([growth_summary, temp_growth_summary], axis=0)
 
-                # ammend forecast matrix to main dictionary
+                # amend forecast matrix to main dictionary
                 demand_mx = demand_mx[["from_model_zone_id", "to_model_zone_id", "N_Demand"]]
                 demand_mx = demand_mx.rename(columns={"N_Demand": f"{period}_Demand"})
                 factored_matrices[period][segment] = demand_mx
