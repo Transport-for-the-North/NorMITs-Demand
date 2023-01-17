@@ -1,5 +1,5 @@
 iteration: 1.0
-forecast_scenario: core
+forecast_scenario: North Factored
 export_folder: E:\NorMITs Demand
 assignment_model: NoRMS
 
@@ -17,10 +17,10 @@ cube_exe: C:\Program Files\Citilabs\CubeVoyager\VOYAGER.EXE
 edge_flows_path: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Base and Mappings\FC_fullfat1819_NEW_DDG.csv
 
 # EDGE outputs
-edge_growth_dir: I:\NorMITs Demand\import\EDGE_growth\Moira distance\Nov 21 Central - Growth
+edge_growth_dir: I:\NorMITs Demand\import\EDGE_growth\NoRMS distance\Nov 21 NPIER - North Factored
 
 # Forecast years dictionary
 # forecast year: EDGE growth factors file
 forecast_years:
-  2040: Out_Nov 21 Central - Growth_2040_rate.csv.bz2
-  2043: Out_Nov 21 Central - Growth_2043_rate.csv.bz2
+  2043: Out_Nov 21 NPIER - North Factored_2043_rate.csv.bz2
+  2053: Out_Nov 21 NPIER - North Factored_2053_rate.csv.bz2
