@@ -1270,17 +1270,18 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             params.export_path / f"stn2stn_growth_report_{forecast_year}.csv",
             index=False,
         )
+
         # if the proportion of the demand that has no factor at all in EDGE exceeds 1%
         #        then report these movements and quit the program
         #        user MUST look into these movements and check why these have no factor
         #        and act accordingly
         if no_factor_demand_prop > 1:
             LOG.warning(
-                f"          Demand with no factors  = {no_factor_demand_prop}% "
-                / "exceeding the 1% threshold of the total demand hence the process terminated"
+                f"Demand with no factors = {no_factor_demand_prop}% "
+                "exceeding the 1% threshold of the total demand hence the process terminated"
             )
-            LOG.warning("           Table Below lists all movements with no factors:")
-            LOG.warning("          %s", no_factors_df.to_string(index=False))
+            LOG.warning("Table Below lists all movements with no factors:")
+            LOG.warning("%s", no_factors_df.to_string(index=False))
             LOG.info("Process was interrupted @ %s", timing.get_datetime())
             print("Process was interrupted - Check the logfile for more details!")
             # quit
@@ -1290,31 +1291,28 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             )
 
         LOG.info(
-            "          Records below have missing factors for -Missing_TicketType- "
+            "Records below have missing factors for -Missing_TicketType- "
             "and therefore growth factors for"
         )
-        LOG.info("          Tickets from Available_TicektType- have been used")
+        LOG.info("Tickets from Available_TicektType- have been used")
         LOG.info(
-            "          Total demand proportion for these movements = %s %% "
+            "Total demand proportion for these movements = %s %% "
             "of which %s %% is Internal",
             tickets_demand_prop,
             tickets_internal_prop,
         )
-        LOG.info("          -----------------------------------")
+        LOG.info("-----------------------------------")
         LOG.info("%s", other_tickets_df.to_string(index=False))
+
         # log info
+        path = params.export_path / f"no_factors_log_{forecast_year}.csv"
         LOG.warning(
-            "          Records below have no factors at all for these movements "
-            "hence no growth have been applied:"
+            "Some records have no factors at all for some movements. "
+            "Therefore, no growth has been applied. See %s for a full summary "
+            "of these movements."
+            % path
         )
-        LOG.warning(
-            "          Total demand proportion for these movements = "
-            "%s %% of which %s %% is Internal",
-            no_factor_demand_prop,
-            factors_internal_prop,
-        )  ####LOG PYLINT
-        LOG.warning("          -----------------------------------")
-        LOG.warning("%s", no_factors_df.to_string(index=False))
+        no_factors_df.to_csv(path, index=False)
 
         # write out matrices
         for i, row in demand_segments.iterrows():
