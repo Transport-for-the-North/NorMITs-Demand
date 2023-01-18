@@ -79,6 +79,7 @@ def _check_calculation_years(ddg_years: list[int], calculation_years: int) -> tu
 def extrapolate_ddg(
     input_file: pathlib.Path,
     output_file: pathlib.Path,
+    reports_folder: pathlib.Path,
     extrapolation_year: int,
     calculation_years: int,
 ) -> None:
@@ -94,6 +95,8 @@ def extrapolate_ddg(
         Path to the DDG file.
     output_file : pathlib.Path
         Path to save extrapolated file to.
+    reports_folder : pathlib.Path
+        Folder to save the reports / summaries to.
     extrapolation_year : int
         Year to extrapolate to, inclusive.
     calculation_years : int
@@ -119,7 +122,7 @@ def extrapolate_ddg(
         calc_range[1] - calc_range[0]
     )
     yearly_increase.name = "Average Yearly Increase"
-    increase_path = output_file.with_name(output_file.stem + "-average_yearly_increase.csv")
+    increase_path = reports_folder / (output_file.stem + "-average_yearly_increase.csv")
     yearly_increase.to_csv(increase_path)
     LOG.info("Written average yearly increase to %s", increase_path)
 
@@ -130,6 +133,8 @@ def extrapolate_ddg(
         extrapolated.append(extrap)
 
     extrapolated_ddg = pd.concat([ddg] + extrapolated, axis=1)
+    # Convert columns back to string to avoid float format issues
+    extrapolated_ddg.columns = [f"{c:.0f}" for c in extrapolated_ddg.columns]
     extrapolated_ddg.to_csv(output_file)
     LOG.info(
         "Added additional years %s - %s and saved to %s",
@@ -150,6 +155,8 @@ def main(params: ExtrapolateDDGsParameters, init_logger: bool = True) -> None:
         Whether or not to initlise a log file.
     """
     params.output_folder.mkdir(exist_ok=True)
+    reports_folder = params.output_folder / "reports"
+    reports_folder.mkdir(exist_ok=True)
 
     if init_logger:
         nd_log.get_logger(
@@ -174,6 +181,7 @@ def main(params: ExtrapolateDDGsParameters, init_logger: bool = True) -> None:
         extrapolate_ddg(
             path,
             params.output_folder / path.name,
+            reports_folder,
             params.final_year,
             params.number_calculation_years,
         )
