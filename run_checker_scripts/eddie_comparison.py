@@ -893,7 +893,14 @@ def _calculate_yearly_quarters(data: pd.DataFrame) -> pd.DataFrame:
     """
     quarters = []
     for yr in data.columns:
-        for q in range(1, 5):
+        previous = str(int(yr) - 1)
+        if previous in data.columns:
+            # Use previous year value for Q1 as we're dealing with financial years
+            col = data[previous].copy()
+            col.name = f"{yr}_q1"
+            quarters.append(col)
+
+        for q in range(2, 5):
             col = data[yr].copy()
             col.name = f"{yr}_q{q}"
             quarters.append(col)
