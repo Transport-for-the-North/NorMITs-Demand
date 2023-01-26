@@ -7,15 +7,16 @@ import itertools
 import pathlib
 
 # Third party imports
-from typing import Tuple
 import pandas as pd
 from tqdm import tqdm
 
 # Local imports
+# pylint: disable=import-error,wrong-import-position
 from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.models.forecasting import forecast_cnfg
 from normits_demand.matrices.cube_mat_converter import CUBEMatConverter
+# pylint: enable=import-error,wrong-import-position
 
 # ## CONSTANTS ## #
 LOG = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ def prepare_stn2stn_matrix(
     dist_mx: pd.DataFrame,
     stn_tlc: pd.DataFrame,
     to_home: bool = False,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Prepare stn 2 stn matrix with TLCs and distances from ij matrix.
 
     Parameters
@@ -328,7 +329,7 @@ def create_factors_for_missing_moira_movements(
     other_tickets_df: pd.DataFrame,
     no_factors_df: pd.DataFrame,
     internal_zone_limit: int = 1157,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Produce Factors for missing movements/purposes/ticket types from other movements.
 
 
@@ -714,7 +715,7 @@ def apply_edge_growth_method2(mx_df: pd.DataFrame, edge_factors: pd.DataFrame) -
 
 def prepare_logging_info(
     other_tickets_df: pd.DataFrame, no_factors_df: pd.DataFrame, demand_total: float
-) -> Tuple[pd.DataFrame, pd.DataFrame, float, float, float, float]:
+) -> tuple[pd.DataFrame, pd.DataFrame, float, float, float, float]:
     """Calculate logging stats and prepare to write to logfile.
 
 
@@ -1179,6 +1180,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 desc="    Demand Segments Loop ",
                 unit=" Segment",
                 colour="cyan",
+                total=len(demand_segments),
             ):
                 # get current segment's details
                 segment = row["Segment"]
