@@ -1,4 +1,4 @@
-eddie_file: I:\Data\EDDIE Inputs\Nov21_EDDIE_Proper_DN_v3.xlsm
+eddie_file: I:\Data\EDDIE Inputs\Nov21_EDDIE_Proper_DN_v3 - TfN Edited (CENTRAL ONLY).xlsm
 workbook_parameters:
   landuse:
     sheet_name: I; CEBR_LA_EMP_POP_GDP
@@ -11,9 +11,6 @@ workbook_parameters:
     header_row: 16
   employment_industry:
     sheet_name: I; CEBR_LA_EMPbyIndustry
-    header_row: 13
-  employment_occupation:
-    sheet_name: I; CEBR_LA_EMPbyOccupation
     header_row: 13
 npier_input: npier_raw_transformational
 npier_scenario_landuse:

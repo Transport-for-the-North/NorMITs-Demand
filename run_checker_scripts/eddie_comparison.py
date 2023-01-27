@@ -67,8 +67,12 @@ CEBR_INDUSTRY_LOOKUP = {
     "Other service activities": "Other services",
 }
 "Lookup from NPIER industries to EDDIE industries."
-OUTPUT_YEARS = range(2011, 2051)
-NORTH_REGIONS = ["North East", "North West", "Yorks & Hum"]
+MIN_YEAR = 2011
+MAX_YEAR = 2043
+OUTPUT_YEARS = range(MIN_YEAR, MAX_YEAR + 1)
+YEARLY_COLUMNS = tuple(str(s) for s in OUTPUT_YEARS)
+QUARTERLY_COLUMNS = tuple(f"{y}_q{q}" for y in OUTPUT_YEARS for q in "1234")
+NORTH_REGIONS = ("north east", "north west", "yorkshire & the humber")
 
 
 ##### CLASSES #####
@@ -88,7 +92,6 @@ class EDDIEWorkbookParams(pydantic.BaseModel):
     lad_lookup: WorksheetParams
     wor_wap: WorksheetParams
     employment_industry: WorksheetParams
-    employment_occupation: WorksheetParams
 
 
 class NPIERScenarioLandUseParameters(pydantic.BaseModel):
@@ -273,7 +276,6 @@ class DisaggregatedLandUse(NamedTuple):
     wap: pd.DataFrame
     wor: pd.DataFrame
     employment_industry: pd.DataFrame
-    employment_occupation: pd.DataFrame
 
 
 class NPIERNorthernLandUse(NamedTuple):
@@ -300,10 +302,9 @@ NPIERLandUseType = TypeVar("NPIERLandUseType", NPIERRegionsLandUse, NPIERNorther
 class NPIEREDDIEFormatLandUse(NamedTuple):
     population: pd.DataFrame
     employment: pd.DataFrame
-    wap: pd.DataFrame
-    wor: pd.DataFrame
     industry_employment: pd.DataFrame
-    occupation_employment: Optional[pd.DataFrame] = None
+    wap: Optional[pd.DataFrame] = None
+    wor: Optional[pd.DataFrame] = None
 
     def copy(self) -> NPIEREDDIEFormatLandUse:
         return NPIEREDDIEFormatLandUse(
@@ -312,7 +313,6 @@ class NPIEREDDIEFormatLandUse(NamedTuple):
             wap=self.wap.copy(),
             wor=self.wor.copy(),
             industry_employment=self.industry_employment.copy(),
-            occupation_employment=self.occupation_employment.copy(),
         )
 
 
@@ -413,6 +413,7 @@ def load_landuse_eddie(
     data.loc[:, "region"] = data[zone_col_name].replace(region_replace)
 
     # TODO(MB) Keep track of original Excel row numbers for replacing data
+    data["region"] = _normalise_region_names(data["region"])
     data = data.set_index(["variable", "region", "local_authority", "units", zone_col_name])
 
     return EDDIELandUseData(
@@ -611,10 +612,31 @@ def _read_employment_industries(
     return industries
 
 
+def _normalise_region_names(names: pd.Index | pd.Series) -> pd.Index:
+    """Normalise names of UK regions in an index."""
+    names = (
+        names.str.lower()
+        .str.strip()
+        .str.replace(r"\s+", " ", regex=True)
+        .str.replace(r"""[!"#$%'()*+,-./:;<=>?@[\\\]^_`{|}~]""", "", regex=True)
+    )
+
+    rename = {
+        r"^united kindgom.*$": "uk",
+        r"\smids$": " midlands",
+        r"yorks\s+&?\s+hum": "yorkshire & the humber",
+        r"^\s*east\s*$": "east of england",
+    }
+    for pattern, repl in rename.items():
+        names = names.str.replace(pattern, repl, regex=True, case=False)
+    return names
+
+
 def _read_npier_regions(
     file: pathlib.Path, population_sheet: WorksheetParams, employment_sheet: WorksheetParams
 ) -> NPIERRegionsLandUse:
     population = read_excel_sheet(file, population_sheet)
+    population.index.names = ["region"]
     population *= 1000
 
     region_names = population.index.tolist()
@@ -623,7 +645,18 @@ def _read_npier_regions(
     region_names.append("United Kingdom (mainland)")
 
     industry_employment = _read_employment_industries(file, employment_sheet, region_names)
-    employment = industry_employment.groupby(level=0).sum()
+    industry_employment.index.names = ["region", "cebr_industry"]
+    employment = industry_employment.groupby(level="region").sum()
+
+    population.index = _normalise_region_names(population.index)
+    employment.index = _normalise_region_names(employment.index)
+
+    industry_employment.index = pd.MultiIndex.from_arrays(
+        [
+            _normalise_region_names(industry_employment.index.get_level_values("region")),
+            industry_employment.index.get_level_values("cebr_industry"),
+        ]
+    )
 
     return NPIERRegionsLandUse(population, employment, industry_employment)
 
@@ -694,6 +727,7 @@ def _load_wor_wap(path: pathlib.Path, sheet_params: WorksheetParams) -> pd.DataF
     index_columns = ["description", "region", "units"]
     wor_wap = wor_wap.dropna(axis=0, subset=index_columns, how="any")
     wor_wap = wor_wap.dropna(axis=1, how="all")
+    wor_wap.loc[:, "region"] = _normalise_region_names(wor_wap["region"])
     wor_wap = wor_wap.set_index(index_columns)
 
     numeric_wor_wap = []
@@ -723,7 +757,6 @@ def load_disaggregated_eddie(
     wor_wap = _load_wor_wap(path, workbook_params.wor_wap)
 
     emp_params = {
-        "occupation": workbook_params.employment_occupation,
         "industry": workbook_params.employment_industry,
     }
     emp_data = {}
@@ -752,6 +785,7 @@ def load_disaggregated_eddie(
         index_columns = ["region", "local_authority", f"cebr_{name}"]
         df = df.dropna(axis=0, how="any", subset=index_columns)
 
+        df.loc[:, "region"] = _normalise_region_names(df["region"])
         df = df.set_index(index_columns)
         for c in df.columns:
             df.loc[:, c] = pd.to_numeric(df[c], downcast="unsigned", errors="coerce")
@@ -762,7 +796,6 @@ def load_disaggregated_eddie(
         wap=wor_wap.loc["Working-Age Population"],
         wor=wor_wap.loc["Employment (Residence-based)"] * 1000,
         employment_industry=emp_data["industry"],
-        employment_occupation=emp_data["occupation"],
     )
 
 
@@ -1039,18 +1072,11 @@ def disaggregate_tfn_landuse(
         eddie_disaggregated.employment_industry,
         "cebr_industry",
     )
-    tfn_emp_occupation = _disaggregate_tfn_employment(
-        eddie_data[LandUseType.EMPLOYMENT],
-        tfn_data[LandUseType.EMPLOYMENT],
-        eddie_disaggregated.employment_occupation,
-        "cebr_occupation",
-    )
 
     return DisaggregatedLandUse(
         wap=tfn_wap,
         wor=tfn_wor,
         employment_industry=tfn_emp_industry,
-        employment_occupation=tfn_emp_occupation,
     )
 
 
@@ -1323,14 +1349,15 @@ def write_north_only_eddie_format(
     for w in ("wor", "wap"):
         eddie_wor_wap = getattr(disaggregated_eddie, w)
         eddie_factors = (
-            eddie_wor_wap.loc[NORTH_REGIONS] / eddie_wor_wap.loc[NORTH_REGIONS].sum()
+            eddie_wor_wap.loc[list(NORTH_REGIONS)]
+            / eddie_wor_wap.loc[list(NORTH_REGIONS)].sum()
         )
         # Add additional columns using split from final column
         eddie_factors = eddie_factors.reindex(columns=columns, method="ffill")
 
         npier_wor_wap = eddie_factors.multiply(getattr(npier_north, w), axis=1).loc[:, columns]
         merged_wor_wap[w] = eddie_wor_wap.reindex(columns=columns)
-        merged_wor_wap[w].loc[NORTH_REGIONS] = npier_wor_wap
+        merged_wor_wap[w].loc[list(NORTH_REGIONS)] = npier_wor_wap
 
     # Industry doesn't have the same LADs as pop / emp in EDDIE for some reason
     north_industry = npier_north.industry_employment.copy()
@@ -1356,179 +1383,225 @@ def write_north_only_eddie_format(
     )
     merged_industry = _infill_columns(merged_industry, [str(i) for i in OUTPUT_YEARS])
 
-    occupation_totals = disaggregated_eddie.employment_occupation.groupby(
-        level="local_authority"
-    ).sum()
-    occupation_totals = merge_with_eddie(
-        occupation_totals,
-        npier_north.industry_employment.groupby(level="npier_lad").sum(),
-        eddie_cols=["local_authority"],
-        north_cols=["npier_lad"],
-        **kwargs,
-    )
-    occupation_totals = occupation_totals.loc[occupation_totals["_merge"] == "both"]
-
-    occupation_totals.columns = pd.MultiIndex.from_tuples(
-        map(split_column_names, occupation_totals.columns)
-    )
-    occupation_factors = occupation_totals.loc[:, "eddie"] / occupation_totals.loc[:, "north"]
-    occupation_factors.index = occupation_factors.index.get_level_values("local_authority")
-    merged_occupation = disaggregated_eddie.employment_occupation.multiply(
-        occupation_factors, level="local_authority"
-    )
-
     landuse_data = NPIEREDDIEFormatLandUse(
         population=merged_population,
         employment=merged_employment,
         wap=merged_wor_wap["wap"],
         wor=merged_wor_wap["wor"],
         industry_employment=merged_industry,
-        occupation_employment=merged_occupation,
     )
     output_eddie_format(landuse_data, output_file)
     return landuse_data
 
 
-def _factor_npier_eddie(
-    eddie_format_npier_data: NPIEREDDIEFormatLandUse,
-    population_factors: pd.DataFrame,
-    employment_factors: pd.DataFrame,
-    min_year: int,
-    max_year: int,
-    factor_join_col: str,
-) -> NPIEREDDIEFormatLandUse:
+def _infill_external_regions_single(
+    data: pd.DataFrame, fill_column: str, index_column: str | list[str]
+) -> pd.DataFrame:
+    external_regions = ~data.index.get_level_values("region").isin(NORTH_REGIONS)
+    infill_columns = data.loc[external_regions].isna().any(axis=0)
+    infill_columns = infill_columns.index[infill_columns]
+
+    if len(infill_columns) == 0:
+        return data
+
+    original_index = data.index.names
+    data = data.reset_index().set_index(index_column)
+
+    fill_dataframe = pd.concat([data[fill_column].copy()] * len(infill_columns), axis=1)
+    fill_dataframe.columns = infill_columns
+
+    data.loc[external_regions, infill_columns] = data.loc[
+        external_regions, infill_columns
+    ].fillna(fill_dataframe)
+    return data.reset_index().set_index(original_index)
+
+
+def _split_quarterly_columns(
+    columns: list[str], min_year: int, max_year: int
+) -> tuple[list[str], list[str]]:
     quarterly_columns = []
     yearly_columns = []
     for yr in range(min_year, max_year + 1):
         yr = str(yr)
-        if yr in employment_factors.columns:
+        if yr in columns:
             yearly_columns.append(yr)
 
         for q in "1234":
             quarter = f"{yr}_q{q}"
-            if quarter in population_factors.columns:
+            if quarter in columns:
                 quarterly_columns.append(quarter)
 
-    factored_population = eddie_format_npier_data.population.drop(columns="_merge").multiply(
-        population_factors.loc[:, quarterly_columns], level=factor_join_col, fill_value=1
-    )
-    factored_employment = eddie_format_npier_data.employment.drop(columns="_merge").multiply(
-        employment_factors.loc[:, quarterly_columns], level=factor_join_col, fill_value=1
-    )
+    return quarterly_columns, yearly_columns
 
-    factored_wap = eddie_format_npier_data.wap.multiply(
-        population_factors.loc[:, quarterly_columns], level=factor_join_col, fill_value=1
-    )
-    factored_wor = eddie_format_npier_data.wor.multiply(
-        employment_factors.loc[:, quarterly_columns], level=factor_join_col, fill_value=1
-    )
 
-    factored_industry = eddie_format_npier_data.industry_employment.drop(
-        columns="_merge"
-    ).multiply(employment_factors.loc[:, yearly_columns], level=factor_join_col, fill_value=1)
-    factored_occupation = eddie_format_npier_data.occupation_employment.multiply(
-        employment_factors.loc[:, yearly_columns], level=factor_join_col, fill_value=1
+def _infill_external_regions(
+    eddie_format_npier_data: NPIEREDDIEFormatLandUse,
+) -> NPIEREDDIEFormatLandUse:
+    QUARTERLY_INFILL = "2038_q1"
+    YEARLY_INFILL = "2038"
+    LAD_INDEX = "lad_2017_zone_id"
+    REGION_INDEX = "region"
+
+    infilled_population = _infill_external_regions_single(
+        eddie_format_npier_data.population.drop(columns="_merge", errors="ignore"),
+        QUARTERLY_INFILL,
+        LAD_INDEX,
+    )
+    infilled_employment = _infill_external_regions_single(
+        eddie_format_npier_data.employment.drop(columns="_merge", errors="ignore"),
+        QUARTERLY_INFILL,
+        LAD_INDEX,
+    )
+    infilled_wap = _infill_external_regions_single(
+        eddie_format_npier_data.wap, QUARTERLY_INFILL, REGION_INDEX
+    )
+    infilled_wor = _infill_external_regions_single(
+        eddie_format_npier_data.wor, QUARTERLY_INFILL, REGION_INDEX
+    )
+    infilled_industry = _infill_external_regions_single(
+        eddie_format_npier_data.industry_employment.drop(columns="_merge", errors="ignore"),
+        YEARLY_INFILL,
+        ["local_authority", "cebr_industry"],
     )
 
     return NPIEREDDIEFormatLandUse(
-        population=factored_population,
-        employment=factored_employment,
-        wap=factored_wap,
-        wor=factored_wor,
-        industry_employment=factored_industry,
-        occupation_employment=factored_occupation,
+        population=infilled_population,
+        employment=infilled_employment,
+        wap=infilled_wap,
+        wor=infilled_wor,
+        industry_employment=infilled_industry,
     )
 
 
+def _add_year_columns(
+    data: pd.DataFrame,
+    min_year: int,
+    max_year: int,
+    yearly: bool = True,
+    quarterly: bool = True,
+) -> pd.DataFrame:
+    columns = []
+    if yearly:
+        columns += [str(i) for i in range(min_year, max_year + 1)]
+    if quarterly:
+        columns += [f"{i}_q{j}" for i in range(min_year, max_year + 1) for j in "1234"]
+    if columns == []:
+        raise ValueError("no columns to add")
+
+    return data.reindex(columns=columns)
+
+
+def _factor_eddie_regions(
+    base: pd.DataFrame, target: pd.DataFrame, columns: str, external: bool = True
+) -> pd.DataFrame:
+    if external:
+        region_filter = lambda r: r not in NORTH_REGIONS
+    else:
+        region_filter = lambda r: r in NORTH_REGIONS
+
+    regions = [r for r in base.index.get_level_values("region").unique() if region_filter(r)]
+
+    base = base.loc[:, columns].copy()
+    base.loc[regions] = (
+        base.loc[regions]
+        .div(base.groupby("region").sum())
+        .mul(target.loc[:, columns], level="region", axis=1)
+    )
+    return base
+
+
 def write_factored_external_eddie_format(
-    eddie: EDDIELandUseData,
     npier_regions: NPIERRegionsLandUse,
     eddie_format_npier_north: NPIEREDDIEFormatLandUse,
     output_file: pathlib.Path,
 ) -> NPIEREDDIEFormatLandUse:
     # Add in Northern values from NPIER raw and factor external areas to match NPIER external regions
-    npier_regions.population.index.names = ["npier_region"]
-    population_by_region = merge_with_eddie(
-        eddie.data[LandUseType.POPULATION].groupby("region").sum(),
-        npier_regions.population,
-        eddie_cols=["region"],
-        north_cols=["npier_region"],
-    )
-    population_by_region.columns = pd.MultiIndex.from_tuples(
-        map(split_column_names, population_by_region.columns)
-    )
-    population_factors = (
-        population_by_region.loc[:, "north"] / population_by_region.loc[:, "eddie"]
-    )
-    population_factors.index = population_factors.index.get_level_values("region")
-    population_factors.drop(columns="_merge", inplace=True, errors="ignore")
+    infilled_npier_north = _infill_external_regions(eddie_format_npier_north)
 
-    npier_regions.employment.index.names = ["npier_region"]
-    employment_by_region = merge_with_eddie(
-        eddie.data[LandUseType.EMPLOYMENT].groupby("region").sum(),
-        npier_regions.employment,
-        eddie_cols=["region"],
-        north_cols=["npier_region"],
-    )
-    employment_by_region.columns = pd.MultiIndex.from_tuples(
-        map(split_column_names, employment_by_region.columns)
-    )
-    employment_factors = (
-        employment_by_region.loc[:, "north"] / employment_by_region.loc[:, "eddie"]
-    )
-    employment_factors.index = employment_factors.index.get_level_values("region")
-    employment_factors.drop(columns="_merge", inplace=True, errors="ignore")
+    # Normalise region index column for all dataframes
+    npier_dict: dict[str, pd.DataFrame] = infilled_npier_north._asdict()
+    for df in npier_dict.values():
+        index_level = df.index.names.index("region")
+        df.index.set_levels(
+            _normalise_region_names(df.index.levels[index_level]), level="region", inplace=True
+        )
+    infilled_npier_north = NPIEREDDIEFormatLandUse(**npier_dict)
 
-    landuse_data = _factor_npier_eddie(
-        eddie_format_npier_north, population_factors, employment_factors, 2011, 2050, "region"
+    factored: dict[str, pd.DataFrame] = {}
+
+    factored["population"] = _factor_eddie_regions(
+        infilled_npier_north.population, npier_regions.population, QUARTERLY_COLUMNS
     )
+    factored["employment"] = _factor_eddie_regions(
+        infilled_npier_north.employment, npier_regions.employment, QUARTERLY_COLUMNS
+    )
+    factored["wap"] = _factor_eddie_regions(
+        infilled_npier_north.wap, npier_regions.population, QUARTERLY_COLUMNS
+    )
+    factored["wor"] = _factor_eddie_regions(
+        infilled_npier_north.wor, npier_regions.employment, QUARTERLY_COLUMNS
+    )
+
+    regions_yearly_employment = npier_regions.employment.rename(
+        columns={f"{y}_q2": y for y in YEARLY_COLUMNS}
+    ).loc[:, YEARLY_COLUMNS]
+    factored["industry_employment"] = _factor_eddie_regions(
+        infilled_npier_north.industry_employment, regions_yearly_employment, YEARLY_COLUMNS
+    )
+
+    landuse_data = NPIEREDDIEFormatLandUse(**factored)
     output_eddie_format(landuse_data, output_file)
     return landuse_data
 
 
 def write_factored_north_eddie_format(
     eddie: EDDIELandUseData,
+    disaggregated_eddie: DisaggregatedLandUse,
     eddie_format_npier_north: NPIEREDDIEFormatLandUse,
     output_file: pathlib.Path,
 ) -> NPIEREDDIEFormatLandUse:
     # Add in Northern values from NPIER factored to EDDIE region totals and leave external area alone
-    eddie_region_pop = eddie_format_npier_north.population.groupby("region").sum()
-    eddie_region_pop.index.names = ["npier_region"]
-    population_by_region = merge_with_eddie(
-        eddie.data[LandUseType.POPULATION].groupby("region").sum(),
-        eddie_region_pop,
-        eddie_cols=["region"],
-        north_cols=["npier_region"],
-    ).loc[NORTH_REGIONS]
-    population_by_region.columns = pd.MultiIndex.from_tuples(
-        map(split_column_names, population_by_region.columns)
+    infilled_npier_north = _infill_external_regions(eddie_format_npier_north)
+    infilled_eddie = _infill_external_regions(
+        NPIEREDDIEFormatLandUse(
+            population=_add_year_columns(
+                eddie.data[LandUseType.POPULATION], MIN_YEAR, MAX_YEAR, yearly=False
+            ),
+            employment=_add_year_columns(
+                eddie.data[LandUseType.EMPLOYMENT], MIN_YEAR, MAX_YEAR, yearly=False
+            ),
+            wap=_add_year_columns(disaggregated_eddie.wap, MIN_YEAR, MAX_YEAR, yearly=False),
+            wor=_add_year_columns(disaggregated_eddie.wor, MIN_YEAR, MAX_YEAR, yearly=False),
+            industry_employment=_add_year_columns(
+                disaggregated_eddie.employment_industry, MIN_YEAR, MAX_YEAR, quarterly=False
+            ),
+        )
     )
-    population_factors = (
-        population_by_region.loc[:, "north"] / population_by_region.loc[:, "eddie"]
-    )
-    population_factors.index = population_factors.index.get_level_values("region")
-    population_factors.drop(columns="_merge", inplace=True, errors="ignore")
 
-    eddie_region_emp = eddie_format_npier_north.employment.groupby("region").sum()
-    eddie_region_emp.index.names = ["npier_region"]
-    employment_by_region = merge_with_eddie(
-        eddie.data[LandUseType.EMPLOYMENT].groupby("region").sum(),
-        eddie_region_emp,
-        eddie_cols=["region"],
-        north_cols=["npier_region"],
-    ).loc[NORTH_REGIONS]
-    employment_by_region.columns = pd.MultiIndex.from_tuples(
-        map(split_column_names, employment_by_region.columns)
-    )
-    employment_factors = (
-        employment_by_region.loc[:, "north"] / employment_by_region.loc[:, "eddie"]
-    )
-    employment_factors.index = employment_factors.index.get_level_values("region")
-    employment_factors.drop(columns="_merge", inplace=True, errors="ignore")
+    factored: dict[str, pd.DataFrame] = {}
 
-    landuse_data = _factor_npier_eddie(
-        eddie_format_npier_north, population_factors, employment_factors, 2011, 2050, "region"
+    factored["population"] = _factor_eddie_regions(
+        infilled_npier_north.population,
+        infilled_eddie.population.groupby("region").sum(),
+        QUARTERLY_COLUMNS,
+        external=False,
     )
+    regions_employment = infilled_eddie.employment.groupby("region").sum()
+    factored["employment"] = _factor_eddie_regions(
+        infilled_npier_north.employment,
+        regions_employment,
+        QUARTERLY_COLUMNS,
+        external=False,
+    )
+
+    regions_yearly_employment = regions_employment.rename(
+        columns={f"{y}_q2": y for y in YEARLY_COLUMNS}
+    ).loc[:, YEARLY_COLUMNS]
+    factored["industry_employment"] = _factor_eddie_regions(
+        infilled_npier_north.industry_employment, regions_yearly_employment, YEARLY_COLUMNS
+    )
+
+    landuse_data = NPIEREDDIEFormatLandUse(**factored)
     output_eddie_format(landuse_data, output_file)
     return landuse_data
 
@@ -1607,11 +1680,22 @@ def _npier_eddie_comparisons_heatmaps_plot(
     regions: Optional[gpd.GeoSeries] = None,
     lads: Optional[gpd.GeoSeries] = None,
 ) -> None:
-    def get_grouped_data(key: str) -> tuple[pd.DataFrame, str]:
-        data = comparisons[key].loc[:, (plot_type, data_years)]
+    YEAR_KEYS = (
+        "industry_employment",
+        "industry_employment_regions",
+    )
+
+    def get_grouped_data(key: str) -> tuple[pd.DataFrame, str, list[str]]:
+        if key in YEAR_KEYS:
+            years = [str(y) for y in plot_years]
+        else:
+            # Use Q1 data for heatmaps
+            years = [f"{y}_q1" for y in plot_years]
+
+        data = comparisons[key].loc[:, (plot_type, years)]
         data = data.groupby(level=join_column).sum()
         data.columns = data.columns.droplevel(0)
-        return data.reset_index(), key.replace("_", " ").title()
+        return data.reset_index(), key.replace("_", " ").title(), years
 
     for plot_type in ("NPIER - EDDIE", "NPIER / EDDIE (%)"):
         fname = plot_type.replace("/", "div")
@@ -1625,15 +1709,8 @@ def _npier_eddie_comparisons_heatmaps_plot(
                 "population",
                 "employment",
                 "industry_employment",
-                "occupation_employment",
             ):
-                if data_key in ("industry_employment", "occupation_employment"):
-                    data_years = [str(y) for y in plot_years]
-                else:
-                    # Use Q1 data for heatmaps
-                    data_years = [f"{y}_q1" for y in plot_years]
-
-                data, data_name = get_grouped_data(data_key)
+                data, data_name, data_years = get_grouped_data(data_key)
 
                 for yr in data_years:
                     _npier_eddie_heatmap(
@@ -1651,8 +1728,17 @@ def _npier_eddie_comparisons_heatmaps_plot(
             # Use Q1 data for heatmaps
             data_years = [f"{y}_q1" for y in plot_years]
 
-            for data_key in ("wap", "wor"):
-                data, data_name = get_grouped_data(data_key)
+            for data_key in (
+                "population_regions",
+                "employment_regions",
+                "industry_employment_regions",
+                "wap",
+                "wor",
+            ):
+                try:
+                    data, data_name, data_years = get_grouped_data(data_key)
+                except KeyError:
+                    continue
 
                 for yr in data_years:
                     _npier_eddie_heatmap(
@@ -1682,26 +1768,36 @@ def npier_eddie_comparison_heatmaps(
     LOG.info("Creating %s", output_folder.stem)
     output_folder.mkdir(exist_ok=True)
 
-    comparisons: dict[str, pd.DataFrame] = dict(
-        population=_npier_eddie_comparison(
-            eddie.data[LandUseType.POPULATION], npier.population, ["local_authority"]
-        ),
-        employment=_npier_eddie_comparison(
-            eddie.data[LandUseType.EMPLOYMENT], npier.employment, ["local_authority"]
-        ),
-        industry_employment=_npier_eddie_comparison(
-            disaggregated_eddie.employment_industry,
-            npier.industry_employment,
-            ["local_authority", "cebr_industry"],
-        ),
-        occupation_employment=_npier_eddie_comparison(
-            disaggregated_eddie.employment_occupation,
-            npier.occupation_employment,
-            ["local_authority", "cebr_occupation"],
-        ),
-        wap=_npier_eddie_comparison(disaggregated_eddie.wap, npier.wap, ["region"]),
-        wor=_npier_eddie_comparison(disaggregated_eddie.wor, npier.wor, ["region"]),
-    )
+    comparisons: dict[str, pd.DataFrame] = {}
+
+    for nm in ("population", "employment"):
+        eddie_data = eddie.data[LandUseType(nm)]
+        npier_data: pd.DataFrame = getattr(npier, nm)
+        comparisons[nm] = _npier_eddie_comparison(eddie_data, npier_data, ["local_authority"])
+        comparisons[f"{nm}_regions"] = _npier_eddie_comparison(
+            eddie_data.groupby("region").sum(), npier_data.groupby("region").sum(), ["region"]
+        )
+
+    for nm in ("industry",):
+        eddie_data: pd.DataFrame = getattr(disaggregated_eddie, f"employment_{nm}")
+        npier_data: pd.DataFrame = getattr(npier, f"{nm}_employment")
+        comparisons[f"{nm}_employment"] = _npier_eddie_comparison(
+            eddie_data, npier_data, ["local_authority", f"cebr_{nm}"]
+        )
+        comparisons[f"{nm}_employment_regions"] = _npier_eddie_comparison(
+            eddie_data.groupby(["region", f"cebr_{nm}"]).sum(),
+            npier_data.groupby(["region", f"cebr_{nm}"]).sum(),
+            ["region", f"cebr_{nm}"],
+        )
+
+    if npier.wap is not None:
+        comparisons["wap"] = _npier_eddie_comparison(
+            disaggregated_eddie.wap, npier.wap, ["region"]
+        )
+    if npier.wor is not None:
+        comparisons["wor"] = _npier_eddie_comparison(
+            disaggregated_eddie.wor, npier.wor, ["region"]
+        )
 
     # Add LAD IDs to disaggregated employment
     lad_id_column = "lad_2017_zone_id"
@@ -1713,7 +1809,7 @@ def npier_eddie_comparison_heatmaps(
             comparisons["employment"].index.get_level_values(lad_id_column),
         )
     )
-    for nm in ("industry_employment", "occupation_employment"):
+    for nm in ("industry_employment",):
         lad_ids = _simplify_strings(
             comparisons[nm].index.get_level_values("local_authority").to_series()
         ).replace(lad_id_lookup)
@@ -1814,6 +1910,9 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
             heatmap_kwargs["regions"] = None
         else:
             heatmap_kwargs["regions"] = plots.get_geo_data(parameters.regions_geospatial_file)
+            heatmap_kwargs["regions"].index = _normalise_region_names(
+                heatmap_kwargs["regions"].index
+            )
 
         if parameters.lad_geospatial_file is None:
             LOG.warning("LADs geospatial file not given")
@@ -1835,7 +1934,6 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
             **heatmap_kwargs,
         )
         npier_factored_external = write_factored_external_eddie_format(
-            eddie,
             reformatted_regions,
             npier_north_only_eddie.copy(),
             output_folder / "NPIER_Raw_EDDIE_format-North_with_factored_external.xlsx",
@@ -1849,6 +1947,7 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
         )
         npier_factored_north = write_factored_north_eddie_format(
             eddie,
+            disaggregated_eddie,
             npier_north_only_eddie,
             output_folder / "NPIER_Raw_EDDIE_format-factored_North.xlsx",
         )
