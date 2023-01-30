@@ -2,15 +2,21 @@
 """Comparisons between the EDDIE DDGs from NPIER or original."""
 
 ##### IMPORTS #####
+from __future__ import annotations
+import dataclasses
+
 # Standard imports
+import enum
 import pathlib
 import re
 import sys
+from typing import Optional
 
 # Third party imports
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import pydantic
 
 # Local imports
 sys.path.append("..")
@@ -30,10 +36,62 @@ EDDIE_ZONE_SYSTEM = "lad_2017"
 CONFIG_FILE = pathlib.Path(r"config\checker\EDDIE_DDG_comparison_parameters.yml")
 DDG_FILENAME_FORMAT = r"^DD_(?P<date>\w+\d+)_(?P<scenario>\w+)_(?P<data>[\w\s{}]+)_LA$"
 NA_VALUES = ["#DIV/0!"]
-DDG_INDEX = ["cebr_lad", "lad13cd"]
 
 
 ##### CLASSES #####
+class DDGType(enum.StrEnum):
+    """Distinguish between the pop emp index and normal DDGs."""
+
+    EMP = "Emp"
+    POP = "Pop"
+    WORWAP = r"frac{WOR}{WAP}"
+    EMPINDEX = "EmpIndex"
+    POPLONGINDEX = "PopLongIndex"
+    POPSHORTINDEX = "PopShortIndex"
+
+    def get_ddg_index(self) -> list[str]:
+        lookup = {
+            **dict.fromkeys(
+                [DDGType.EMP, DDGType.POP, DDGType.WORWAP], ["cebr_lad", "lad13cd"]
+            ),
+            **dict.fromkeys(
+                [DDGType.EMPINDEX, DDGType.POPLONGINDEX, DDGType.POPSHORTINDEX],
+                ["o_lad13cd", "d_lad13cd"],
+            ),
+        }
+        return lookup[self]
+
+    @classmethod
+    def get(cls, name: str) -> DDGType:
+        """Case insensitive way to get DDGType based on given name."""
+        values_lookup = {d.value.lower().strip(): d for d in cls}
+        try:
+            return values_lookup[name.strip().lower()]
+        except KeyError as error:
+            raise KeyError(f"{name} is not a valid DDGType") from error
+
+
+class RegionsDataParams(pydantic.BaseModel):
+    lad_lookup: pathlib.Path
+    shapefile: pathlib.Path
+    id_column: str
+
+    @pydantic.validator("lad_lookup", "shapefile")
+    def _file_exists(  # pylint: disable=no-self-argument
+        cls, value: pathlib.Path
+    ) -> pathlib.Path:
+        if not value.is_file():
+            raise ValueError(f"file doesn't exist: {value}")
+        return value
+
+
+@dataclasses.dataclass
+class RegionsData:
+    lad_lookup: pd.DataFrame
+    geodata: gpd.GeoDataFrame
+    join_column: str
+
+
 class DDGComparisonParameters(config_base.BaseConfig):
     """Parameters for running EDDIE DDG comparison script."""
 
@@ -44,14 +102,21 @@ class DDGComparisonParameters(config_base.BaseConfig):
     eddie_scenario: str
     date: str
     heatmap_years: list[int]
-    comparison_ddgs: set[str]
+    comparison_ddgs: set[DDGType]
     base_year: int
+    regions_data: RegionsDataParams
+
+
+@dataclasses.dataclass
+class ComparisonData:
+    base: pd.DataFrame
+    regions: Optional[pd.DataFrame] = None
 
 
 ##### FUNCTIONS #####
 def find_ddg_files(
     folder: pathlib.Path, date: str, scenario: str, ddg_filter: set[str]
-) -> dict[str, pathlib.Path]:
+) -> dict[DDGType, pathlib.Path]:
     """Find DDG CSV files which match `DDG_FILENAME_FORMAT`.
 
     Parameters
@@ -67,7 +132,7 @@ def find_ddg_files(
 
     Returns
     -------
-    dict[str, pathlib.Path]
+    dict[DDGType, pathlib.Path]
         Dictionary containing paths to the CSVs for the
         given `date` and `scenario` with the key being the
         type of DDG.
@@ -100,7 +165,8 @@ def find_ddg_files(
             raise ValueError(f"found duplicate files for {date} {scenario} {data['data']}")
 
         if data["data"].lower().strip() in ddg_filter:
-            files[data["data"]] = file
+            ddg_type = DDGType.get(data["data"].lower().strip())
+            files[ddg_type] = file
 
     LOG.info('Found %s DDGs in "%s"', len(files), folder)
 
@@ -112,8 +178,10 @@ def find_ddg_files(
 
 
 def check_data_files(
-    npier: dict[str, pathlib.Path], eddie: dict[str, pathlib.Path], ddg_filter: set[str]
-) -> set:
+    npier: dict[DDGType, pathlib.Path],
+    eddie: dict[DDGType, pathlib.Path],
+    ddg_filter: set[str],
+) -> set[DDGType]:
     """Check that `npier` and `eddie` have the same keys.
 
     Log a warning message for any keys present in only one
@@ -121,31 +189,34 @@ def check_data_files(
 
     Parameters
     ----------
-    npier, eddie : dict[str, pathlib.Path]
+    npier, eddie : dict[DDGType, pathlib.Path]
         Dictionary containing NPIER / EDDIE files, respectively,
-        with DDG name as the keys.
-    ddg_filter : set[str]
+        with DDG type as the keys.
+    ddg_filter : set[DDGType]
         DDG data to check is given for NPIER and EDDIE.
 
     Returns
     -------
-    set
+    set[DDGType]
         Unique set of keys present in both dictionaries.
     """
-    npier = {s.lower().strip() for s in npier}
-    eddie = {s.lower().strip() for s in eddie}
-    missing = {"NPIER": ddg_filter - npier, "EDDIE": ddg_filter - eddie}
+    npier_set = set(npier)
+    eddie_set = set(eddie)
+    missing = {"NPIER": ddg_filter - npier_set, "EDDIE": ddg_filter - eddie_set}
 
-    for nm, dt in missing.items():
-        if dt:
+    for data_name, ddg_type in missing.items():
+        if ddg_type:
             LOG.warning(
-                "%s data type files found not found for %s: %s", len(dt), nm, ", ".join(dt)
+                "%s data type files found not found for %s: %s",
+                len(ddg_type),
+                data_name,
+                ", ".join(ddg_type),
             )
 
-    return eddie & npier
+    return eddie_set & npier_set
 
 
-def _read_ddg(file: pathlib.Path, model_name: str) -> pd.DataFrame:
+def _read_ddg(file: pathlib.Path, model_name: str, ddg_type: DDGType) -> pd.DataFrame:
     """Read DDG CSV file.
 
     Parameters
@@ -169,7 +240,7 @@ def _read_ddg(file: pathlib.Path, model_name: str) -> pd.DataFrame:
     # Fix incorrect LAD column name in some DDGs
     df.rename(columns={"la13cd": "lad13cd"}, inplace=True)
 
-    df = df.set_index(DDG_INDEX)
+    df = df.set_index(ddg_type.get_ddg_index())
     df.columns = pd.MultiIndex.from_product(([model_name], df.columns))
 
     return df
@@ -195,51 +266,81 @@ def _multilevel_dataframe_to_excel(df: pd.DataFrame, file: pathlib.Path, **kwarg
 def compare_ddg(
     npier_file: pathlib.Path,
     eddie_file: pathlib.Path,
-    data_name: str,
+    ddg_type: DDGType,
     output_file: pathlib.Path,
-) -> pd.DataFrame:
+    regions: Optional[RegionsData] = None,
+) -> ComparisonData:
     """Compare NPIER and EDDIE DDG files.
 
     Parameters
     ----------
     npier_file, eddie_file : pathlib.Path
         Path to the DDG files.
-    data_name : str
-        Name of the DDG being compared, for log messages.
+    ddg_type : DDGType
+        Type of the DDG being compared, for log messages.
     output_file : pathlib.Path
         Excel workbook to save the comparisons to, will
         be overwritten if exists.
+    regions : RegionsData, optional
+        Lookup to perform regions grouping, not done if not
+        given.
 
     Returns
     -------
-    pd.DataFrame
-        Comparisons DataFrame containing the following 4 column groups:
+    ComparisonData
+        Comparisons DataFrames containing the following 4 column groups:
         NPIER, EDDIE, NPIER - EDDIE, % NPIER - EDDIE. Each column group
         contains different columns for the different years.
     """
-    LOG.info("Comparing %s DDG", data_name)
+    LOG.info("Comparing %s DDG", ddg_type)
 
-    npier = _read_ddg(npier_file, "NPIER")
-    eddie = _read_ddg(eddie_file, "EDDIE")
-    comparison = npier.merge(eddie, how="outer", on=DDG_INDEX)
+    npier = _read_ddg(npier_file, "NPIER", ddg_type)
+    eddie = _read_ddg(eddie_file, "EDDIE", ddg_type)
+    joined = {"base": npier.merge(eddie, how="outer", on=ddg_type.get_ddg_index())}
 
-    differences: dict[str, pd.DataFrame] = {
-        "NPIER - EDDIE": comparison.loc[:, "NPIER"] - comparison.loc[:, "EDDIE"],
-        "% NPIER - EDDIE": comparison.loc[:, "NPIER"].divide(comparison.loc[:, "EDDIE"]) - 1,
-    }
+    if regions:
+        df = joined["base"].copy()
+        df.index = df.index.droplevel(0)
+        merged = df.merge(
+            regions.lad_lookup[["lad17cd", regions.join_column]],
+            left_index=True,
+            right_on="lad17cd",
+            validate="1:1",
+        )
+        merged = merged.drop(columns="lad17cd")
 
-    for nm, df in differences.items():
-        df = df.dropna(axis=1, how="all")
-        df.columns = pd.MultiIndex.from_product(((nm,), df.columns))
-        differences[nm] = df
-    differences["% NPIER - EDDIE"].fillna(0, inplace=True)
-    differences["% NPIER - EDDIE"].replace([np.inf, -np.inf], np.nan, inplace=True)
+        merged = merged.groupby(regions.join_column, as_index=True).sum()
+        merged.columns = pd.MultiIndex.from_tuples(merged.columns)
+        joined["regions"] = merged
 
-    comparison = pd.concat([comparison] + list(differences.values()), axis=1)
+    comparisons: dict[str, pd.DataFrame] = {}
+    for data_name, comparison in joined.items():
+        differences: dict[str, pd.DataFrame] = {
+            "NPIER - EDDIE": comparison.loc[:, "NPIER"] - comparison.loc[:, "EDDIE"],
+            "% NPIER - EDDIE": comparison.loc[:, "NPIER"].divide(comparison.loc[:, "EDDIE"])
+            - 1,
+        }
 
-    _multilevel_dataframe_to_excel(comparison, output_file)
+        for nm, df in differences.items():
+            df = df.dropna(axis=1, how="all")
+            df.columns = pd.MultiIndex.from_product(((nm,), df.columns))
+            differences[nm] = df
+        differences["% NPIER - EDDIE"].fillna(0, inplace=True)
+        differences["% NPIER - EDDIE"].replace([np.inf, -np.inf], np.nan, inplace=True)
 
-    return comparison
+        comparison = pd.concat([comparison] + list(differences.values()), axis=1)
+
+        if data_name == "regions":
+            _multilevel_dataframe_to_excel(
+                comparison,
+                output_file.with_name(output_file.stem + "-regions" + output_file.suffix),
+            )
+        else:
+            _multilevel_dataframe_to_excel(comparison, output_file)
+
+        comparisons[data_name] = comparison
+
+    return ComparisonData(**comparisons)
 
 
 def comparison_heatmap(
@@ -331,6 +432,14 @@ def get_zoning(zone_system: str) -> tuple[nd.ZoningSystem, gpd.GeoDataFrame]:
     return zones, geom
 
 
+def get_regions_data(regions: RegionsDataParams) -> RegionsData:
+    """Load regions shapefile and LAD lookup."""
+    lookup = pd.read_csv(regions.lad_lookup)
+    geodata = gpd.read_file(regions.shapefile)[[regions.id_column, "geometry"]]
+
+    return RegionsData(lad_lookup=lookup, geodata=geodata, join_column=regions.id_column)
+
+
 def growth_comparison(
     data: pd.DataFrame, base_year: str, output_file: pathlib.Path, ddg_name: str
 ) -> pd.DataFrame:
@@ -399,71 +508,97 @@ def main(params: DDGComparisonParameters, init_logger: bool = True):
             file_handler_args=dict(log_file=params.output_folder / LOG_FILE)
         )
 
-    ddg_filter = {str(s).strip().lower(): s for s in params.comparison_ddgs}
+    ddg_filter = {str(s).strip().lower() for s in params.comparison_ddgs}
     npier_files = find_ddg_files(
-        params.npier_ddg_folder, params.date, params.npier_scenario, set(ddg_filter)
+        params.npier_ddg_folder, params.date, params.npier_scenario, ddg_filter
     )
     eddie_files = find_ddg_files(
-        params.eddie_ddg_folder, params.date, params.eddie_scenario, set(ddg_filter)
+        params.eddie_ddg_folder, params.date, params.eddie_scenario, ddg_filter
     )
-    data_types = check_data_files(npier_files, eddie_files, set(ddg_filter))
+    ddg_types = check_data_files(npier_files, eddie_files, ddg_filter)
 
     eddie_zone, eddie_geom = get_zoning(EDDIE_ZONE_SYSTEM)
+    regions = get_regions_data(params.regions_data)
 
     folders: dict[str, pathlib.Path] = {}
     for f in ("comparison", "growth"):
         folders[f] = params.output_folder / f"DDG {f.title()}"
         folders[f].mkdir(exist_ok=True)
 
-    for dt in data_types:
-        ddg_name = ddg_filter[dt]
-        fname = f"DD_{params.date}_{params.npier_scenario}_{params.eddie_scenario}_{ddg_name}"
+    # Cannot map other DDG types because they're matrices
+    MAP_TYPES = [DDGType.EMP, DDGType.POP, DDGType.WORWAP]
+
+    for ddg_type in ddg_types:
+        fname = f"DD_{params.date}_{params.npier_scenario}_{params.eddie_scenario}_{ddg_type}"
         out_file = folders["comparison"] / (fname + "_comparison.xlsx")
 
+        region_data = regions if ddg_type in MAP_TYPES else None
+
         comparison = compare_ddg(
-            npier_files[ddg_name], eddie_files[ddg_name], ddg_name, out_file
+            npier_files[ddg_type], eddie_files[ddg_type], ddg_type, out_file, region_data
         )
-        comparison.index.set_names(eddie_zone.col_name, level=1, inplace=True)
+        comparison.base.index.set_names(eddie_zone.col_name, level=1, inplace=True)
 
-        for plt_data in ("NPIER - EDDIE", "% NPIER - EDDIE"):
-            plt_nm = plt_data.replace("%", "Percentage")
-            fname = out_file.stem + "_" + plt_nm.lower().replace(" - ", "-").replace(" ", "_")
-            out_file = folders["comparison"] / f"{plt_nm} Heatmaps" / fname
-            out_file.parent.mkdir(exist_ok=True)
+        if ddg_type in MAP_TYPES:
+            for plt_data in ("NPIER - EDDIE", "% NPIER - EDDIE"):
+                plt_nm = plt_data.replace("%", "Percentage")
+                fname = (
+                    out_file.stem + "_" + plt_nm.lower().replace(" - ", "-").replace(" ", "_")
+                )
+                out_file = folders["comparison"] / f"{plt_nm} Heatmaps" / fname
+                out_file.parent.mkdir(exist_ok=True)
 
-            comparison_heatmap(
-                comparison,
-                eddie_geom,
-                eddie_zone.col_name,
-                [str(i) for i in params.heatmap_years],
-                f"EDDIE vs NPIER {ddg_name} Comparison",
-                out_file,
-                plt_data,
-                "{:.1%}" if "%" in plt_data else "{:.3g}",
-            )
+                comparison_heatmap(
+                    comparison.base,
+                    eddie_geom,
+                    eddie_zone.col_name,
+                    [str(i) for i in params.heatmap_years],
+                    f"EDDIE vs NPIER {ddg_type} Comparison",
+                    out_file,
+                    plt_data,
+                    "{:.1%}" if "%" in plt_data else "{:.3g}",
+                )
+
+                if comparison.regions is not None and region_data is not None:
+                    comparison_heatmap(
+                        comparison.regions,
+                        region_data.geodata,
+                        region_data.join_column,
+                        [str(i) for i in params.heatmap_years],
+                        f"EDDIE vs NPIER {ddg_type} Region Comparison",
+                        out_file.with_name(out_file.stem + "-regions" + out_file.suffix),
+                        plt_data,
+                        "{:.1%}" if "%" in plt_data else "{:.3g}",
+                    )
 
         out_file = folders["growth"] / (fname + f"_{params.base_year}_growth_comparison.xlsx")
         growth = growth_comparison(
-            comparison.loc[:, ["NPIER", "EDDIE"]], str(params.base_year), out_file, ddg_name
+            comparison.base.loc[:, ["NPIER", "EDDIE"]],
+            str(params.base_year),
+            out_file,
+            ddg_type,
         )
 
-        for plt_data in growth.columns.get_level_values(0).unique():
-            fname = (
-                out_file.stem + "_" + plt_data.lower().replace(" - ", "-").replace(" ", "_")
-            )
-            out_file = folders["growth"] / f"{plt_data} Heatmaps" / fname
-            out_file.parent.mkdir(exist_ok=True)
+        if ddg_type in MAP_TYPES:
+            for plt_data in growth.columns.get_level_values(0).unique():
+                fname = (
+                    out_file.stem
+                    + "_"
+                    + plt_data.lower().replace(" - ", "-").replace(" ", "_")
+                )
+                out_file = folders["growth"] / f"{plt_data} Heatmaps" / fname
+                out_file.parent.mkdir(exist_ok=True)
 
-            comparison_heatmap(
-                growth,
-                eddie_geom,
-                eddie_zone.col_name,
-                [str(i) for i in params.heatmap_years],
-                f"{plt_data} Growth",
-                out_file,
-                plt_data,
-                "{:.1%}",
-            )
+                comparison_heatmap(
+                    growth,
+                    eddie_geom,
+                    eddie_zone.col_name,
+                    [str(i) for i in params.heatmap_years],
+                    f"{plt_data} Growth",
+                    out_file,
+                    plt_data,
+                    "{:.1%}",
+                )
 
 
 if __name__ == "__main__":
