@@ -71,7 +71,10 @@ MIN_YEAR = 2011
 MAX_YEAR = 2043
 OUTPUT_YEARS = range(MIN_YEAR, MAX_YEAR + 1)
 YEARLY_COLUMNS = tuple(str(s) for s in OUTPUT_YEARS)
-QUARTERLY_COLUMNS = tuple(f"{y}_q{q}" for y in OUTPUT_YEARS for q in "1234")
+# Adds 4 quarters for every year except the final year which only adds Q1
+QUARTERLY_COLUMNS = tuple(
+    f"{y}_q{q}" for y in OUTPUT_YEARS for q in "1234" if y != MAX_YEAR or q not in "234"
+)
 NORTH_REGIONS = ("north east", "north west", "yorkshire & the humber")
 
 
@@ -314,6 +317,14 @@ class NPIEREDDIEFormatLandUse(NamedTuple):
             wor=self.wor.copy(),
             industry_employment=self.industry_employment.copy(),
         )
+
+
+class InfillMethod(enum.StrEnum):
+    """Method to use when finding which Na columns require infilling."""
+
+    ANY = enum.auto()
+    ALL = enum.auto()
+    NONE = enum.auto()
 
 
 ##### FUNCTIONS #####
@@ -1395,10 +1406,17 @@ def write_north_only_eddie_format(
 
 
 def _infill_external_regions_single(
-    data: pd.DataFrame, fill_column: str, index_column: str | list[str]
+    data: pd.DataFrame, index_column: str | list[str], method: InfillMethod
 ) -> pd.DataFrame:
     external_regions = ~data.index.get_level_values("region").isin(NORTH_REGIONS)
-    infill_columns = data.loc[external_regions].isna().any(axis=0)
+
+    if method == InfillMethod.ANY:
+        infill_columns = data.loc[external_regions].isna().any(axis=0)
+    elif method == InfillMethod.ALL:
+        infill_columns = data.loc[external_regions].isna().all(axis=0)
+    else:
+        raise ValueError(f"invalid infill method {method}")
+
     infill_columns = infill_columns.index[infill_columns]
 
     if len(infill_columns) == 0:
@@ -1407,12 +1425,9 @@ def _infill_external_regions_single(
     original_index = data.index.names
     data = data.reset_index().set_index(index_column)
 
-    fill_dataframe = pd.concat([data[fill_column].copy()] * len(infill_columns), axis=1)
-    fill_dataframe.columns = infill_columns
-
     data.loc[external_regions, infill_columns] = data.loc[
         external_regions, infill_columns
-    ].fillna(fill_dataframe)
+    ].fillna(axis=1, method="ffill")
     return data.reset_index().set_index(original_index)
 
 
@@ -1435,33 +1450,31 @@ def _split_quarterly_columns(
 
 
 def _infill_external_regions(
-    eddie_format_npier_data: NPIEREDDIEFormatLandUse,
+    eddie_format_npier_data: NPIEREDDIEFormatLandUse, method: InfillMethod
 ) -> NPIEREDDIEFormatLandUse:
-    QUARTERLY_INFILL = "2038_q1"
-    YEARLY_INFILL = "2038"
     LAD_INDEX = "lad_2017_zone_id"
     REGION_INDEX = "region"
 
     infilled_population = _infill_external_regions_single(
         eddie_format_npier_data.population.drop(columns="_merge", errors="ignore"),
-        QUARTERLY_INFILL,
         LAD_INDEX,
+        method,
     )
     infilled_employment = _infill_external_regions_single(
         eddie_format_npier_data.employment.drop(columns="_merge", errors="ignore"),
-        QUARTERLY_INFILL,
         LAD_INDEX,
+        method,
     )
     infilled_wap = _infill_external_regions_single(
-        eddie_format_npier_data.wap, QUARTERLY_INFILL, REGION_INDEX
+        eddie_format_npier_data.wap, REGION_INDEX, method
     )
     infilled_wor = _infill_external_regions_single(
-        eddie_format_npier_data.wor, QUARTERLY_INFILL, REGION_INDEX
+        eddie_format_npier_data.wor, REGION_INDEX, method
     )
     infilled_industry = _infill_external_regions_single(
         eddie_format_npier_data.industry_employment.drop(columns="_merge", errors="ignore"),
-        YEARLY_INFILL,
         ["local_authority", "cebr_industry"],
+        method,
     )
 
     return NPIEREDDIEFormatLandUse(
@@ -1492,7 +1505,7 @@ def _add_year_columns(
 
 
 def _factor_eddie_regions(
-    base: pd.DataFrame, target: pd.DataFrame, columns: str, external: bool = True
+    base: pd.DataFrame, target: pd.DataFrame, columns: list[str], external: bool = True
 ) -> pd.DataFrame:
     if external:
         region_filter = lambda r: r not in NORTH_REGIONS
@@ -1514,9 +1527,13 @@ def write_factored_external_eddie_format(
     npier_regions: NPIERRegionsLandUse,
     eddie_format_npier_north: NPIEREDDIEFormatLandUse,
     output_file: pathlib.Path,
+    infill: InfillMethod = InfillMethod.NONE,
 ) -> NPIEREDDIEFormatLandUse:
     # Add in Northern values from NPIER raw and factor external areas to match NPIER external regions
-    infilled_npier_north = _infill_external_regions(eddie_format_npier_north)
+    if infill in (InfillMethod.ANY, InfillMethod.ALL):
+        infilled_npier_north = _infill_external_regions(eddie_format_npier_north, infill)
+    else:
+        infilled_npier_north = eddie_format_npier_north.copy()
 
     # Normalise region index column for all dataframes
     npier_dict: dict[str, pd.DataFrame] = infilled_npier_north._asdict()
@@ -1559,24 +1576,43 @@ def write_factored_north_eddie_format(
     disaggregated_eddie: DisaggregatedLandUse,
     eddie_format_npier_north: NPIEREDDIEFormatLandUse,
     output_file: pathlib.Path,
+    infill: InfillMethod = InfillMethod.ALL,
 ) -> NPIEREDDIEFormatLandUse:
     # Add in Northern values from NPIER factored to EDDIE region totals and leave external area alone
-    infilled_npier_north = _infill_external_regions(eddie_format_npier_north)
-    infilled_eddie = _infill_external_regions(
-        NPIEREDDIEFormatLandUse(
-            population=_add_year_columns(
-                eddie.data[LandUseType.POPULATION], MIN_YEAR, MAX_YEAR, yearly=False
+    if infill in (InfillMethod.ALL, InfillMethod.ANY):
+        infilled_npier_north = _infill_external_regions(eddie_format_npier_north, infill)
+        infilled_eddie = _infill_external_regions(
+            NPIEREDDIEFormatLandUse(
+                population=_add_year_columns(
+                    eddie.data[LandUseType.POPULATION], MIN_YEAR, MAX_YEAR, yearly=False
+                ),
+                employment=_add_year_columns(
+                    eddie.data[LandUseType.EMPLOYMENT], MIN_YEAR, MAX_YEAR, yearly=False
+                ),
+                wap=_add_year_columns(
+                    disaggregated_eddie.wap, MIN_YEAR, MAX_YEAR, yearly=False
+                ),
+                wor=_add_year_columns(
+                    disaggregated_eddie.wor, MIN_YEAR, MAX_YEAR, yearly=False
+                ),
+                industry_employment=_add_year_columns(
+                    disaggregated_eddie.employment_industry,
+                    MIN_YEAR,
+                    MAX_YEAR,
+                    quarterly=False,
+                ),
             ),
-            employment=_add_year_columns(
-                eddie.data[LandUseType.EMPLOYMENT], MIN_YEAR, MAX_YEAR, yearly=False
-            ),
-            wap=_add_year_columns(disaggregated_eddie.wap, MIN_YEAR, MAX_YEAR, yearly=False),
-            wor=_add_year_columns(disaggregated_eddie.wor, MIN_YEAR, MAX_YEAR, yearly=False),
-            industry_employment=_add_year_columns(
-                disaggregated_eddie.employment_industry, MIN_YEAR, MAX_YEAR, quarterly=False
-            ),
+            infill,
         )
-    )
+    else:
+        infilled_npier_north = eddie_format_npier_north.copy()
+        infilled_eddie = NPIEREDDIEFormatLandUse(
+            population=eddie.data[LandUseType.POPULATION],
+            employment=eddie.data[LandUseType.EMPLOYMENT],
+            wap=disaggregated_eddie.wap,
+            wor=disaggregated_eddie.wor,
+            industry_employment=disaggregated_eddie.employment_industry,
+        )
 
     factored: dict[str, pd.DataFrame] = {}
 
@@ -1586,19 +1622,18 @@ def write_factored_north_eddie_format(
         QUARTERLY_COLUMNS,
         external=False,
     )
-    regions_employment = infilled_eddie.employment.groupby("region").sum()
     factored["employment"] = _factor_eddie_regions(
         infilled_npier_north.employment,
-        regions_employment,
+        infilled_eddie.employment.loc[:, QUARTERLY_COLUMNS].groupby("region").sum(),
         QUARTERLY_COLUMNS,
         external=False,
     )
 
-    regions_yearly_employment = regions_employment.rename(
-        columns={f"{y}_q2": y for y in YEARLY_COLUMNS}
-    ).loc[:, YEARLY_COLUMNS]
     factored["industry_employment"] = _factor_eddie_regions(
-        infilled_npier_north.industry_employment, regions_yearly_employment, YEARLY_COLUMNS
+        infilled_npier_north.industry_employment,
+        infilled_eddie.industry_employment.groupby("region").sum(),
+        YEARLY_COLUMNS,
+        external=False,
     )
 
     landuse_data = NPIEREDDIEFormatLandUse(**factored)
@@ -1784,10 +1819,15 @@ def npier_eddie_comparison_heatmaps(
         comparisons[f"{nm}_employment"] = _npier_eddie_comparison(
             eddie_data, npier_data, ["local_authority", f"cebr_{nm}"]
         )
-        comparisons[f"{nm}_employment_regions"] = _npier_eddie_comparison(
+        comparisons[f"{nm}_employment_regions_split"] = _npier_eddie_comparison(
             eddie_data.groupby(["region", f"cebr_{nm}"]).sum(),
             npier_data.groupby(["region", f"cebr_{nm}"]).sum(),
             ["region", f"cebr_{nm}"],
+        )
+        comparisons[f"{nm}_employment_regions"] = _npier_eddie_comparison(
+            eddie_data.groupby("region").sum(),
+            npier_data.groupby("region").sum(),
+            ["region"]
         )
 
     if npier.wap is not None:
