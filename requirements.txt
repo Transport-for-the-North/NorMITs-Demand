@@ -1,4 +1,7 @@
 python>=3.9
+
+caf.toolkit>=0.0.5
+
 # Required libraries
 numpy>=1.19.0
 pandas>=1.4.0
