@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-"""
+"""Collection of forecasting tools to apply flat growth factors to matrices of data"""
 from __future__ import annotations
 
 # Built-Ins
@@ -25,18 +24,40 @@ from caf.toolkit import concurrency
 # pylint: enable=import-error,wrong-import-position
 
 # # # CONSTANTS # # #
+MatrixTypeLiteral = Literal["long", "wide"]
+
 LOG = logging.getLogger(__name__)
+
 
 # # # CLASSES # # #
 
 # # # FUNCTIONS # # #
 # ## Private ## #
-def _grow_matrix_pd():
-    pass
+def _grow_matrix_long(
+    matrix_in_path: pathlib.Path,
+    matrix_out_path: pathlib.Path,
+    growth_factor: int | float,
+    grow_cols: list[Any] | None = None,
+) -> None:
+    """Grow a long pandas matrix by a flat factor"""
+    df = pd.read_csv(matrix_in_path)
+    grow_cols = df.columns if grow_cols is None else grow_cols
+    for col in grow_cols:
+        df[col] *= growth_factor
+    df.to_csv(matrix_out_path, index=False)
 
 
-def _grow_matrix_np():
-    pass
+def _grow_matrix_wide(
+    matrix_in_path: pathlib.Path,
+    matrix_out_path: pathlib.Path,
+    growth_factor: int | float,
+    grow_cols: list[Any] | None = None,
+) -> None:
+    """Grow a wide pandas matrix by a flat factor"""
+    del grow_cols   # Not needed, but passed in for consistency
+    mat = pd.read_csv(matrix_in_path, index_col=0)
+    mat *= growth_factor
+    mat.to_csv(matrix_out_path)
 
 
 # ## Public ## #
@@ -44,10 +65,66 @@ def grow_matrix(
     matrix_in_path: pathlib.Path,
     matrix_out_path: pathlib.Path,
     growth_factor: int | float,
-    growth_zones: list[Any],
-    matrix_type: Literal["pandas", "numpy"],
+    matrix_type: MatrixTypeLiteral,
+    growth_zones: list[Any] | None = None,
+    grow_cols: list[Any] = None,
 ) -> None:
-    pass
+    """Apply a flat growth factor to a single matrix across a set zones
+
+    Parameters
+    ----------
+    matrix_in_path:
+        Path to the matrix to read in and apply the growth to.
+
+    matrix_out_path:
+        Path to write the grown matrix out to.
+
+    growth_factor:
+        The growth factor to apply to the input matrix to generate
+        the output matrix.
+
+    growth_zones:
+        The zones to apply the growth factor to. If left as None, then growth
+        is applied to all zone pairs.
+
+    matrix_type:
+        Determines which growth method to use based on the type of matrix being
+        loaded in.
+
+    grow_cols:
+        If using a long matrix, this should be a list of the columns to
+        apply the growth factor to. This argument is ignored if
+        `matrix_type="wide"`.
+
+    Returns
+    -------
+    None
+    """
+    if growth_zones is not None:
+        # BACKLOG: Implement method to grow only specific zones with
+        #  simple growth
+        raise NotImplementedError(
+            "Growing on specific zones and not the whole matrix is not yet "
+            "supported"
+        )
+
+    # Grow the matrix depending on the method
+    if matrix_type == "wide":
+        grow_fn = _grow_matrix_wide
+    elif matrix_type == "long":
+        grow_fn = _grow_matrix_long
+    else:
+        raise ValueError(
+            f"matrix_type value of {matrix_type} is not a valid option. "
+            f"Expected on of: {MatrixTypeLiteral.__args__}"
+        )
+
+    grow_fn(
+        matrix_in_path=matrix_in_path,
+        matrix_out_path=matrix_out_path,
+        growth_factor=growth_factor,
+        grow_cols=grow_cols,
+    )
 
 
 def grow_matrices(
@@ -56,8 +133,9 @@ def grow_matrices(
     matrix_io_names: Mapping[str, str] | Iterable[str],
     growth_factor: int | float,
     growth_zones: list[Any] | None = None,
-    matrix_type: Literal["pandas", "numpy"] | None = None,
+    matrix_type: MatrixTypeLiteral | None = None,
     process_count: int = -2,
+    grow_cols: list[Any] = None,
 ) -> None:
     """Apply a flat growth factor to a set of matrices across set zones
 
@@ -96,6 +174,11 @@ def grow_matrices(
         application. See `caf.toolkit.concurrency.multiprocess` for full
         documentation.
 
+    grow_cols:
+        If using a long matrix, this should be a list of the columns to
+        apply the growth factor to. This argument is ignored if
+        `matrix_type="wide"`.
+
     Returns
     -------
     None
@@ -109,9 +192,9 @@ def grow_matrices(
         first_i_matrix = matrix_in_dir / next(iter(matrix_io_names))
         mat = pd.read_csv(first_i_matrix)
         if isinstance(mat, pd.DataFrame):
-            matrix_type = "pandas"
+            matrix_type = "long"
         elif isinstance(mat, np.ndarray):
-            matrix_type = "numpy"
+            matrix_type = "wide"
         else:
             raise TypeError(
                 "Tried to determine the type of the input matrices but got an "
@@ -121,31 +204,19 @@ def grow_matrices(
             )
 
     # Call as a multiprocess
-    # kwarg_list = list()
-    # for in_name, out_name in matrix_io_names.items():
-    #     kwarg_list.append({
-    #         "matrix_in_path": matrix_in_dir / in_name,
-    #         "matrix_out_path": matrix_out_dir / in_name,
-    #         "growth_factor": growth_factor,
-    #         "growth_zones": growth_zones,
-    #         "matrix_type": matrix_type,
-    #     })
-    #
-    # concurrency.multiprocess(
-    #     fn=grow_matrix,
-    #     kwarg_list=kwarg_list,
-    #     process_count=process_count,
-    # )
-
-
-    # Testing!
+    kwarg_list = list()
     for in_name, out_name in matrix_io_names.items():
-        grow_matrix(
-            matrix_in_path=matrix_in_dir / in_name,
-            matrix_out_path=matrix_out_dir / in_name,
-            growth_factor=growth_factor,
-            growth_zones=growth_zones,
-            matrix_type=matrix_type,
-        )
+        kwarg_list.append({
+            "matrix_in_path": matrix_in_dir / in_name,
+            "matrix_out_path": matrix_out_dir / out_name,
+            "growth_factor": growth_factor,
+            "growth_zones": growth_zones,
+            "matrix_type": matrix_type,
+            "grow_cols": grow_cols,
+        })
 
-
+    concurrency.multiprocess(
+        fn=grow_matrix,
+        kwarg_list=kwarg_list,
+        process_count=process_count,
+    )
