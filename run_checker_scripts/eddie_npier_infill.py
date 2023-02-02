@@ -1908,6 +1908,7 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
     )
 
     if params.npier_input == NPIERInputType.NPIER_SCENARIO_LANDUSE:
+        # Used when using UZC data, probably no longer user
         tfn = load_landuse_tfn(params.npier_scenario_landuse)
 
         output_file_base = output_folder / "EDDIE_TfN_landuse_comparison"
@@ -1937,6 +1938,7 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
         )
 
     else:
+        # NPIER transformational raw data
         npier_raw_north, npier_raw_regions = load_raw_transformational(
             params.npier_raw_transformational
         )
