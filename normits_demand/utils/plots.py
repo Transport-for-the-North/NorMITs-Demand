@@ -144,6 +144,7 @@ class Bounds(NamedTuple):
     max_x: int
     max_y: int
 
+
 ##### FUNCTIONS #####
 def match_files(folder: Path, pattern: re.Pattern) -> Iterator[tuple[dict[str, str], Path]]:
     """Iterate through all files in folder which match `pattern`.
@@ -508,11 +509,18 @@ def _heatmap_figure(
     positive_negative_colormaps: bool = False,
     legend_label_fmt: str = "{:.1%}",
     legend_title: Optional[str] = None,
-    zoomed_bounds: Bounds = Bounds(300000, 150000, 600000, 500000),
+    zoomed_bounds: Optional[Bounds] = Bounds(300000, 150000, 600000, 500000),
 ):
     LEGEND_KWARGS = dict(title_fontsize="large", fontsize="medium")
 
-    fig, axes = plt.subplots(1, 2, figsize=(20, 15), frameon=False, constrained_layout=True)
+    ncols = 1 if zoomed_bounds is None else 2
+
+    fig, axes = plt.subplots(
+        1, ncols, figsize=(20, 15), frameon=False, constrained_layout=True
+    )
+    if ncols == 1:
+        axes = [axes]
+
     fig.suptitle(title, fontsize="xx-large", backgroundcolor="white")
     for ax in axes:
         ax.set_aspect("equal")
@@ -578,7 +586,7 @@ def _heatmap_figure(
                 linewidth=kwargs["linewidth"],
                 edgecolor=kwargs["edgecolor"],
             )
-        axes[1].legend(handles=cmap.legend_elements, **kwargs.pop("legend_kwds"))
+        axes[ncols - 1].legend(handles=cmap.legend_elements, **kwargs.pop("legend_kwds"))
 
     else:
         if bins:
@@ -594,16 +602,18 @@ def _heatmap_figure(
         warnings.simplefilter("error", category=UserWarning)
         try:
             geodata.plot(ax=axes[0], legend=False, **kwargs)
-            geodata.plot(ax=axes[1], legend=True, **kwargs)
+            if ncols == 2:
+                geodata.plot(ax=axes[1], legend=True, **kwargs)
         except UserWarning:
             kwargs["scheme"] = "FisherJenksSampled"
             geodata.plot(ax=axes[0], legend=False, **kwargs)
-            geodata.plot(ax=axes[1], legend=True, **kwargs)
+            if ncols == 2:
+                geodata.plot(ax=axes[1], legend=True, **kwargs)
         finally:
             warnings.simplefilter("default", category=UserWarning)
 
         # Format legend text
-        legend = axes[1].get_legend()
+        legend = axes[ncols - 1].get_legend()
         for label in legend.get_texts():
             text = label.get_text()
             values = [float(s.strip()) for s in text.split(",")]
@@ -621,9 +631,10 @@ def _heatmap_figure(
                 text = f"{lower:.0%} - {upper:.0%}"
             label.set_text(text)
 
-    axes[1].set_xlim(zoomed_bounds.min_x, zoomed_bounds.max_x)
-    axes[1].set_ylim(zoomed_bounds.min_y, zoomed_bounds.max_y)
-    axes[1].annotate(
+    if ncols == 2:
+        axes[1].set_xlim(zoomed_bounds.min_x, zoomed_bounds.max_x)
+        axes[1].set_ylim(zoomed_bounds.min_y, zoomed_bounds.max_y)
+    axes[ncols - 1].annotate(
         "Source: NorMITs Demand",
         xy=(0.9, 0.01),
         xycoords="figure fraction",
