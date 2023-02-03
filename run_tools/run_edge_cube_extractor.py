@@ -17,12 +17,13 @@ sys.path.append("..")
 from normits_demand import logging as nd_log
 from normits_demand.tools import edge_cube_extractor
 from normits_demand.utils import file_ops
+from normits_demand.matrices.cube_mat_converter import CUBEMatConverter
 
 # TODO (MI) Setup user inputs using BaseConfig
 
 # ## USER INPUTS ## #
 # cube catalogue setup
-CUBE_EXE = Path("C:/Program Files/Citilabs/CubeVoyager/VOYAGER.EXE")
+CUBE_EXE = Path(r"C:\Program Files\Citilabs\CubeVoyager\VOYAGER.EXE")
 CUBE_CAT_PATH = Path(r"C:\NorMITs\NorTMS_T3_Model_v8.16b")
 CAT_RUN_DIR = "Runs"
 CUBE_RUN_ID = "ILP_2018"
@@ -102,11 +103,12 @@ def run_extractor():
         )
         LOG.info("NoRMS matrices converted to OMX successfully")
 
-        # export to CSVs
+        # export to OMX
         for period in tqdm(periods, desc="Time Periods Loop ", unit="Period"):
-            edge_cube_extractor.export_mat_2_csv_via_omx(
-                CUBE_EXE, OUT_PATH / f"PT_{period}.MAT", OUT_PATH, f"{period}", f"{period}"
-            )
+            c_m = CUBEMatConverter(CUBE_EXE)
+            c_m.mat_2_omx(OUT_PATH / f"PT_{period}.MAT", OUT_PATH, f"PT_{period}")
+            # delete .MAT files
+            os.remove(f"{OUT_PATH}/PT_{period}.MAT")
             LOG.info(f"{period} NoRMS matrices exported to CSVs")
 
         LOG.info("#" * 80)
