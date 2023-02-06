@@ -30,13 +30,14 @@ from typing import Any, Collection, Iterable, Iterator, List, Optional, Sequence
 import numpy as np
 import pandas as pd
 
+from caf.toolkit import pandas_utils as pd_utils
+
 # Local imports
 import normits_demand as nd
 from normits_demand import constants as consts
 from normits_demand.concurrency import multiprocessing, multithreading
 from normits_demand.utils import compress
 from normits_demand.utils import general as du
-from normits_demand.utils import pandas_utils as pd_utils
 
 # Imports that need moving into here
 from normits_demand.utils.general import list_files

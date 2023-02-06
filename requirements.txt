@@ -6,6 +6,7 @@ tqdm>=4.50.2
 pytest>=6.2.1
 openpyxl>=3.0.5
 pyodbc>=4.0.30
+caf.toolkit>=0.0.4
 
 scipy>=1.6.2
 matplotlib>=3.4.3

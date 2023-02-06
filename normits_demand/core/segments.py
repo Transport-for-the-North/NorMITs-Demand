@@ -17,7 +17,6 @@ from __future__ import annotations
 import io
 import os
 import math
-import pathlib
 import itertools
 import collections
 import pathlib
@@ -36,6 +35,8 @@ from typing import Iterable
 import pandas as pd
 import numpy as np
 
+from caf.toolkit import pandas_utils as pd_utils
+
 # Local Imports
 import normits_demand as nd
 
@@ -46,7 +47,6 @@ from normits_demand.utils import file_ops
 from normits_demand.utils import compress
 from normits_demand.utils import general as du
 from normits_demand.utils import math_utils
-from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand import logging as nd_log
 
 

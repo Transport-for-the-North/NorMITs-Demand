@@ -20,6 +20,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from caf.toolkit import pandas_utils as pd_utils
+
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
@@ -33,7 +35,6 @@ from normits_demand.utils import timing
 from normits_demand.utils import math_utils
 from normits_demand.utils import functional as func_utils
 from normits_demand.utils import string_utils as str_utils
-from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand.tools.trip_length_distributions import enumerations as tld_enums
 # pylint: enable=import-error,wrong-import-position
 

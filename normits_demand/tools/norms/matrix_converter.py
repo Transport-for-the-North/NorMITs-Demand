@@ -26,13 +26,13 @@ import tqdm
 import numpy as np
 import pandas as pd
 
-# Local Imports
+from caf.toolkit import pandas_utils as pd_utils
 
+# Local Imports
 from normits_demand import core as nd_core
 from normits_demand import logging as nd_log
 from normits_demand.utils import file_ops
 from normits_demand.utils import general as du
-from normits_demand.utils import pandas_utils as pd_utils
 from normits_demand.matrices import pa_to_od as pa2od
 from normits_demand.matrices import utils as matrix_utils
 from normits_demand.matrices import matrix_processing

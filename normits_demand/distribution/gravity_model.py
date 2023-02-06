@@ -28,6 +28,8 @@ import numpy as np
 import pandas as pd
 from scipy import optimize
 
+from caf.toolkit import pandas_utils as pd_utils
+
 # Local Imports
 import normits_demand as nd
 
@@ -38,7 +40,6 @@ from normits_demand.utils import timing
 from normits_demand.utils import file_ops
 from normits_demand.utils import math_utils
 from normits_demand.utils import general as du
-from normits_demand.utils import pandas_utils as pd_utils
 
 from normits_demand.validation import checks
 from normits_demand.distribution import furness
