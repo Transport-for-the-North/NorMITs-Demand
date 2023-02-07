@@ -153,6 +153,7 @@ class Scenario(IsValidEnum):
     SC02_PP = "SC02_PP"
     SC03_DD = "SC03_DD"
     SC04_UZC = "SC04_UZC"
+    DLOG = "DLOG"
 
     @staticmethod
     def tfn_scenarios():
