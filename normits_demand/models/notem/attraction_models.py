@@ -228,6 +228,7 @@ class HBAttractionModel(HBAttractionModelPaths):
             export_pure_attractions: bool = False,
             export_notem_segmentation: bool = True,
             export_reports: bool = True,
+            non_resi_path: bool = True,
             ) -> None:
         """
         Runs the HB Attraction model.
@@ -260,6 +261,10 @@ class HBAttractionModel(HBAttractionModelPaths):
             Whether to output reports while running. All reports will be
             written out to self.report_home.
 
+        non_resi_path : bool, default True
+            Whether to use the `non_resi_path` (True) or the
+            `employment_paths` for the employment file.
+
         Returns
         -------
         None
@@ -274,7 +279,7 @@ class HBAttractionModel(HBAttractionModelPaths):
 
             # ## GENERATE ATTRACTIONS BY MODE ## #
             self._logger.info("Loading the employment data")
-            emp_dvec = self._read_land_use_data(year)
+            emp_dvec = self._read_land_use_data(year, non_resi_path)
 
             self._logger.info("Applying trip rates")
             pure_attractions = self._generate_attractions(emp_dvec)
@@ -334,7 +339,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         self._logger.info("HB Attraction Model took: %s", time_taken)
         self._logger.info("HB Attraction Model Finished")
 
-    def _read_land_use_data(self, year: int) -> nd.DVector:
+    def _read_land_use_data(self, year: int, non_resi_path: bool = True) -> nd.DVector:
         """
         Reads in the land use data for year and converts it into a Dvector.
 
@@ -342,6 +347,10 @@ class HBAttractionModel(HBAttractionModelPaths):
         ----------
         year:
             The year to get attraction data for.
+
+        non_resi_path : bool, default True
+            Whether to use the `non_resi_path` (True) or the
+            `employment_paths` for the employment file.
 
         Returns
         -------
@@ -353,9 +362,13 @@ class HBAttractionModel(HBAttractionModelPaths):
         emp_seg = nd.get_segmentation_level(self._segmentations['employment'])
 
         # Read the land use data corresponding to the year
+        if non_resi_path:
+            path = self.non_resi_path.format(year=year)
+        else:
+            path=self.employment_paths[year]
+
         emp = file_ops.read_df(
-            # path=self.employment_paths[year],
-            path=self.non_resi_path.format(year=year),  # TODO Revert back to using employment path
+            path=path,
             find_similar=True,
             usecols=self._target_col_dtypes['employment'].keys(),
             dtype=self._target_col_dtypes['employment'],

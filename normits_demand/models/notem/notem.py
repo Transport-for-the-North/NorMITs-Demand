@@ -174,6 +174,7 @@ class NoTEM(NoTEMExportPaths):
             generate_nhb: bool = False,
             generate_nhb_production: bool = False,
             generate_nhb_attraction: bool = False,
+            non_resi_path: bool = True,
             ) -> None:
         """
         Runs the notem trip end models based on the criteria given.
@@ -200,6 +201,11 @@ class NoTEM(NoTEMExportPaths):
 
         generate_nhb_attraction:
             Runs the non home based attraction trip end model only.
+
+        non_resi_path : bool, default True
+            Whether to use the `non_resi_path` (True) or the
+            `employment_paths` for the employment file used in
+            HB attractions.
 
         Returns
         -------
@@ -234,7 +240,7 @@ class NoTEM(NoTEMExportPaths):
             self._generate_hb_production()
 
         if generate_hb_attraction:
-            self._generate_hb_attraction()
+            self._generate_hb_attraction(non_resi_path)
 
         if generate_nhb_production:
             self._generate_nhb_production()
@@ -270,9 +276,15 @@ class NoTEM(NoTEMExportPaths):
             export_reports=True,
         )
 
-    def _generate_hb_attraction(self) -> None:
+    def _generate_hb_attraction(self, non_resi_path: bool = True) -> None:
         """
         Runs the home based Attraction trip end model
+
+        Parameters
+        ----------
+        non_resi_path : bool, default True
+            Whether to use the `non_resi_path` (True) or the
+            `employment_paths` for the employment file.
         """
         self._logger.debug("Generating Home-Based Attraction Model imports")
         # Runs the module to create import dictionary
@@ -296,6 +308,7 @@ class NoTEM(NoTEMExportPaths):
             export_pure_attractions=False,
             export_notem_segmentation=True,
             export_reports=True,
+            non_resi_path=non_resi_path,
         )
 
     def _generate_nhb_production(self) -> None:
