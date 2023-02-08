@@ -3,8 +3,10 @@
 
 ##### IMPORTS #####
 import pathlib
+import re
 import sys
 from typing import Literal, Mapping
+import pandas as pd
 
 import pydantic
 from pydantic import dataclasses
@@ -24,7 +26,7 @@ LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_dlog_tem")
 LOG_FILE = "DLog_TEM.log"
 CONFIG_FILE = pathlib.Path(r"config\models\DLog_tem_config.yaml")
 RAW_LANDUSE_INDEX_COLUMNS = {
-    "population": ["msoa_zone_id", "dwelling_type", "tfn_traveller_type"],
+    "population": ["msoa_zone_id", "tfn_traveller_type"],
     "employment": ["msoa_zone_id", "sic_code"],
 }
 
@@ -73,6 +75,53 @@ class DLogTEMParameters(config_base.BaseConfig):
 
 
 ##### FUNCTIONS #####
+def _find_any_landuse_file(
+    scenario_folder: pathlib.Path, landuse: Literal["pop", "emp"]
+) -> pathlib.Path:
+    for path in scenario_folder.with_name(nd.Scenario.SC01_JAM.value).iterdir():
+        if not path.is_file():
+            continue
+
+        pattern = rf"^land_use_\d{{4}}_{landuse}\.(pbz2|csv|csv\.bz2)$"
+        match = re.match(pattern, path.name, re.IGNORECASE)
+        if match:
+            return path
+
+    raise FileNotFoundError(f"cannot find a {landuse} land use file in {scenario_folder}")
+
+
+def _infill_area_type(
+    scenario_folder: pathlib.Path, landuse_data: pd.DataFrame
+) -> pd.DataFrame:
+    index_columns = RAW_LANDUSE_INDEX_COLUMNS["population"].copy()
+    area_col = "area_type"
+
+    try:
+        other_landuse = _find_any_landuse_file(scenario_folder, "pop")
+    except FileNotFoundError as error:
+        raise FileNotFoundError("cannot find file to infill population area type") from error
+
+    columns = [index_columns[0], area_col]
+    area_type_lookup = file_ops.read_df(other_landuse, usecols=columns)[columns]
+    # Area type is tied to MSOA but need to group rows because there
+    # is more disaggregated data in the other land use file
+    area_type_lookup = area_type_lookup.groupby(index_columns[0]).first()
+
+    LOG.debug("Infilling area type column using %s", other_landuse)
+    landuse_data = landuse_data.merge(
+        area_type_lookup, on=index_columns[0], how="left", validate="m:1", indicator=True
+    )
+    missing = landuse_data["_merge"] != "both"
+    if missing.sum() > 0:
+        raise ValueError(
+            f"{missing.sum()} rows not found when infilling area type from {other_landuse}"
+        )
+    landuse_data = landuse_data.drop(columns="_merge")
+
+    index_columns.insert(1, area_col)
+    return landuse_data.set_index(index_columns, verify_integrity=True)
+
+
 def split_raw_landuse(
     raw_file: pathlib.Path,
     landuse: Literal["population", "employment"],
@@ -113,6 +162,8 @@ def split_raw_landuse(
 
         return base_year < year <= max_year
 
+    scenario_folder = pathlib.Path(next(iter(output_files.values()))).parent
+
     if not overwrite:
         new_files = {}
         existing = []
@@ -128,7 +179,7 @@ def split_raw_landuse(
                 '"%s" and aren\'t being overwritten: %s',
                 len(existing),
                 landuse,
-                pathlib.Path(next(iter(output_files.values()))).parent,
+                scenario_folder,
                 ", ".join(existing),
             )
 
@@ -140,11 +191,13 @@ def split_raw_landuse(
     max_year = max(output_files)
     years = [str(i) for i in output_files]
     LOG.info("Splitting raw %s landuse to separate years files", landuse)
-    landuse_data = file_ops.read_df(
-        raw_file,
-        index_col=RAW_LANDUSE_INDEX_COLUMNS[landuse],  # type: ignore
-        usecols=column_filter,
-    )
+    landuse_data = file_ops.read_df(raw_file, usecols=column_filter)
+
+    # Aggregate rows because raw population is disaggregated by unneeded dwelling type column
+    landuse_data = landuse_data.groupby(RAW_LANDUSE_INDEX_COLUMNS[landuse]).sum()
+
+    if landuse == "population":
+        landuse_data = _infill_area_type(scenario_folder, landuse_data.reset_index())
 
     LOG.debug(
         "Calculated cummulative total %s using years: %s",
@@ -168,16 +221,15 @@ def split_raw_landuse(
 def main(params: DLogTEMParameters, init_logger: bool = True) -> None:
     if init_logger:
         # Add log file output to main package logger
+        log_file = params.export_folder / LOG_FILE
         nd_log.get_logger(
             nd_log.get_package_logger_name(),
-            params.export_folder / LOG_FILE,
+            log_file,
             "Running D-Log Trip End Model",
             log_version=True,
         )
-        nd_log.capture_warnings(
-            file_handler_args=dict(log_file=params.export_folder / LOG_FILE)
-        )
-        LOG.info("Log file saved to %s", params.export_folder / LOG_FILE)
+        nd_log.capture_warnings(file_handler_args=dict(log_file=log_file))
+        LOG.info("Log file saved to %s", log_file)
 
     LOG.debug("Input parameters:\n%s", params.to_yaml())
 
@@ -208,23 +260,36 @@ def main(params: DLogTEMParameters, init_logger: bool = True) -> None:
         nhb_production_import_version=params.import_version.nhb_production,
     )
 
-    # Split required years into separate files and load into land use folder
-    split_raw_landuse(
-        params.raw_dlog_landuse.population,
-        "population",
-        import_builder.population_paths,
-        params.base_year,
-        False,
+    split_landuse_log = (
+        pathlib.Path(next(iter(import_builder.population_paths.values()))).parent / LOG_FILE
     )
-    split_raw_landuse(
-        params.raw_dlog_landuse.employment,
-        "employment",
-        import_builder.employment_paths,
-        params.base_year,
-        False,
+    split_landuse_log = split_landuse_log.with_name(
+        split_landuse_log.stem + "-split_landuse.log"
     )
+    split_landuse_log.parent.mkdir(exist_ok=True, parents=True)
 
-    raise NotImplementedError()
+    with nd_log.TemporaryLogFile(LOG, split_landuse_log):
+        LOG.debug(
+            'Split landuse outputs created by DLog trip end model, main log file: "%s"',
+            log_file,
+        )
+
+        # Split required years into separate files and load into land use folder
+        split_raw_landuse(
+            params.raw_dlog_landuse.population,
+            "population",
+            import_builder.population_paths,
+            params.base_year,
+            True,
+        )
+        split_raw_landuse(
+            params.raw_dlog_landuse.employment,
+            "employment",
+            import_builder.employment_paths,
+            params.base_year,
+            True,
+        )
+
     tem = NoTEM(
         years=params.years,
         scenario=params.scenario,
@@ -236,10 +301,9 @@ def main(params: DLogTEMParameters, init_logger: bool = True) -> None:
     )
     tem.run(generate_all=True)
 
-    # TODO(MB) Run distribution model
-
 
 def _run() -> None:
+    # TODO(MB) Add command line argument to pass a different config file
     print(f"Loading config: {CONFIG_FILE}")
     parameters = DLogTEMParameters.load_yaml(CONFIG_FILE)
 
