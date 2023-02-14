@@ -42,8 +42,8 @@ class NoTEM(NoTEMExportPaths):
                  iteration_name: str,
                  import_builder: nd.pathing.NoTEMImportPathsBase,
                  export_home: nd.PathLike,
-                 hb_attraction_balance_zoning: nd.BalancingZones = None,
-                 nhb_attraction_balance_zoning: nd.BalancingZones = None,
+                 hb_attraction_balance_zoning: nd.BalancingZones | bool = True,
+                 nhb_attraction_balance_zoning: nd.BalancingZones | bool = True,
                  trip_end_adjustments: Optional[List[TripEndAdjustmentFactors]] = None,
                  ):
         """
@@ -79,13 +79,15 @@ class NoTEM(NoTEMExportPaths):
             The zoning systems to balance the home-based attractions to the productions
             at, for each segment of the attractions segmentation. A translation must exist
             between this and the running zoning system, which is MSOA by default.
-            If left as None, then no spatial balance is done, only a segmental balance.
+            If True, then no spatial balance is done, only a segmental balance and if
+            False no balancing is done.
 
         nhb_attraction_balance_zoning:
             The zoning systems to balance the non-home-based attractions to the productions
             at, for each segment of the attractions segmentation. A translation must exist
             between this and the running zoning system, which is MSOA by default.
-            If left as None, then no spatial balance is done, only a segmental balance.
+            If True, then no spatial balance is done, only a segmental balance and if
+            False no balancing is done.
 
         trip_end_adjustments: List[TripEndAdjustmentFactors], optional
             List of all adjustment factors to apply to the HB productions trip ends.

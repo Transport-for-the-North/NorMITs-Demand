@@ -29,6 +29,7 @@ RAW_LANDUSE_INDEX_COLUMNS = {
     "population": ["msoa_zone_id", "tfn_traveller_type"],
     "employment": ["msoa_zone_id", "sic_code"],
 }
+LANDUSE_ZONING = "msoa"
 
 ##### CLASSES #####
 @dataclasses.dataclass
@@ -61,6 +62,7 @@ class DLogTEMParameters(config_base.BaseConfig):
     trip_end_iteration: str
     export_folder: pydantic.DirectoryPath  # pylint: disable=no-member
     scenario: core.Scenario = core.Scenario.DLOG
+    overwrite_intermediary_landuse: bool = False
 
     @pydantic.validator("years", each_item=True)
     def _validate_years(  # pylint: disable=no-self-argument
@@ -88,6 +90,23 @@ def _find_any_landuse_file(
             return path
 
     raise FileNotFoundError(f"cannot find a {landuse} land use file in {scenario_folder}")
+
+
+def _infill_zones(landuse_data: pd.DataFrame) -> pd.DataFrame:
+    zoning = nd.get_zoning_system(LANDUSE_ZONING)
+
+    unique_indices = []
+    for column in landuse_data.index.names:
+        if column == zoning.col_name:
+            continue
+
+        unique_indices.append(landuse_data.index.get_level_values(column).unique())
+
+    full_index = pd.MultiIndex.from_product(
+        [zoning.unique_zones] + unique_indices, names=landuse_data.index.names
+    )
+
+    return landuse_data.reindex(index=full_index, fill_value=0.0)
 
 
 def _infill_area_type(
@@ -196,6 +215,9 @@ def split_raw_landuse(
     # Aggregate rows because raw population is disaggregated by unneeded dwelling type column
     landuse_data = landuse_data.groupby(RAW_LANDUSE_INDEX_COLUMNS[landuse]).sum()
 
+    # Infill missing zones with 0
+    landuse_data = _infill_zones(landuse_data)
+
     if landuse == "population":
         landuse_data = _infill_area_type(scenario_folder, landuse_data.reset_index())
 
@@ -214,7 +236,11 @@ def split_raw_landuse(
         path = pathlib.Path(path)
         path.parent.mkdir(exist_ok=True, parents=True)
 
-        landuse_data.loc[:, str(year)].to_csv(path)
+        data = landuse_data.loc[:, str(year)]
+        if landuse == "employment":
+            data.name = "people"
+
+        data.to_csv(path)
         LOG.info("Written: %s", path)
 
 
@@ -232,21 +258,6 @@ def main(params: DLogTEMParameters, init_logger: bool = True) -> None:
         LOG.info("Log file saved to %s", log_file)
 
     LOG.debug("Input parameters:\n%s", params.to_yaml())
-
-    # Define different balancing zones for each mode
-    mode_balancing_zones = {5: nd.get_zoning_system("ca_sector_2020")}
-    hb_attraction_balance_zoning = nd.BalancingZones.build_single_segment_group(
-        nd.get_segmentation_level("notem_hb_output"),
-        nd.get_zoning_system("gor"),
-        "m",
-        mode_balancing_zones,
-    )
-    nhb_attraction_balance_zoning = nd.BalancingZones.build_single_segment_group(
-        nd.get_segmentation_level("notem_nhb_output"),
-        nd.get_zoning_system("gor"),
-        "m",
-        mode_balancing_zones,
-    )
 
     import_builder = NoTEMImportPaths(
         import_home=params.notem_import_home,
@@ -280,14 +291,14 @@ def main(params: DLogTEMParameters, init_logger: bool = True) -> None:
             "population",
             import_builder.population_paths,
             params.base_year,
-            True,
+            params.overwrite_intermediary_landuse,
         )
         split_raw_landuse(
             params.raw_dlog_landuse.employment,
             "employment",
             import_builder.employment_paths,
             params.base_year,
-            True,
+            params.overwrite_intermediary_landuse,
         )
 
     tem = NoTEM(
@@ -296,10 +307,10 @@ def main(params: DLogTEMParameters, init_logger: bool = True) -> None:
         iteration_name=params.trip_end_iteration,
         import_builder=import_builder,
         export_home=params.export_folder,
-        hb_attraction_balance_zoning=hb_attraction_balance_zoning,
-        nhb_attraction_balance_zoning=nhb_attraction_balance_zoning,
+        hb_attraction_balance_zoning=False,
+        nhb_attraction_balance_zoning=False,
     )
-    tem.run(generate_all=True)
+    tem.run(generate_all=True, non_resi_path=False)
 
 
 def _run() -> None:

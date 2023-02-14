@@ -13,6 +13,7 @@ Attraction Models for NoTEM
 
 # Allow class self type hinting
 from __future__ import annotations
+import logging
 
 # Builtins
 import os
@@ -79,45 +80,37 @@ class HBAttractionModel(HBAttractionModelPaths):
 
     # Define wanted columns
     _target_col_dtypes = {
-        'employment': {
-            'msoa_zone_id': str,
-            'sic_code': int,
-            'people': float
-        },
-        'trip_weight': {
-            'purpose': int,
-            'mode': int,
-            'sic_code': int,
-            'trip_rate': float
-        },
+        "employment": {"msoa_zone_id": str, "sic_code": int, "people": float},
+        "trip_weight": {"purpose": int, "mode": int, "sic_code": int, "trip_rate": float},
     }
 
     # Define segmentations used
     _segmentations = {
-        'employment': 'sic',
-        'trip_weights': 'hb_p_m_sic',
-        'pure_attractions': 'hb_p_m',
+        "employment": "sic",
+        "trip_weights": "hb_p_m_sic",
+        "pure_attractions": "hb_p_m",
     }
 
     # Define segment renames needed
     _seg_rename = {
-        'sic_code': 'sic',
-        'purpose': 'p',
-        'mode': 'm',
+        "sic_code": "sic",
+        "purpose": "p",
+        "mode": "m",
     }
 
-    _zoning = 'msoa'
+    _zoning = "msoa"
 
-    def __init__(self,
-                 employment_paths: Dict[int, nd.PathLike],
-                 production_balance_paths: Dict[int, nd.PathLike],
-                 trip_weights_path: str,
-                 non_resi_path: str, # TODO Remove temp parameter replacement for land use
-                 export_home: str,
-                 balance_zoning: nd.BalancingZones = None,
-                 constraint_paths: Dict[int, nd.PathLike] = None,
-                 process_count: int = consts.PROCESS_COUNT
-                 ) -> None:
+    def __init__(
+        self,
+        employment_paths: Dict[int, nd.PathLike],
+        production_balance_paths: Dict[int, nd.PathLike],
+        trip_weights_path: str,
+        non_resi_path: str,  # TODO Remove temp parameter replacement for land use
+        export_home: str,
+        balance_zoning: nd.BalancingZones | bool = True,
+        constraint_paths: Dict[int, nd.PathLike] = None,
+        process_count: int = consts.PROCESS_COUNT,
+    ) -> None:
         """
         Sets up and validates arguments for the Attraction model.
 
@@ -152,7 +145,8 @@ class HBAttractionModel(HBAttractionModelPaths):
             The zoning systems to balance the attractions to the productions at for
             each segment of the attractions segmentation. A translation must exist
             between this and the running zoning system, which is MSOA by default.
-            If left as None, then no spatial balance is done, only a segmental balance.
+            If True, then no spatial balance is done, only a segmental balance and if
+            False no balancing is done.
 
         constraint_paths:
             Dictionary of {year: constraint_path} pairs.
@@ -167,34 +161,39 @@ class HBAttractionModel(HBAttractionModelPaths):
             Defaults to consts.PROCESS_COUNT.
         """
         # Check that the paths we need exist!
-        [file_ops.check_file_exists(x, find_similar=True) for x in employment_paths.values()]
-        [file_ops.check_file_exists(x) for x in production_balance_paths.values()]
-        file_ops.check_file_exists(trip_weights_path, find_similar=True)
+        _ = [
+            file_ops.check_file_exists(x, find_similar=True) for x in employment_paths.values()
+        ]
+        _ = [file_ops.check_file_exists(x) for x in production_balance_paths.values()]
+        _ = file_ops.check_file_exists(trip_weights_path, find_similar=True)
 
         if constraint_paths is not None:
-            [file_ops.check_file_exists(x, find_similar=True) for x in constraint_paths.values()]
+            _ = [
+                file_ops.check_file_exists(x, find_similar=True)
+                for x in constraint_paths.values()
+            ]
 
         # Validate that we have data for all the years we're running for
         for year in employment_paths.keys():
             if year not in production_balance_paths.keys():
                 raise ValueError(
                     "Year %d found in land_use_paths\n"
-                    "But not found in control_production_paths"
-                    % year
+                    "But not found in control_production_paths" % year
                 )
             if constraint_paths is not None:
                 if year not in constraint_paths.keys():
                     raise ValueError(
                         "Year %d found in land_use_paths\n"
-                        "But not found in constraint_paths"
-                        % year
+                        "But not found in constraint_paths" % year
                     )
 
         # Assign
         self.employment_paths = employment_paths
         self.production_balance_paths = production_balance_paths
         self.trip_weights_path = trip_weights_path
-        self.non_resi_path = non_resi_path # TODO Remove this parameter when using new land use
+        self.non_resi_path = (
+            non_resi_path  # TODO Remove this parameter when using new land use
+        )
         self.balance_zoning = balance_zoning
         self.constraint_paths = constraint_paths
         self.process_count = process_count
@@ -219,17 +218,16 @@ class HBAttractionModel(HBAttractionModelPaths):
             instantiate_msg="Initialised HB Attraction Model",
         )
         # Save balancing zones to file
-        if self.balance_zoning is not None:
-            self.balance_zoning.save(
-                os.path.join(self.export_home, "HB_balancing_zones.ini")
-            )
+        if isinstance(self.balance_zoning, nd.BalancingZones):
+            self.balance_zoning.save(os.path.join(self.export_home, "HB_balancing_zones.ini"))
 
-    def run(self,
-            export_pure_attractions: bool = False,
-            export_notem_segmentation: bool = True,
-            export_reports: bool = True,
-            non_resi_path: bool = True,
-            ) -> None:
+    def run(
+        self,
+        export_pure_attractions: bool = False,
+        export_notem_segmentation: bool = True,
+        export_reports: bool = True,
+        non_resi_path: bool = True,
+    ) -> None:
         """
         Runs the HB Attraction model.
 
@@ -289,7 +287,7 @@ class HBAttractionModel(HBAttractionModelPaths):
                 pure_attractions.save(self.export_paths.pure_demand[year])
 
             if export_reports:
-                self._logger.info("Exporting pure demand reports to disk")               
+                self._logger.info("Exporting pure demand reports to disk")
                 pure_demand_paths = self.report_paths.pure_demand
                 pure_attractions.write_sector_reports(
                     segment_totals_path=pure_demand_paths.segment_total[year],
@@ -297,9 +295,8 @@ class HBAttractionModel(HBAttractionModelPaths):
                     ie_sector_path=pure_demand_paths.ie_sector[year],
                 )
 
-            # Control the attractions to the productions - this also adds in
-            # some segmentation to bring it in line with the productions
-            self._logger.info("Balancing to productions")
+            # Control the attractions to the productions, if desired - this also
+            # adds in some segmentation to bring it in line with the productions
             notem_segmented = self._attractions_balance(
                 a_dvec=pure_attractions,
                 p_dvec_path=self.production_balance_paths[year],
@@ -317,7 +314,7 @@ class HBAttractionModel(HBAttractionModelPaths):
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
                     lad_report_path=notem_segmented_paths.lad_report[year],
-                    lad_report_seg=nd.get_segmentation_level('hb_p_m_tp_week'),
+                    lad_report_seg=nd.get_segmentation_level("hb_p_m_tp_week"),
                 )
 
             # TODO: Bring in constraints (Validation)
@@ -326,8 +323,8 @@ class HBAttractionModel(HBAttractionModelPaths):
             if self.constraint_paths is not None:
                 msg = "No code implemented to constrain attractions."
                 self._logger.error(msg)
-                raise NotImplementedError(msg)  
-              
+                raise NotImplementedError(msg)
+
             # Print timing stats for the year
             year_end_time = timing.current_milli_time()
             time_taken = timing.time_taken(year_start_time, year_end_time)
@@ -359,19 +356,19 @@ class HBAttractionModel(HBAttractionModelPaths):
         """
         # Define the zoning and segmentations we want to use
         zoning = nd.get_zoning_system(self._zoning)
-        emp_seg = nd.get_segmentation_level(self._segmentations['employment'])
+        emp_seg = nd.get_segmentation_level(self._segmentations["employment"])
 
         # Read the land use data corresponding to the year
         if non_resi_path:
             path = self.non_resi_path.format(year=year)
         else:
-            path=self.employment_paths[year]
+            path = self.employment_paths[year]
 
         emp = file_ops.read_df(
             path=path,
             find_similar=True,
-            usecols=self._target_col_dtypes['employment'].keys(),
-            dtype=self._target_col_dtypes['employment'],
+            usecols=self._target_col_dtypes["employment"].keys(),
+            dtype=self._target_col_dtypes["employment"],
         )
 
         return nd.DVector(
@@ -398,15 +395,15 @@ class HBAttractionModel(HBAttractionModelPaths):
             ie., pure attraction
         """
         # Define the zoning and segmentations we want to use
-        trip_weights_seg = nd.get_segmentation_level(self._segmentations['trip_weights'])
-        attractions_seg = nd.get_segmentation_level(self._segmentations['pure_attractions'])
+        trip_weights_seg = nd.get_segmentation_level(self._segmentations["trip_weights"])
+        attractions_seg = nd.get_segmentation_level(self._segmentations["pure_attractions"])
 
         # ## CREATE THE TRIP RATES DVEC ## #
         trip_rates = file_ops.read_df(
             self.trip_weights_path,
             find_similar=True,
-            usecols=self._target_col_dtypes['trip_weight'].keys(),
-            dtype=self._target_col_dtypes['trip_weight'],
+            usecols=self._target_col_dtypes["trip_weight"].keys(),
+            dtype=self._target_col_dtypes["trip_weight"],
         )
 
         trip_weights_dvec = nd.DVector(
@@ -418,10 +415,11 @@ class HBAttractionModel(HBAttractionModelPaths):
 
         return emp_dvec.multiply_and_aggregate(trip_weights_dvec, attractions_seg)
 
-    def _attractions_balance(self,
-                             a_dvec: nd.DVector,
-                             p_dvec_path: str,
-                             ) -> nd.DVector:
+    def _attractions_balance(
+        self,
+        a_dvec: nd.DVector,
+        p_dvec_path: str,
+    ) -> nd.DVector:
         """
         Balances attractions to production segmentation
 
@@ -443,26 +441,10 @@ class HBAttractionModel(HBAttractionModelPaths):
         p_dvec = nd.DVector.load(p_dvec_path)
 
         # Split a_dvec into p_dvec segments and balance
+        self._logger.info("Split attractions segmentations to match productions")
         a_dvec = a_dvec.split_segmentation_like(p_dvec)
-        balanced_attractions = a_dvec.balance_at_segments(
-            p_dvec,
-            balance_zoning=self.balance_zoning,
-            split_weekday_weekend=True,
-        )
 
-        # ## ATTRACTIONS TOTAL CHECK ## #
-        if not balanced_attractions.sum_is_close(p_dvec):
-            msg = (
-                "The attraction total after balancing to the productions is "
-                "not similar enough to the productions. Are some zones being "
-                "dropped in the zonal translation?\n"
-                "Expected %f\n"
-                "Got %f"
-                % (p_dvec.sum(), balanced_attractions.sum())
-            )
-            self._logger.warning(msg)
-
-        return balanced_attractions
+        return _attraction_balancing(a_dvec, p_dvec, self.balance_zoning, self._logger)
 
 
 class NHBAttractionModel(NHBAttractionModelPaths):
@@ -495,14 +477,15 @@ class NHBAttractionModel(NHBAttractionModelPaths):
     # Constants
     __version__ = nd.__version__
 
-    def __init__(self,
-                 hb_attraction_paths: Dict[int, nd.PathLike],
-                 nhb_production_paths: Dict[int, nd.PathLike],
-                 export_home: str,
-                 balance_zoning: nd.BalancingZones = None,
-                 constraint_paths: Dict[int, nd.PathLike] = None,
-                 process_count: int = consts.PROCESS_COUNT
-                 ) -> None:
+    def __init__(
+        self,
+        hb_attraction_paths: Dict[int, nd.PathLike],
+        nhb_production_paths: Dict[int, nd.PathLike],
+        export_home: str,
+        balance_zoning: nd.BalancingZones | bool = True,
+        constraint_paths: Dict[int, nd.PathLike] = None,
+        process_count: int = consts.PROCESS_COUNT,
+    ) -> None:
         """
         Sets up and validates arguments for the NHB Attraction model.
 
@@ -526,7 +509,8 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             The zoning systems to balance the attractions to the productions at for
             each segment of the attractions segmentation. A translation must exist
             between this and the running zoning system, which is MSOA by default.
-            If left as None, then no spatial balance is done, only a segmental balance.
+            If True, then no spatial balance is done, only a segmental balance and if
+            False no balancing is done.
 
         constraint_paths:
             Dictionary of {year: constraint_path} pairs.
@@ -541,27 +525,28 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             Defaults to consts.PROCESS_COUNT.
         """
         # Check that the paths we need exist!
-        [file_ops.check_file_exists(x) for x in hb_attraction_paths.values()]
-        [file_ops.check_file_exists(x) for x in nhb_production_paths.values()]
+        _ = [file_ops.check_file_exists(x) for x in hb_attraction_paths.values()]
+        _ = [file_ops.check_file_exists(x) for x in nhb_production_paths.values()]
 
         if constraint_paths is not None:
-            [file_ops.check_file_exists(x, find_similar=True) for x in constraint_paths.values()]
+            _ = [
+                file_ops.check_file_exists(x, find_similar=True)
+                for x in constraint_paths.values()
+            ]
 
         # Validate that we have data for all the years we're running for
         for year in hb_attraction_paths.keys():
             if year not in nhb_production_paths.keys():
                 raise ValueError(
                     "Year %d found in notem segmented hb_attractions_paths\n"
-                    "But not found in notem segmented nhb_productions_paths"
-                    % year
+                    "But not found in notem segmented nhb_productions_paths" % year
                 )
 
             if constraint_paths is not None:
                 if year not in constraint_paths.keys():
                     raise ValueError(
                         "Year %d found in notem segmented hb_attractions_paths\n"
-                        "But not found in constraint_paths"
-                        % year
+                        "But not found in constraint_paths" % year
                     )
 
         # Assign
@@ -591,16 +576,15 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             instantiate_msg="Initialised NHB Attraction Model",
         )
         # Save balancing zones to file
-        if self.balance_zoning is not None:
-            self.balance_zoning.save(
-                os.path.join(self.export_home, "NHB_balancing_zones.ini")
-            )
+        if isinstance(self.balance_zoning, nd.BalancingZones):
+            self.balance_zoning.save(os.path.join(self.export_home, "NHB_balancing_zones.ini"))
 
-    def run(self,
-            export_nhb_pure_attractions: bool = False,
-            export_notem_segmentation: bool = True,
-            export_reports: bool = True,
-            ) -> None:
+    def run(
+        self,
+        export_nhb_pure_attractions: bool = False,
+        export_notem_segmentation: bool = True,
+        export_reports: bool = True,
+    ) -> None:
         """
         Runs the NHB Attraction model.
 
@@ -637,7 +621,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         -------
         None
         """
-        # Initialise timing        
+        # Initialise timing
         start_time = timing.current_milli_time()
         self._logger.info("Starting NHB Attraction Model")
 
@@ -663,7 +647,6 @@ class NHBAttractionModel(NHBAttractionModelPaths):
                 )
 
             # Control the attractions to the productions
-            self._logger.info("Balancing the attractions to the productions")
             notem_segmented = self._attractions_balance(
                 a_dvec=pure_nhb_attr,
                 p_dvec_path=self.nhb_production_paths[year],
@@ -681,17 +664,17 @@ class NHBAttractionModel(NHBAttractionModelPaths):
                     ca_sector_path=notem_segmented_paths.ca_sector[year],
                     ie_sector_path=notem_segmented_paths.ie_sector[year],
                     lad_report_path=notem_segmented_paths.lad_report[year],
-                    lad_report_seg=nd.get_segmentation_level('nhb_p_m_tp_week'),
+                    lad_report_seg=nd.get_segmentation_level("nhb_p_m_tp_week"),
                 )
 
             # TODO: Bring in constraints (Validation)
             #  Output some audits of what attractions was before and after control
             #  By segment.
             if self.constraint_paths is not None:
-                msg = "No code implemented to constrain productions"                              
+                msg = "No code implemented to constrain productions"
                 self._logger.error(msg)
-                raise NotImplementedError(msg)            
-                
+                raise NotImplementedError(msg)
+
             # Print timing stats for the year
             year_end_time = timing.current_milli_time()
             time_taken = timing.time_taken(year_start_time, year_end_time)
@@ -703,9 +686,10 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         self._logger.info("NHB Attraction Model took: %s" % time_taken)
         self._logger.info("NHB Attraction Model Finished")
 
-    def _create_nhb_attraction_data(self,
-                                    year: int,
-                                    ) -> nd.DVector:
+    def _create_nhb_attraction_data(
+        self,
+        year: int,
+    ) -> nd.DVector:
         """
         Reads in HB attractions converts it into a NHB attractions Dvector.
 
@@ -724,18 +708,18 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         nhb_attr_dvec:
             Returns NHB attractions as a Dvector
         """
-        segmentation = nd.get_segmentation_level('notem_nhb_output')
+        segmentation = nd.get_segmentation_level("notem_nhb_output")
 
         # Reading the notem segmented HB attractions compressed pickle
         hb_attr_notem = nd.DVector.load(self.hb_attraction_paths[year])
         df = hb_attr_notem.to_df()
 
         # Removing p1 and p7
-        mask = df['p'] != 7
+        mask = df["p"] != 7
         df = df[mask].reset_index(drop=True)
 
         # Adding 10 to the remaining purposes
-        df['p'] += 10
+        df["p"] += 10
 
         # Instantiate
         return nd.DVector(
@@ -747,10 +731,11 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             val_col=hb_attr_notem.val_col,
         )
 
-    def _attractions_balance(self,
-                             a_dvec: nd.DVector,
-                             p_dvec_path: str,
-                             ) -> nd.DVector:
+    def _attractions_balance(
+        self,
+        a_dvec: nd.DVector,
+        p_dvec_path: str,
+    ) -> nd.DVector:
         """
         Balances attractions to production segmentation
 
@@ -771,22 +756,44 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         # Read in the productions DVec from disk
         p_dvec = nd.DVector.load(p_dvec_path)
 
-        balanced_attractions = a_dvec.balance_at_segments(
+        return _attraction_balancing(a_dvec, p_dvec, self.balance_zoning, self._logger)
+
+
+def _attraction_balancing(
+    a_dvec: nd.DVector,
+    p_dvec: nd.DVector,
+    balancing_zones: nd.BalancingZones | bool,
+    logger: logging.Logger,
+) -> nd.DVector:
+    if isinstance(balancing_zones, nd.BalancingZones) or balancing_zones:
+        logger.info("Balancing the attractions to the productions")
+        if isinstance(balancing_zones, nd.BalancingZones):
+            balance_zoning = balancing_zones
+        else:
+            balance_zoning = None
+
+        attractions = a_dvec.balance_at_segments(
             p_dvec,
-            balance_zoning=self.balance_zoning,
+            balance_zoning=balance_zoning,
             split_weekday_weekend=False,
         )
+        msg = (
+            "The attraction total after balancing to the productions is "
+            "not similar enough to the productions. Are some zones being "
+            "dropped in the zonal translation?\n"
+            "Expected %f\nGot %f"
+        )
 
-        # ## ATTRACTIONS TOTAL CHECK ## #
-        if not balanced_attractions.sum_is_close(p_dvec):
-            msg = (
-                "The attraction total after balancing to the productions is "
-                "not similar enough to the productions. Are some zones being "
-                "dropped in the zonal translation?\n"
-                "Expected %f\n"
-                "Got %f"
-                % (p_dvec.sum(), balanced_attractions.sum())
-            )
-            self._logger.warning(msg)
+    else:
+        logger.info("Attractions aren't balanced to productions")
+        msg = (
+            "Attraction total is different to the productions total.\n"
+            "Productions: %f\nAttractions: %f"
+        )
+        attractions = a_dvec
 
-        return balanced_attractions
+    # ## ATTRACTIONS TOTAL CHECK ## #
+    if not attractions.sum_is_close(p_dvec):
+        logger.warning(msg, p_dvec.sum(), attractions.sum())
+
+    return attractions

@@ -2136,7 +2136,7 @@ class DVector:
     def balance_at_segments(self,
                             other: DVector,
                             split_weekday_weekend: bool = False,
-                            balance_zoning: nd.BalancingZones = None,
+                            balance_zoning: Optional[nd.BalancingZones] = None,
                             ) -> DVector:
         """
         Balance segment totals to other, ignoring zoning splits.

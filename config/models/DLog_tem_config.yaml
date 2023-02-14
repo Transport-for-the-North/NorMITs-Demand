@@ -7,7 +7,7 @@ years:
   - 2025
   - 2030
 # Iteration and location of the base TfN land use, which was used in D-Lit
-land_use_import_home: I:/
+land_use_import_home: C:\Users\ukmjb018\OneDrive - WSP O365\WSP_Projects\TfN NorMITs Demand Partner 2022\DLog Matrix\Outputs
 land_use_iteration:
   base: iter3e
   future: iter3e
@@ -16,5 +16,6 @@ import_version:
   hb_attraction: 2.3
   nhb_production: 3.0
 trip_end_iteration: 1.0
-export_folder: C:\Users\ukmjb018\OneDrive - WSP O365\WSP_Projects\TfN NorMITs Demand Partner 2022\DLog Matrix\Outputs
+export_folder: C:\Users\ukmjb018\OneDrive - WSP O365\WSP_Projects\TfN NorMITs Demand Partner 2022\DLog Matrix\Outputs\DLogTEM
 scenario: DLOG
+overwrite_intermediary_landuse: false
