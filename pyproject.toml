@@ -21,6 +21,7 @@ extension-pkg-allow-list = "pydantic.dataclasses"
 
 [tool.mypy]
 ignore_missing_imports = true
+plugins = "pydantic.mypy"
 
 [tool.pydocstyle]
 convention = "numpy"

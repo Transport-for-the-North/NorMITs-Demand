@@ -318,7 +318,11 @@ def _run() -> None:
     print(f"Loading config: {CONFIG_FILE}")
     parameters = DLogTEMParameters.load_yaml(CONFIG_FILE)
 
-    main(parameters)
+    try:
+        main(parameters)
+    except Exception:
+        LOG.critical("Critical error occurred", exc_info=True)
+        raise
 
 
 ##### MAIN #####
