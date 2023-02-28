@@ -509,7 +509,7 @@ def _heatmap_figure(
     positive_negative_colormaps: bool = False,
     legend_label_fmt: str = "{:.1%}",
     legend_title: Optional[str] = None,
-    zoomed_bounds: Optional[Bounds] = Bounds(300000, 150000, 600000, 500000),
+    zoomed_bounds: Optional[Bounds] = Bounds(300000, 340000, 550000, 650000),
 ):
     LEGEND_KWARGS = dict(title_fontsize="large", fontsize="medium")
 
