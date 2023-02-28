@@ -710,6 +710,40 @@ def fromto_2_from_by_averaging(
     return matrices
 
 
+def convert_csv_2_mat(
+    norms_segments: list,
+    cube_exe: pathlib.Path,
+    fcast_year: int,
+    output_folder: pathlib.Path,
+) -> None:
+    """Convert CSV output matrices to Cube .MAT.
+    Function converts output CSV matrices into a single Cube .MAT matrix
+    in NoRMS input demand matrix format
+    Parameters
+    ----------
+    norms_segments : list
+        list of NoRMS input demand segments
+    cube_exe : Path
+        path to Cube Voyager executable
+    fcast_year : int
+        forecast year
+    output_folder : Path
+        path to folder where CSV matrices are saved. this is where the .MAT
+        will also be saved to
+    """
+    # empty dictionary
+    mats_dict = {}
+    # create a dictionary of matrices and their paths
+    for segment in norms_segments:
+        mats_dict[segment] = pathlib.Path(output_folder, f"{fcast_year}_24Hr_{segment}.csv")
+
+    # call CUBE convertor class
+    c_m = CUBEMatConverter(cube_exe)
+    c_m.csv_to_mat(
+        1300, mats_dict, pathlib.Path(output_folder, f"PT_24hr_Demand_{fcast_year}.MAT"), 1
+    )
+
+
 # TODO (MI): Possibly modularize this into 2 or 3 modules. e.g. growth matrices, splitting matrices, growth application
 def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
     """Run Growth Process."""
@@ -829,12 +863,9 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                     )
                 # check if matrix has no demand then continue
                 if zonal_base_demand_mx["Demand"].sum() == 0:
-                    factored_matrices[time_period][segment] = pd.DataFrame(
-                        {
-                            "from_model_zone_id": [],
-                            "to_model_zone_id": [],
-                            f"{time_period}_Demand": [],
-                        }
+                    # keep matrix as it is, i.e. = 0
+                    factored_matrices[time_period][segment] = long_mx_2_wide_mx(
+                        zonal_base_demand_mx
                     )
                     LOG.debug(f"{time_period:>12}{segment:>15}" f"{0:>12}{0:>12}")
                     continue
@@ -916,10 +947,14 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         for segment in norms_segments:
             # write out demand matrix
             file_ops.write_df(
-                wide_mx_2_long_mx(norms_matrices[segment]),
+                wide_mx_2_long_mx(
+                    norms_matrices[segment], rows="from_model_zone_id", cols="to_model_zone_id"
+                ).sort_values(by=["from_model_zone_id", "to_model_zone_id"]),
                 params.export_path / f"{forecast_year}_24Hr_{segment}.csv",
                 index=False,
             )
+        # convert to Cube .MAT
+        convert_csv_2_mat(norms_segments, params.cube_exe, forecast_year, params.export_path)
         # export growth summary
         file_ops.write_df(
             growth_summary,
