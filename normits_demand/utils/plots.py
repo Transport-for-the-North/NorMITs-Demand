@@ -138,6 +138,13 @@ class CustomCmap:
         )
 
 
+class Bounds(NamedTuple):
+    min_x: int
+    min_y: int
+    max_x: int
+    max_y: int
+
+
 ##### FUNCTIONS #####
 def match_files(folder: Path, pattern: re.Pattern) -> Iterator[tuple[dict[str, str], Path]]:
     """Iterate through all files in folder which match `pattern`.
@@ -326,7 +333,14 @@ def _plot_bars(
     label_fmt: str = ".3g",
 ):
     """Create the bar plots used in `matrix_total_plots`."""
-    bars = ax.bar(x_data, y_data, label=label, color=colour, width=width, align="edge",)
+    bars = ax.bar(
+        x_data,
+        y_data,
+        label=label,
+        color=colour,
+        width=width,
+        align="edge",
+    )
 
     for rect in bars:
         height = rect.get_height()
@@ -415,7 +429,9 @@ def matrix_total_plots(
         fmt = ".3g" if max_height < 1000 else ".2g"
         for i, (uc, row) in enumerate(rows.iterrows()):
             kwargs = dict(
-                colour=colours[uc], label=f"{to.upper()} - {uc.title()}", label_fmt=fmt,
+                colour=colours[uc],
+                label=f"{to.upper()} - {uc.title()}",
+                label_fmt=fmt,
             )
             if plot_type == PlotType.BAR:
                 _plot_bars(
@@ -440,9 +456,7 @@ def matrix_total_plots(
     return fig
 
 
-def plot_all_matrix_totals(
-    totals: pd.DataFrame, out_path: Path,
-):
+def plot_all_matrix_totals(totals: pd.DataFrame, out_path: Path):
     """Plot the matrix trip end totals and growths.
 
     Parameters
@@ -493,11 +507,22 @@ def _heatmap_figure(
     n_bins: int = 5,
     analytical_area: Union[geometry.Polygon, geometry.MultiPolygon] = None,
     positive_negative_colormaps: bool = False,
+    legend_label_fmt: str = "{:.1%}",
+    legend_title: Optional[str] = None,
+    zoomed_bounds: Optional[Bounds] = Bounds(300000, 150000, 600000, 500000),
+    missing_kwds: Optional[dict[str, Any]] = None,
 ):
     LEGEND_KWARGS = dict(title_fontsize="large", fontsize="medium")
 
-    fig, axes = plt.subplots(1, 2, figsize=(20, 15), frameon=False, constrained_layout=True)
-    fig.suptitle(title, fontsize="xx-large")
+    ncols = 1 if zoomed_bounds is None else 2
+
+    fig, axes = plt.subplots(
+        1, ncols, figsize=(20, 15), frameon=False, constrained_layout=True
+    )
+    if ncols == 1:
+        axes = [axes]
+
+    fig.suptitle(title, fontsize="xx-large", backgroundcolor="white")
     for ax in axes:
         ax.set_aspect("equal")
         ax.set_xticklabels([])
@@ -510,7 +535,7 @@ def _heatmap_figure(
         axes[0].legend(**LEGEND_KWARGS, loc="upper right")
 
     # Drop nan
-    geodata = geodata.loc[~geodata[column_name].isna()]
+    # geodata = geodata.loc[~geodata[column_name].isna()]
 
     kwargs = dict(
         column=column_name,
@@ -518,34 +543,41 @@ def _heatmap_figure(
         scheme="NaturalBreaks",
         k=7,
         legend_kwds=dict(
-            title=f"{str(column_name).title()}", **LEGEND_KWARGS, loc="upper right",
+            title=legend_title if legend_title else str(column_name).title(),
+            **LEGEND_KWARGS,
+            loc="upper right",
         ),
-        # missing_kwds={
-        #     "color": "lightgrey",
-        #     "edgecolor": "red",
-        #     "hatch": "///",
-        #     "label": "Missing values",
-        # },
+        missing_kwds={
+            "color": "lightgrey",
+            "edgecolor": "red",
+            "hatch": "///",
+            "label": "Missing values",
+        },
         linewidth=0.0,
         edgecolor="black",
     )
 
+    if missing_kwds is not None:
+        kwargs["missing_kwds"].update(missing_kwds)
+
     if positive_negative_colormaps:
         # Calculate, and apply, separate colormaps for positive and negative values
-        label_fmt = "{:.1%}"
         negative_cmap = _colormap_classify(
             geodata.loc[geodata[column_name] <= 0, column_name],
             "PuBu_r",
-            label_fmt=label_fmt,
+            label_fmt=legend_label_fmt,
             n_bins=n_bins,
             bins=list(filter(lambda x: x <= 0, bins)) if bins is not None else bins,
         )
         positive_cmap = _colormap_classify(
-            geodata.loc[geodata[column_name] > 0, column_name],
+            geodata.loc[
+                (geodata[column_name] > 0) | (geodata[column_name].isna()), column_name
+            ],
             "YlGn",
-            label_fmt=label_fmt,
+            label_fmt=legend_label_fmt,
             n_bins=n_bins,
             bins=list(filter(lambda x: x > 0, bins)) if bins is not None else bins,
+            nan_style=kwargs["missing_kwds"],
         )
         cmap = negative_cmap + positive_cmap
         # Update colours index to be the same order as geodata
@@ -557,8 +589,9 @@ def _heatmap_figure(
                 color=cmap.colours.values,
                 linewidth=kwargs["linewidth"],
                 edgecolor=kwargs["edgecolor"],
+                missing_kwds=kwargs["missing_kwds"],
             )
-        axes[1].legend(handles=cmap.legend_elements, **kwargs.pop("legend_kwds"))
+        axes[ncols - 1].legend(handles=cmap.legend_elements, **kwargs.pop("legend_kwds"))
 
     else:
         if bins:
@@ -574,16 +607,18 @@ def _heatmap_figure(
         warnings.simplefilter("error", category=UserWarning)
         try:
             geodata.plot(ax=axes[0], legend=False, **kwargs)
-            geodata.plot(ax=axes[1], legend=True, **kwargs)
+            if ncols == 2:
+                geodata.plot(ax=axes[1], legend=True, **kwargs)
         except UserWarning:
             kwargs["scheme"] = "FisherJenksSampled"
             geodata.plot(ax=axes[0], legend=False, **kwargs)
-            geodata.plot(ax=axes[1], legend=True, **kwargs)
+            if ncols == 2:
+                geodata.plot(ax=axes[1], legend=True, **kwargs)
         finally:
             warnings.simplefilter("default", category=UserWarning)
 
         # Format legend text
-        legend = axes[1].get_legend()
+        legend = axes[ncols - 1].get_legend()
         for label in legend.get_texts():
             text = label.get_text()
             values = [float(s.strip()) for s in text.split(",")]
@@ -601,9 +636,11 @@ def _heatmap_figure(
                 text = f"{lower:.0%} - {upper:.0%}"
             label.set_text(text)
 
-    axes[1].set_xlim(300000, 600000)
-    axes[1].set_ylim(150000, 500000)
-    axes[1].annotate(
+    if ncols == 2:
+        axes[1].set_xlim(zoomed_bounds.min_x, zoomed_bounds.max_x)
+        axes[1].set_ylim(zoomed_bounds.min_y, zoomed_bounds.max_y)
+
+    axes[ncols - 1].annotate(
         "Source: NorMITs Demand",
         xy=(0.9, 0.01),
         xycoords="figure fraction",
@@ -733,7 +770,9 @@ def ntem_pa_plots(
                 params["year"], *base_key, plot_zoning
             ),
             "NTEM Forecast {} - {} {}".format(
-                params["year"], params["trip_origin"].upper(), params["user_class"].title(),
+                params["year"],
+                params["trip_origin"].upper(),
+                params["user_class"].title(),
             ),
             analytical_area=analytical_area,
             bins=[-1, -0.5, -0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2, 0.5, 1, np.inf],
@@ -797,7 +836,10 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
         for to in nd.TripOrigin:
             for pa in ("productions", "attractions"):
                 fig, axd = plt.subplot_mosaic(
-                    [["internal", "colorbar"], ["external", "colorbar"],],
+                    [
+                        ["internal", "colorbar"],
+                        ["external", "colorbar"],
+                    ],
                     gridspec_kw=dict(width_ratios=[1, 0.05]),
                     figsize=(9, 15),
                     tight_layout=True,
@@ -1234,12 +1276,41 @@ def main(params: PAPlotsParameters) -> None:
     )
 
 
+def _mapclassify_natural(
+    y: np.ndarray, k: int = 5, initial: int = 10
+) -> mapclassify.NaturalBreaks:
+    """Wrapper around NaturalBreaks to try smaller values of k on error.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        (n,1), values to classify
+    k : int, optional, default 5
+        number of classes required
+    initial : int, default 10
+        Number of initial solutions generated with different centroids.
+        Best of initial results is returned.
+
+    Returns
+    -------
+    mapclassify.NaturalBreaks
+    """
+    while True:
+        try:
+            return mapclassify.NaturalBreaks(y, k, initial)
+        except ValueError:
+            if k <= 2:
+                raise
+            k -= 1
+
+
 def _colormap_classify(
     data: pd.Series,
     cmap_name: str,
     n_bins: int = 5,
     label_fmt: str = "{:.0f}",
     bins: Optional[List[Union[int, float]]] = None,
+    nan_style: Optional[dict[str, Any]] = None,
 ) -> CustomCmap:
     """Calculate a NaturalBreaks colour map."""
 
@@ -1258,7 +1329,7 @@ def _colormap_classify(
     if bins is not None:
         mc_bins = mapclassify.UserDefined(finite, bins)
     else:
-        mc_bins = mapclassify.NaturalBreaks(finite, k=n_bins)
+        mc_bins = _mapclassify_natural(finite, k=n_bins)
 
     bin_categories = pd.Series(mc_bins.yb, index=finite.index)
     bin_categories = bin_categories.reindex_like(data)
@@ -1267,7 +1338,11 @@ def _colormap_classify(
     colours = pd.DataFrame(
         cmap(bin_categories), index=bin_categories.index, columns=iter("RGBA")
     )
-    colours.loc[bin_categories.isna(), :] = np.nan
+
+    if nan_style is None:
+        colours.loc[bin_categories.isna(), :] = np.nan
+    else:
+        colours.loc[bin_categories.isna(), :] = nan_style.get("color", (1, 0, 0, 1))
 
     min_bin = np.min(finite)
     if min_bin > mc_bins.bins[0]:
@@ -1281,6 +1356,14 @@ def _colormap_classify(
     legend = [
         patches.Patch(fc=c, label=l, ls="") for c, l in zip(cmap(range(mc_bins.k)), labels)
     ]
+
+    if nan_style is not None:
+        legend.append(
+            patches.Patch(
+                fc=nan_style.get("color", (1, 0, 0, 1)),
+                label=nan_style.get("label", "Missing Values")
+            )
+        )
 
     return CustomCmap(bin_categories, colours, legend)
 
@@ -1304,7 +1387,14 @@ def _autoplot_func(
         elif diff:
             growth = df[years[i + 1]] - df[years[i]]
         with backend_pdf.PdfPages(
-            os.path.join(out_folder, f'iter{iter}', 'NTEM', f'{hb_nhb}_{pa}','reports', f"pct_plot_{years[i]}_{level}.pdf")
+            os.path.join(
+                out_folder,
+                f"iter{iter}",
+                "NTEM",
+                f"{hb_nhb}_{pa}",
+                "reports",
+                f"pct_plot_{years[i]}_{level}.pdf",
+            )
         ) as pdf:
             if plot_type == "heatmap":
                 cols = growth.columns
@@ -1383,10 +1473,10 @@ def plot_tripend_iters(
                     nd.DVector.load(
                         os.path.join(
                             path,
-                            f'iter{scenario}',
-                            'NTEM',
-                            f'{hb_nhb}_{pa}',
-                            f'{hb_nhb}_msoa_notem_segmented_{year}_dvec.pkl',
+                            f"iter{scenario}",
+                            "NTEM",
+                            f"{hb_nhb}_{pa}",
+                            f"{hb_nhb}_msoa_notem_segmented_{year}_dvec.pkl",
                         )
                     )
                     .translate_zoning(zone)
@@ -1427,7 +1517,7 @@ def plot_tripend_iters(
                     plot_type=plot_type,
                     hb_nhb=hb_nhb,
                     pa=pa,
-                    iter=scenario
+                    iter=scenario,
                 )
         else:
             data = {}
@@ -1457,17 +1547,17 @@ def plot_tripend_iters(
                 data.values(),
             )
             _autoplot_func(
-            years=years,
-            zone_shape=zone_shape,
-            out_folder=os.path.join(path),
-            pct=pct,
-            diff=diff,
-            df=df,
-            level=level,
-            plot_type=plot_type,
-            hb_nhb=hb_nhb,
-            pa=pa,
-            iter=scenario,
+                years=years,
+                zone_shape=zone_shape,
+                out_folder=os.path.join(path),
+                pct=pct,
+                diff=diff,
+                df=df,
+                level=level,
+                plot_type=plot_type,
+                hb_nhb=hb_nhb,
+                pa=pa,
+                iter=scenario,
             )
 
 
@@ -1503,7 +1593,14 @@ if __name__ == "__main__":
 
     # main(pa_parameters)
 
-    for i in ['hb']:
-        for j in ['productions','attractions']:
-            plot_tripend_iters(scenario='9.7-COVID',
-            pa=j,hb_nhb=i,zone_name='lad_2020',segmentation='hb_p_tp_week',years=[2021,2030,2040],pct=True)
+    for i in ["hb"]:
+        for j in ["productions", "attractions"]:
+            plot_tripend_iters(
+                scenario="9.7-COVID",
+                pa=j,
+                hb_nhb=i,
+                zone_name="lad_2020",
+                segmentation="hb_p_tp_week",
+                years=[2021, 2030, 2040],
+                pct=True,
+            )

@@ -396,3 +396,30 @@ class AssignmentModel(IsValidEnum):
     def tfn_models(cls) -> set[AssignmentModel]:
         """Transport for the North's assignment models."""
         return {cls.NOHAM, cls.NORMS}
+
+
+class TripEndType(enum.StrEnum):
+    """Defined trip end types."""
+
+    HB_PRODUCTIONS = enum.auto()
+    HB_ATTRACTIONS = enum.auto()
+    NHB_PRODUCTIONS = enum.auto()
+    NHB_ATTRACTIONS = enum.auto()
+
+    @staticmethod
+    def trip_origin_lookup() -> dict[TripEndType, TripOrigin]:
+        return {
+            TripEndType.HB_PRODUCTIONS: TripOrigin.HB,
+            TripEndType.HB_ATTRACTIONS: TripOrigin.HB,
+            TripEndType.NHB_PRODUCTIONS: TripOrigin.NHB,
+            TripEndType.NHB_ATTRACTIONS: TripOrigin.NHB,
+        }
+
+    @property
+    def trip_origin(self) -> TripOrigin:
+        return self.trip_origin_lookup()[self]
+    
+    def formatted(self) -> str:
+        """Format text for outputs and display purposes."""
+        to, pa = self.value.split("_")
+        return f"{to.upper()} {pa.title()}"
