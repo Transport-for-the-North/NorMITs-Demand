@@ -1303,7 +1303,7 @@ def _colormap_classify(
     cmap_name: str,
     n_bins: int = 5,
     label_fmt: str = "{:.0f}",
-    bins: Optional[List[Union[int, float]]] = None,
+    bins: Optional[list[int | float]] = None,
     nan_colour: Optional[tuple[float, float, float, float]] = None,
 ) -> CustomCmap:
     """Calculate a NaturalBreaks colour map."""
@@ -1326,12 +1326,16 @@ def _colormap_classify(
         mc_bins = _mapclassify_natural(finite, k=n_bins)
 
     bin_categories = pd.Series(mc_bins.yb, index=finite.index)
-    bin_categories = bin_categories.reindex_like(data)
 
     cmap = cm.get_cmap(cmap_name, mc_bins.k)
+    # Cmap produces incorrect results if given floats instead of int so
+    # bin_categories can't contain Nans until after colours are calculated
     colours = pd.DataFrame(
-        cmap(bin_categories), index=bin_categories.index, columns=iter("RGBA")
+        cmap(bin_categories.astype(int)), index=bin_categories.index, columns=iter("RGBA")
     )
+
+    bin_categories = bin_categories.reindex_like(data)
+    colours = colours.reindex(bin_categories.index)
 
     if nan_colour is None:
         colours.loc[bin_categories.isna(), :] = np.nan
