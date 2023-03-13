@@ -268,6 +268,7 @@ def compare_ddg(
     eddie_file: pathlib.Path,
     ddg_type: DDGType,
     output_file: pathlib.Path,
+    npier_scenario: str,
     regions: Optional[RegionsData] = None,
 ) -> ComparisonData:
     """Compare NPIER and EDDIE DDG files.
@@ -281,6 +282,8 @@ def compare_ddg(
     output_file : pathlib.Path
         Excel workbook to save the comparisons to, will
         be overwritten if exists.
+    npier_scenario : str
+        Name of the NPIER scenario, used for naming outputs.
     regions : RegionsData, optional
         Lookup to perform regions grouping, not done if not
         given.
@@ -289,12 +292,13 @@ def compare_ddg(
     -------
     ComparisonData
         Comparisons DataFrames containing the following 4 column groups:
-        NPIER, EDDIE, NPIER - EDDIE, % NPIER - EDDIE. Each column group
-        contains different columns for the different years.
+        `npier_scenario`, EDDIE, {npier_scenario} - EDDIE,
+        % {npier_scenario} - EDDIE. Each column group contains
+        different columns for the different years.
     """
     LOG.info("Comparing %s DDG", ddg_type)
 
-    npier = _read_ddg(npier_file, "NPIER", ddg_type)
+    npier = _read_ddg(npier_file, npier_scenario, ddg_type)
     eddie = _read_ddg(eddie_file, "EDDIE", ddg_type)
     joined = {"base": npier.merge(eddie, how="outer", on=ddg_type.get_ddg_index())}
 
@@ -313,11 +317,14 @@ def compare_ddg(
         merged.columns = pd.MultiIndex.from_tuples(merged.columns)
         joined["regions"] = merged
 
+    diff_name = f"{npier_scenario} - EDDIE"
+    perc_name = f"% {npier_scenario} - EDDIE"
+
     comparisons: dict[str, pd.DataFrame] = {}
     for data_name, comparison in joined.items():
         differences: dict[str, pd.DataFrame] = {
-            "NPIER - EDDIE": comparison.loc[:, "NPIER"] - comparison.loc[:, "EDDIE"],
-            "% NPIER - EDDIE": comparison.loc[:, "NPIER"].divide(comparison.loc[:, "EDDIE"])
+            diff_name: comparison.loc[:, npier_scenario] - comparison.loc[:, "EDDIE"],
+            perc_name: comparison.loc[:, npier_scenario].divide(comparison.loc[:, "EDDIE"])
             - 1,
         }
 
@@ -325,8 +332,8 @@ def compare_ddg(
             df = df.dropna(axis=1, how="all")
             df.columns = pd.MultiIndex.from_product(((nm,), df.columns))
             differences[nm] = df
-        differences["% NPIER - EDDIE"].fillna(0, inplace=True)
-        differences["% NPIER - EDDIE"].replace([np.inf, -np.inf], np.nan, inplace=True)
+        differences[perc_name].fillna(0, inplace=True)
+        differences[perc_name].replace([np.inf, -np.inf], np.nan, inplace=True)
 
         comparison = pd.concat([comparison] + list(differences.values()), axis=1)
 
@@ -441,7 +448,7 @@ def get_regions_data(regions: RegionsDataParams) -> RegionsData:
 
 
 def growth_comparison(
-    data: pd.DataFrame, base_year: str, output_file: pathlib.Path, ddg_name: str
+    data: pd.DataFrame, base_year: str, output_file: pathlib.Path, ddg_name: str, npier_scenario: str
 ) -> pd.DataFrame:
     """Calculate DDG growth and compare between NPIER and EDDIE.
 
@@ -455,22 +462,24 @@ def growth_comparison(
         Path to Excel file to save growth comparisons to.
     ddg_name : str
         Name of DDG, used for logging.
+    npier_scenario : str
+        Name of NPIER scenario, used for labelling columns
 
     Returns
     -------
     pd.DataFrame
         Comparisons DataFrame containing the following 3 column groups:
-        NPIER, EDDIE, NPIER - EDDIE. Each column group contains different
-        columns for the different years.
+        `npier_scenario`, EDDIE, {npier_scenario} - EDDIE. Each column group
+        contains different columns for the different years.
     """
     LOG.info("Comparing growth from %s for %s", base_year, ddg_name)
 
     growth: dict[str, pd.DataFrame] = {}
-    for i in ("NPIER", "EDDIE"):
+    for i in (npier_scenario, "EDDIE"):
         df = data.loc[:, i].divide(data[(i, base_year)], axis=0)
         growth[i] = df
 
-    growth["NPIER - EDDIE"] = growth["NPIER"] - growth["EDDIE"]
+    growth[f"{npier_scenario} - EDDIE"] = growth[npier_scenario] - growth["EDDIE"]
 
     for nm, df in growth.items():
         df = df.dropna(axis=1, how="all")
@@ -501,7 +510,7 @@ def main(params: DDGComparisonParameters, init_logger: bool = True):
         nd_log.get_logger(
             nd_log.get_package_logger_name(),
             params.output_folder / LOG_FILE,
-            "Running EDDIE & NPIER DDG Comparison",
+            "Running EDDIE DDG Comparison",
             log_version=True,
         )
         nd_log.capture_warnings(
@@ -535,12 +544,12 @@ def main(params: DDGComparisonParameters, init_logger: bool = True):
         region_data = regions if ddg_type in MAP_TYPES else None
 
         comparison = compare_ddg(
-            npier_files[ddg_type], eddie_files[ddg_type], ddg_type, out_file, region_data
+            npier_files[ddg_type], eddie_files[ddg_type], ddg_type, out_file, params.npier_scenario, region_data
         )
         comparison.base.index.set_names(eddie_zone.col_name, level=1, inplace=True)
 
         if ddg_type in MAP_TYPES:
-            for plt_data in ("NPIER - EDDIE", "% NPIER - EDDIE"):
+            for plt_data in (f"{params.npier_scenario} - EDDIE", f"% {params.npier_scenario} - EDDIE"):
                 plt_nm = plt_data.replace("%", "Percentage")
                 fname = (
                     out_file.stem + "_" + plt_nm.lower().replace(" - ", "-").replace(" ", "_")
@@ -553,7 +562,7 @@ def main(params: DDGComparisonParameters, init_logger: bool = True):
                     eddie_geom,
                     eddie_zone.col_name,
                     [str(i) for i in params.heatmap_years],
-                    f"EDDIE vs NPIER {ddg_type} Comparison",
+                    f"EDDIE vs {params.npier_scenario} {ddg_type} Comparison",
                     out_file,
                     plt_data,
                     "{:.1%}" if "%" in plt_data else "{:.3g}",
@@ -565,7 +574,7 @@ def main(params: DDGComparisonParameters, init_logger: bool = True):
                         region_data.geodata,
                         region_data.join_column,
                         [str(i) for i in params.heatmap_years],
-                        f"EDDIE vs NPIER {ddg_type} Region Comparison",
+                        f"EDDIE vs {params.npier_scenario} {ddg_type} Region Comparison",
                         out_file.with_name(out_file.stem + "-regions" + out_file.suffix),
                         plt_data,
                         "{:.1%}" if "%" in plt_data else "{:.3g}",
@@ -573,10 +582,11 @@ def main(params: DDGComparisonParameters, init_logger: bool = True):
 
         out_file = folders["growth"] / (fname + f"_{params.base_year}_growth_comparison.xlsx")
         growth = growth_comparison(
-            comparison.base.loc[:, ["NPIER", "EDDIE"]],
+            comparison.base.loc[:, [params.npier_scenario, "EDDIE"]],
             str(params.base_year),
             out_file,
             ddg_type,
+            params.npier_scenario,
         )
 
         if ddg_type in MAP_TYPES:
