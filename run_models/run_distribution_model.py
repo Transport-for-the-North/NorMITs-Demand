@@ -55,9 +55,9 @@ NHB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
 
 
 def main():
-    # mode = nd.Mode.CAR
+    mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
-    mode = nd.Mode.TRAIN
+    # mode = nd.Mode.TRAIN
     # mode = nd.Mode.TRAM
 
     # Running options
@@ -71,11 +71,11 @@ def main():
     run_nhb = True
 
     run_all = False
-    run_upper_model = False
-    run_lower_model = False
+    run_upper_model = True
+    run_lower_model = True
     run_pa_matrix_reports = False
-    run_pa_to_od = False
-    run_pa_split_by_tp = False
+    run_pa_to_od = True
+    run_pa_split_by_tp = True
     run_od_matrix_reports = False
     compile_to_assignment = True
 
@@ -425,7 +425,7 @@ def main():
         'base_year': BASE_YEAR,
         'scenario': SCENARIO,
         'notem_iteration_name': NOTEM_ITERATION_NAME,
-        'time_format': nd.core.TimeFormat.AVG_DAY,
+        'time_format': nd.core.TimeFormat.AVG_WEEK,
     }
     if use_tram:
         trip_end_getter = converters.TramToDistributionModel(
