@@ -37,6 +37,7 @@ from normits_demand.matrices import matrix_processing
 from normits_demand.matrices import pa_to_od
 from normits_demand.matrices import utils as mat_utils
 from normits_demand.reports import matrix_reports
+from normits_demand.concurrency import multiprocessing
 
 from normits_demand.pathing.distribution_model import DistributionModelExportPaths
 from normits_demand.pathing.distribution_model import DMArgumentBuilderBase
@@ -742,7 +743,75 @@ class DistributionModel(DistributionModelExportPaths):
             col_name='destinations',
         )
 
-    def compile_to_assignment_format(self):
+    def _convert_matrix_time_format(
+        self,
+        import_dir: pathlib.Path,
+        export_dir: pathlib.Path,
+        from_time_format: nd.core.TimeFormat = None,
+        to_time_format: nd.core.TimeFormat = None,
+    ) -> None:
+        """Converts matrices between time formats"""
+        # TODO(BT): This function just assumes there's time periods.
+        #  Won't work otherwise
+        conversion_factors = from_time_format.get_conversion_factors(to_time_format)
+
+        # Build matrix naming templates
+        from_template = self.running_segmentation.generate_template_file_name(
+            file_desc='synthetic_od_from',
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            compressed=True,
+        )
+
+        to_template = self.running_segmentation.generate_template_file_name(
+            file_desc='synthetic_od_to',
+            trip_origin=self.trip_origin,
+            year=str(self.year),
+            compressed=True,
+        )
+
+        # Build the multiprocessing kwargs
+        kwarg_list = list()
+        for segment_params in self.running_segmentation:
+            for tp in [1, 2, 3, 4]:
+                # Generate the from and to filenames
+                tp_params = segment_params.copy()
+                tp_params['tp'] = tp
+                segment_str = nd.core.SegmentationLevel.generate_template_segment_str(
+                    naming_order=self.running_segmentation.naming_order + ['tp'],
+                    segment_params=tp_params,
+                    segment_types=self.running_segmentation.segment_types | {"tp": int},
+                )
+                od_from_fname = from_template.format(segment_params=segment_str)
+                od_to_fname = to_template.format(segment_params=segment_str)
+
+                # Add to the kwargs list
+                for fname in [od_from_fname, od_to_fname]:
+                    kwarg_list.append({
+                        "input_path": import_dir / fname,
+                        "output_path": export_dir / fname,
+                        "factor": conversion_factors[tp]
+                    })
+
+        # MP running
+        self._logger.info(
+            f"Converting OD matrix time format from {from_time_format.value} "
+            f"to {to_time_format.value}."
+        )
+        pbar_kwargs = {'desc': "Converting OD matrix time format"}
+        multiprocessing.multiprocess(
+            fn=mat_utils.apply_factor,
+            kwargs=kwarg_list,
+            process_count=self.process_count,
+            pbar_kwargs=pbar_kwargs
+
+        )
+
+    def compile_to_assignment_format(
+        self,
+        from_time_format: nd.core.TimeFormat = None,
+        to_time_format: nd.core.TimeFormat = None,
+    ):
         """TfN Specific helper function to compile outputs into assignment format
 
         This should really be the job of NorMITs Matrix tools! Move there
@@ -752,18 +821,32 @@ class DistributionModel(DistributionModelExportPaths):
         -------
 
         """
-        # TODO(BT): NEED TO OUTPUT SPLITTING FACTORS
-
         # TODO(BT): UPDATE build_compile_params() to use segmentation levels
         m_needed = self.running_segmentation.segments['m'].unique()
 
         # NoHAM should be tp split
         tp_needed = [1, 2, 3, 4]
 
+        # Covert time periods if factors given
+        od_mat_dir = self.export_paths.full_od_dir
+        if (
+           (from_time_format is not None and to_time_format is not None)
+            and (from_time_format != to_time_format)
+           ):
+            new_od_mat_dir = pathlib.Path(self.export_paths.full_od_dir) / "converted time format"
+            new_od_mat_dir.mkdir(exist_ok=True)
+            self._convert_matrix_time_format(
+                import_dir=pathlib.Path(self.export_paths.full_od_dir),
+                export_dir=pathlib.Path(new_od_mat_dir),
+                from_time_format=from_time_format,
+                to_time_format=to_time_format,
+            )
+            od_mat_dir = new_od_mat_dir
+
         if self.running_mode in [nd.Mode.CAR, nd.Mode.BUS]:
             # Compile to NoHAM format
             compile_params_paths = matrix_processing.build_compile_params(
-                import_dir=self.export_paths.full_od_dir,
+                import_dir=od_mat_dir,
                 export_dir=self.export_paths.compiled_od_dir,
                 matrix_format=self._od_matrix_desc,
                 years_needed=[self.year],
@@ -772,7 +855,7 @@ class DistributionModel(DistributionModelExportPaths):
             )
 
             matrix_processing.compile_matrices(
-                mat_import=self.export_paths.full_od_dir,
+                mat_import=od_mat_dir,
                 mat_export=self.export_paths.compiled_od_dir,
                 compile_params_path=compile_params_paths[0],
                 factors_fname="od_compilation_factors.pkl",
@@ -816,7 +899,7 @@ class DistributionModel(DistributionModelExportPaths):
             self._logger.info("Compiling NoRMS VDM Format")
             matrix_processing.compile_norms_to_vdm(
                 mat_pa_import=self.export_paths.full_tp_pa_dir,
-                mat_od_import=self.export_paths.full_od_dir,
+                mat_od_import=od_mat_dir,
                 mat_export=self.export_paths.compiled_pa_dir,  # TODO(BT): Rename to NoRMS
                 params_export=self.export_paths.compiled_pa_dir,
                 year=self.year,

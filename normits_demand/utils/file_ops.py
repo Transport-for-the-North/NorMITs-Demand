@@ -1328,7 +1328,7 @@ def get_oldest_modified_time(paths: Iterable[PathLike]) -> float:
     -------
     oldest_modified_time:
         The oldest modified time of all paths.
-        If paths is an empty iterable, -1 is returned.
+        If paths is an empty iterable, or none of the paths exist, -1 is returned.
     """
     if paths == list():
         return -1
@@ -1339,11 +1339,13 @@ def get_oldest_modified_time(paths: Iterable[PathLike]) -> float:
     # Check the latest time of all paths
     for path in paths:
         # Keep the latest time
+        if not os.path.exists(path):
+            continue
         modified_time = os.path.getmtime(path)
         if modified_time < oldest_time:
             oldest_time = modified_time
 
-    return oldest_time
+    return -1 if oldest_time == np.inf else oldest_time
 
 
 def _convert_to_path_list(
@@ -1378,7 +1380,7 @@ def _convert_to_path_list(
         raise ValueError(f"Expected a pathlib.Path. Got {type(to_convert)}")
 
     # If a file, convert to single item list
-    if to_convert.is_file():
+    if not to_convert.is_dir():
         return [to_convert]
 
     # Must be a directory, get all filenames
