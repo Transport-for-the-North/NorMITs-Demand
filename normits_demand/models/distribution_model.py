@@ -775,6 +775,7 @@ class DistributionModel(DistributionModelExportPaths):
                 mat_import=self.export_paths.full_od_dir,
                 mat_export=self.export_paths.compiled_od_dir,
                 compile_params_path=compile_params_paths[0],
+                factors_fname="od_compilation_factors.pkl",
             )
 
             # TODO(BT): Build in DM imports!
