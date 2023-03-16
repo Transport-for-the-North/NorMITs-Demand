@@ -13,6 +13,7 @@ Home of the NorMITs Distribution Model
 # Built-Ins
 import os
 import pathlib
+import itertools
 import functools
 
 from typing import Any
@@ -772,25 +773,38 @@ class DistributionModel(DistributionModelExportPaths):
 
         # Build the multiprocessing kwargs
         kwarg_list = list()
-        for segment_params in self.running_segmentation:
-            for tp in [1, 2, 3, 4, 5, 6]:
-                # Generate filenames
-                tp_params = segment_params.copy()
-                tp_params['tp'] = tp
-                segment_str = nd.core.SegmentationLevel.generate_template_segment_str(
-                    naming_order=self.running_segmentation.naming_order + ['tp'],
-                    segment_params=tp_params,
-                    segment_types=self.running_segmentation.segment_types | {"tp": int},
-                )
 
-                # Build the kwarg list
-                for mx_format in matrix_formats:
-                    fname = template.format(segment_params=segment_str, matrix_format=mx_format)
-                    kwarg_list.append({
-                        "input_path": import_dir / fname,
-                        "output_path": export_dir / fname,
-                        "factor": conversion_factors[tp]
-                    })
+        # BACKLOG(BT): This is all a really rough kludge to get this working
+        #  NOW. Need to come back and think how to do this properly.
+        if self.running_segmentation.has_time_period_segments():
+            iterator = itertools.product(self.running_segmentation, [-1])
+            naming_order = self.running_segmentation.naming_order
+            segment_types = self.running_segmentation.segment_types
+        else:
+            tps = [1, 2, 3, 4, 5, 6]
+            iterator = itertools.product(self.running_segmentation, tps)
+            naming_order = self.running_segmentation.naming_order + ['tp']
+            segment_types = self.running_segmentation.segment_types | {"tp": int}
+
+        for segment_params, tp in iterator:
+            # Generate filenames
+            tp_params = segment_params.copy()
+            if "tp" not in tp_params:
+                tp_params['tp'] = tp
+            segment_str = nd.core.SegmentationLevel.generate_template_segment_str(
+                naming_order=naming_order,
+                segment_params=tp_params,
+                segment_types=segment_types,
+            )
+
+            # Build the kwarg list
+            for mx_format in matrix_formats:
+                fname = template.format(segment_params=segment_str, matrix_format=mx_format)
+                kwarg_list.append({
+                    "input_path": import_dir / fname,
+                    "output_path": export_dir / fname,
+                    "factor": conversion_factors[tp_params["tp"]]
+                })
 
         # MP running
         self._logger.info(
