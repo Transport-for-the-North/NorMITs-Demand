@@ -756,25 +756,25 @@ class DistributionModel(DistributionModelExportPaths):
         conversion_factors = from_time_format.get_conversion_factors(to_time_format)
 
         # Build matrix naming templates
-        from_template = self.running_segmentation.generate_template_file_name(
-            file_desc='synthetic_od_from',
+        template = self.running_segmentation.generate_template_file_name(
+            file_desc='{matrix_format}',
             trip_origin=self.trip_origin,
             year=str(self.year),
             compressed=True,
         )
 
-        to_template = self.running_segmentation.generate_template_file_name(
-            file_desc='synthetic_od_to',
-            trip_origin=self.trip_origin,
-            year=str(self.year),
-            compressed=True,
-        )
+        if self.trip_origin == nd.core.TripOrigin.HB.value:
+            matrix_formats = ["synthetic_od_from", "synthetic_od_to"]
+        elif self.trip_origin == nd.core.TripOrigin.NHB.value:
+            matrix_formats = ["synthetic_od"]
+        else:
+            raise ValueError(f"Trip origin '{self.trip_origin}' not recognised.")
 
         # Build the multiprocessing kwargs
         kwarg_list = list()
         for segment_params in self.running_segmentation:
-            for tp in [1, 2, 3, 4]:
-                # Generate the from and to filenames
+            for tp in [1, 2, 3, 4, 5, 6]:
+                # Generate filenames
                 tp_params = segment_params.copy()
                 tp_params['tp'] = tp
                 segment_str = nd.core.SegmentationLevel.generate_template_segment_str(
@@ -782,11 +782,10 @@ class DistributionModel(DistributionModelExportPaths):
                     segment_params=tp_params,
                     segment_types=self.running_segmentation.segment_types | {"tp": int},
                 )
-                od_from_fname = from_template.format(segment_params=segment_str)
-                od_to_fname = to_template.format(segment_params=segment_str)
 
-                # Add to the kwargs list
-                for fname in [od_from_fname, od_to_fname]:
+                # Build the kwarg list
+                for mx_format in matrix_formats:
+                    fname = template.format(segment_params=segment_str, matrix_format=mx_format)
                     kwarg_list.append({
                         "input_path": import_dir / fname,
                         "output_path": export_dir / fname,
