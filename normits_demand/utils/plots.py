@@ -145,6 +145,14 @@ class Bounds(NamedTuple):
     max_y: int
 
 
+@dataclasses.dataclass
+class LegendLabelValues:
+    lower: float
+    upper: float
+    lower_formatted: str
+    upper_formatted: str
+
+
 ##### FUNCTIONS #####
 def match_files(folder: Path, pattern: re.Pattern) -> Iterator[tuple[dict[str, str], Path]]:
     """Iterate through all files in folder which match `pattern`.
@@ -499,6 +507,30 @@ def get_geo_data(file: GeoSpatialFile) -> gpd.GeoSeries:
     return geo["geometry"]
 
 
+def _extract_legend_values(text: str) -> Optional[LegendLabelValues]:
+    """Extract numbers and formatted strings from legend label."""
+    number = r"\d+(?:\.\d*)?"
+    units = r"%?"
+    pattern = (
+        rf"(?P<lower>{number})"
+        rf"(?P<lower_units>{units})"
+        r"[,\s]+"  # separator
+        rf"(?P<upper>{number})"
+        rf"(?P<upper_units>{units})"
+    )
+
+    match: Optional[re.Match] = re.search(pattern, text)
+    if match is None:
+        return match
+
+    return LegendLabelValues(
+        lower=float(match.group("lower")),
+        upper=float(match.group("upper")),
+        lower_formatted="{}{}".format(match.group("lower"), match.group("lower_units")),
+        upper_formatted="{}{}".format(match.group("upper"), match.group("upper_units")),
+    )
+
+
 def _heatmap_figure(
     geodata: gpd.GeoDataFrame,
     column_name: str,
@@ -512,7 +544,7 @@ def _heatmap_figure(
     zoomed_bounds: Optional[Bounds] = Bounds(300000, 150000, 600000, 500000),
     missing_kwds: Optional[dict[str, Any]] = None,
 ):
-    LEGEND_KWARGS = dict(title_fontsize="large", fontsize="medium")
+    LEGEND_KWARGS = dict(title_fontsize="large", fontsize="medium", fmt=legend_label_fmt)
 
     ncols = 1 if zoomed_bounds is None else 2
 
@@ -620,21 +652,18 @@ def _heatmap_figure(
         # Format legend text
         legend = axes[ncols - 1].get_legend()
         for label in legend.get_texts():
-            text = label.get_text()
-            values = [float(s.strip()) for s in text.split(",")]
-            lower = np.floor(values[0] * 100) / 100
-            upper = np.ceil(values[1] * 100) / 100
-            # Set to 0 if 0 or -0
-            lower = 0 if lower == 0 else lower
-            upper = 0 if upper == 0 else upper
+            # Don't attempt to rename the label
+            # if it isn't in the expected format
+            values = _extract_legend_values(label.get_text())
+            if values is None:
+                continue
 
-            if lower == -np.inf:
-                text = f"< {upper:.0%}"
-            elif upper == np.inf:
-                text = f"> {lower:.0%}"
+            if values.lower == -np.inf:
+                label.set_text(f"< {values.upper_formatted}")
+            elif values.upper == np.inf:
+                label.set_text(f"> {values.lower_formatted}")
             else:
-                text = f"{lower:.0%} - {upper:.0%}"
-            label.set_text(text)
+                label.set_text(f"{values.lower_formatted} - {values.upper_formatted}")
 
     if ncols == 2:
         axes[1].set_xlim(zoomed_bounds.min_x, zoomed_bounds.max_x)
@@ -1365,7 +1394,7 @@ def _colormap_classify(
         legend.append(
             patches.Patch(
                 fc=nan_style.get("color", (1, 0, 0, 1)),
-                label=nan_style.get("label", "Missing Values")
+                label=nan_style.get("label", "Missing Values"),
             )
         )
 
