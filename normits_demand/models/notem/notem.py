@@ -11,8 +11,9 @@ File purpose:
 NoTEM Class Frontend for calling all production and attraction models
 """
 # Builtins
-import os
+from __future__ import annotations
 
+import os
 from typing import List, Optional
 
 # Third Party

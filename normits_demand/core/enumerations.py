@@ -398,7 +398,7 @@ class AssignmentModel(IsValidEnum):
         return {cls.NOHAM, cls.NORMS}
 
 
-class TripEndType(enum.StrEnum):
+class TripEndType(str, IsValidEnumWithAutoNameLower):
     """Defined trip end types."""
 
     HB_PRODUCTIONS = enum.auto()
@@ -418,8 +418,11 @@ class TripEndType(enum.StrEnum):
     @property
     def trip_origin(self) -> TripOrigin:
         return self.trip_origin_lookup()[self]
-    
+
     def formatted(self) -> str:
         """Format text for outputs and display purposes."""
         to, pa = self.value.split("_")
         return f"{to.upper()} {pa.title()}"
+
+    def __str__(self) -> str:
+        return self.value
