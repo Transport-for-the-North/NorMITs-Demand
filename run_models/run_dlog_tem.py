@@ -285,6 +285,7 @@ def main(params: DLogTEMParameters, init_logger: bool = True) -> None:
             log_file,
         )
 
+        # TODO(MB) Determine a better location to save the split land use for separate iterations
         # Split required years into separate files and load into land use folder
         split_raw_landuse(
             params.raw_dlog_landuse.population,

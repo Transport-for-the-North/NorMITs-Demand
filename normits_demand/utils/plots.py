@@ -544,7 +544,7 @@ def _heatmap_figure(
     zoomed_bounds: Optional[Bounds] = Bounds(300000, 150000, 600000, 500000),
     missing_kwds: Optional[dict[str, Any]] = None,
 ):
-    LEGEND_KWARGS = dict(title_fontsize="large", fontsize="medium", fmt=legend_label_fmt)
+    LEGEND_KWARGS = dict(title_fontsize="large", fontsize="medium")
 
     ncols = 1 if zoomed_bounds is None else 2
 
