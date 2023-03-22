@@ -10,6 +10,7 @@ Other updates made by: Nirmal Kumar
 File purpose:
 NoTEM Class Frontend for calling all production and attraction models
 """
+from __future__ import annotations
 # Builtins
 import os
 

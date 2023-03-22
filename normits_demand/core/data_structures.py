@@ -911,7 +911,7 @@ class DVector:
                     if len(extra_zones) > 10:
                         extra_zones = list(extra_zones)
                         extra_zones_str = (
-                            f"{extra_zones[:10]} plus {len(extra_zones - 10)} more"
+                            f"{extra_zones[:10]} plus {len(extra_zones) - 10} more"
                         )
                     else:
                         extra_zones_str = f"{extra_zones}"
