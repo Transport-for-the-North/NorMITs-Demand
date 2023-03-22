@@ -109,7 +109,9 @@ class Mode(IsValidEnum):
         }
 
         if self not in conversion:
-            raise nd.NormitsDemandError(f"No definition exists for {self} mode_values")
+            raise nd.NormitsDemandError(
+                f"No definition exists for {self} mode_values"
+            )
 
         return conversion[self]
 
@@ -203,7 +205,8 @@ class TripOrigin(IsValidEnum):
                 return to
 
         raise ValueError(
-            f"No TripOrigin exists with the value '{val}'. " f"Expected one of: {valid_values}"
+            f"No TripOrigin exists with the value '{val}'. "
+            f"Expected one of: {valid_values}"
         )
 
 
@@ -245,11 +248,16 @@ class UserClass(IsValidEnumWithAutoNameLower):
         }
 
         # Add combinations of other values
-        b_val = p_dict[UserClass.HB_BUSINESS] + p_dict[UserClass.NHB_BUSINESS]
+        b_val = (
+            p_dict[UserClass.HB_BUSINESS]
+            + p_dict[UserClass.NHB_BUSINESS]
+        )
         p_dict[UserClass.BUSINESS] = b_val
 
         p_dict[UserClass.COMMUTE] = p_dict[UserClass.HB_COMMUTE]
-        p_dict[UserClass.OTHER] = p_dict[UserClass.HB_OTHER] + p_dict[UserClass.NHB_OTHER]
+        p_dict[UserClass.OTHER] = (
+            p_dict[UserClass.HB_OTHER] + p_dict[UserClass.NHB_OTHER]
+        )
 
         return p_dict
 
@@ -319,7 +327,10 @@ class CostUnits(IsValidEnum):
 
     @staticmethod
     def _miles_to_m_factor() -> float:
-        return CostUnits._miles_to_km_factor() * CostUnits._km_to_m_factor()
+        return (
+            CostUnits._miles_to_km_factor()
+            * CostUnits._km_to_m_factor()
+        )
 
     @staticmethod
     def _m_to_km_factor() -> float:
@@ -368,7 +379,9 @@ class AssignmentModel(IsValidEnum):
             if model.value.lower() == name:
                 return model
 
-        raise ValueError(f"'{model_name}' isn't a valid AssignmentModel")
+        raise ValueError(
+            f"'{model_name}' isn't a valid AssignmentModel"
+        )
 
     def get_name(self) -> str:
         """Return the model name."""
@@ -397,29 +410,32 @@ class AssignmentModel(IsValidEnum):
         """Transport for the North's assignment models."""
         return {cls.NOHAM, cls.NORMS}
 
-# TODO This is from python 3.11, needs to be changed to be usable in 3.9
-# class TripEndType(enum.StrEnum):
-#     """Defined trip end types."""
-#
-#     HB_PRODUCTIONS = enum.auto()
-#     HB_ATTRACTIONS = enum.auto()
-#     NHB_PRODUCTIONS = enum.auto()
-#     NHB_ATTRACTIONS = enum.auto()
-#
-#     @staticmethod
-#     def trip_origin_lookup() -> dict[TripEndType, TripOrigin]:
-#         return {
-#             TripEndType.HB_PRODUCTIONS: TripOrigin.HB,
-#             TripEndType.HB_ATTRACTIONS: TripOrigin.HB,
-#             TripEndType.NHB_PRODUCTIONS: TripOrigin.NHB,
-#             TripEndType.NHB_ATTRACTIONS: TripOrigin.NHB,
-#         }
-#
-#     @property
-#     def trip_origin(self) -> TripOrigin:
-#         return self.trip_origin_lookup()[self]
-#
-#     def formatted(self) -> str:
-#         """Format text for outputs and display purposes."""
-#         to, pa = self.value.split("_")
-#         return f"{to.upper()} {pa.title()}"
+
+class TripEndType(str, IsValidEnumWithAutoNameLower):
+    """Defined trip end types."""
+
+    HB_PRODUCTIONS = enum.auto()
+    HB_ATTRACTIONS = enum.auto()
+    NHB_PRODUCTIONS = enum.auto()
+    NHB_ATTRACTIONS = enum.auto()
+
+    @staticmethod
+    def trip_origin_lookup() -> dict[TripEndType, TripOrigin]:
+        return {
+            TripEndType.HB_PRODUCTIONS: TripOrigin.HB,
+            TripEndType.HB_ATTRACTIONS: TripOrigin.HB,
+            TripEndType.NHB_PRODUCTIONS: TripOrigin.NHB,
+            TripEndType.NHB_ATTRACTIONS: TripOrigin.NHB,
+        }
+
+    @property
+    def trip_origin(self) -> TripOrigin:
+        return self.trip_origin_lookup()[self]
+
+    def formatted(self) -> str:
+        """Format text for outputs and display purposes."""
+        to, pa = self.value.split("_")
+        return f"{to.upper()} {pa.title()}"
+
+    def __str__(self) -> str:
+        return self.value
