@@ -54,6 +54,7 @@ from normits_demand import logging as nd_log
 from normits_demand.core import enumerations as nd_enum
 from normits_demand.reports import ntem_forecast_checks
 from normits_demand.utils import file_ops, pandas_utils
+import ntem_plot_conf as config
 
 # pylint: enable=import-error,wrong-import-position
 
@@ -744,9 +745,8 @@ def ntem_pa_plots(
     base_folder: Path,
     forecast_folder: Path,
     matrix_zoning: str,
-    plot_zoning: str,
+    plot_params: config.plotting_params,
     out_folder: Path,
-    geospatial_file: GeoSpatialFile,
     analytical_area_file: GeoSpatialFile,
 ):
     """Create PA trip end growth graphs and maps.
@@ -773,6 +773,8 @@ def ntem_pa_plots(
         message=".*zones in the matrix are missing",
         category=UserWarning,
     )
+    plot_zoning = plot_params.plot_zoning
+    geospatial_file = plot_params.geospatial_file
     base_trip_ends, base_totals = get_base_trip_ends(
         base_folder, matrix_zoning, plot_zoning
     )
@@ -982,8 +984,7 @@ def growth_comparison_regression(
 
 def ntem_tempro_comparison_plots(
     comparison_folder: Path,
-    geospatial_file: GeoSpatialFile,
-    plot_zoning: str,
+    geo_data: config.plotting_params,
     analytical_area_shape: GeoSpatialFile,
     output_folder: Path,
 ):
@@ -1007,6 +1008,8 @@ def ntem_tempro_comparison_plots(
     nice_zone_name = {
         "lad_2020_internal_noham": "LAD Internal NoHAM External"
     }
+    geospatial_file = geo_data.geospatial_file
+    plot_zoning = geo_data.plot_zoning
     geospatial = get_geo_data(geospatial_file).to_frame()
     analytical_area = get_geo_data(analytical_area_shape).iloc[0]
 
@@ -1416,7 +1419,7 @@ def tempro_uc_summary(comparisons_folder: Path, zoning: str) -> None:
         LOG.info("Written: %s", output_path)
 
 
-def main(params: PAPlotsParameters) -> None:
+def main(params: config.PAPlotsParameters) -> None:
     """Produce the PA growth and TEMPro comparison maps and graphs.
 
     Parameters
@@ -1425,31 +1428,29 @@ def main(params: PAPlotsParameters) -> None:
         Parameters and input files for creating the graphs.
     """
     params.output_folder.mkdir(exist_ok=True)
-    # tempro_comparison_summary(
-    #     params.tempro_comparison_folder,
-    #     params.tempro_comparison_summary_zoning,
-    #     params.base_year,
-    # )
+    tempro_comparison_summary(
+        params.tempro_comparison_folder,
+        params.tempro_comp_summary_zoning,
+        params.base_year,
+    )
     ntem_tempro_comparison_plots(
         params.tempro_comparison_folder,
-        params.geospatial_file,
-        params.plot_zoning,
+        params.diff_plot_params,
         params.analytical_area_shape,
         params.output_folder,
     )
-    # tempro_uc_summary(
-    #     params.tempro_comparison_folder,
-    #     params.tempro_comparison_summary_zoning,
-    # )
-    # ntem_pa_plots(
-    #     params.base_matrix_folder,
-    #     params.forecast_matrix_folder,
-    #     params.matrix_zoning,
-    #     params.plot_zoning,
-    #     params.output_folder,
-    #     params.geospatial_file,
-    #     params.analytical_area_shape,
-    # )
+    tempro_uc_summary(
+        params.tempro_comparison_folder,
+        params.tempro_comparison_summary_zoning,
+    )
+    ntem_pa_plots(
+        params.base_matrix_folder,
+        params.forecast_matrix_folder,
+        params.matrix_zoning,
+        params.total_plot_params,
+        params.output_folder,
+        params.analytical_area_shape,
+    )
 
 
 def _colormap_classify(
@@ -1522,27 +1523,39 @@ if __name__ == "__main__":
             / "Matrices"
             / "24hr VDM PA Matrices"
         )
+        diff_geo = config.plotting_params(
+            geospatial_file=config.GeoSpatialFile(
+                path=Path(
+                    r"Y:\Data Strategy\GIS Shapefiles\LAD_2021\LAD_MAY_2021_UK_BFE_V2.shp"
+                ),
+                id_column="LAD21CD",
+            ),
+            plot_zoning="lad_2020",
+        )
 
-        pa_parameters = PAPlotsParameters(
+        plot_geo = config.plotting_params(
+            geospatial_file=config.GeoSpatialFile(
+                path=Path(
+                    r"Y:\Data Strategy\GIS Shapefiles\lad_2020_internal_noham\lad_2020_internal_noham_zoning.shp"
+                ),
+                id_column="zone_name",
+            ),
+            plot_zoning="lad_2020_internal_noham",
+        )
+
+        pa_parameters = config.PAPlotsParameters(
             base_matrix_folder=Path(
                 r"I:\NorMITs Demand\import\noham\post_me\tms_seg_pa"
             ),
             forecast_matrix_folder=forecast_matrix_folder,
             matrix_zoning="noham",
-            plot_zoning="lad_2020",
-            output_folder=forecast_matrix_folder / "Plots",
-            geospatial_file=GeoSpatialFile(
-                Path(
-                    r"Y:\Data Strategy\GIS Shapefiles\LAD_2021\LAD_MAY_2021_UK_BFE_V2.shp"
-                ),
-                "LAD21CD",
-            ),
-            analytical_area_shape=GeoSpatialFile(
-                Path(
+            output_folder=forecast_matrix_folder / "Plots" / "dummy",
+            analytical_area_shape=config.GeoSpatialFile(
+                path=Path(
                     r"Y:\Data Strategy\GIS Shapefiles\North Analytical Area"
                     r"\Boundary\north_analytical_area_simple_boundary.shp"
                 ),
-                "Name",
+                id_column="Name",
             ),
             tempro_comparison_folder=iteration_folder
             / scenario
@@ -1550,8 +1563,10 @@ if __name__ == "__main__":
             / "Matrices"
             / "PA"
             / "TEMPro Comparisons",
-            tempro_comparison_summary_zoning="ca_sector_2020",
+            tempro_comp_summary_zoning="ca_sector_2020",
             base_year=2018,
+            diff_plot_params=diff_geo,
+            total_plot_params=plot_geo,
         )
 
         main(pa_parameters)
