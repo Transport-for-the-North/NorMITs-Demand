@@ -15,6 +15,7 @@ import os
 import pathlib
 
 from typing import Any
+from typing import Optional
 
 # Third Party
 import numpy as np
@@ -42,11 +43,12 @@ LOG = nd_log.get_logger(__name__)
 
 class TripLengthDistributionBuilder:
     # Class constants
-    _running_log_fname = "1. input_params.txt"
-    _full_export_fname = "2. full_export.csv"
-    _seg_report_fname = "3. {seg_name}_report.csv"
-    _agg_full_export_fname = "4. aggregated_full_export.csv"
-    _agg_seg_report_fname = "5. {seg_name}_aggregated_report.csv"
+    _input_params_fname = "1. input_params.txt"
+    _running_log_fname = "2. run_log.log"
+    _full_export_fname = "3. full_export.csv"
+    _seg_report_fname = "4. {seg_name}_report.csv"
+    _agg_full_export_fname = "5. aggregated_full_export.csv"
+    _agg_seg_report_fname = "6. {seg_name}_aggregated_report.csv"
 
     _distribution_fname_desc = "cost_distribution"
 
@@ -314,7 +316,7 @@ class TripLengthDistributionBuilder:
         all_band_mean_cost = list()
         for lower, upper in func_utils.pairwise(band_edges):
             # Filter to trips in this band
-            mask = (data[trip_dist_col] > lower) & (data[trip_dist_col] < upper)
+            mask = (data[trip_dist_col] >= lower) & (data[trip_dist_col] < upper)
             band_data = data[mask].copy()
 
             # Calculate mean miles and total trips
@@ -642,7 +644,7 @@ class TripLengthDistributionBuilder:
             tp_copy=True,
         )
 
-        output_path = output_path / self._running_log_fname
+        output_path = output_path / self._input_params_fname
         with open(output_path, "w") as f:
             f.write(run_log_str)
 
@@ -732,7 +734,7 @@ class TripLengthDistributionBuilder:
             copy_definition_name=copy_definition_name,
         )
 
-        output_path = output_path / self._running_log_fname
+        output_path = output_path / self._input_params_fname
         with open(output_path, "w") as f:
             f.write(run_log_str)
 
@@ -1187,11 +1189,11 @@ class TripLengthDistributionBuilder:
         self,
         bands_name: str,
         segmentation: nd_core.SegmentationLevel,
-        aggregated_exclude_segments: list[str],
         geo_area: tld_enums.GeoArea,
         sample_period: tld_enums.SampleTimePeriods,
         trip_filter_type: tld_enums.TripFilter,
         cost_units: nd_core.CostUnits = nd_core.CostUnits.MILES,
+        aggregated_exclude_segments: Optional[list[str]] = None,
         inter_smoothing: bool = False,
         check_sample_size: int = 400,
         min_sample_size: int = 40,
@@ -1326,38 +1328,48 @@ class TripLengthDistributionBuilder:
             "inter_smoothing": inter_smoothing,
         }
 
-        # Build tld dictionary, return a proper name for the distributions
-        name_to_distribution, sample_size_log, full_export = self.build_tld(**tld_kwargs)
+        log_path = tld_out_path / self._running_log_fname
+        with nd.logging.TemporaryLogFile(LOG, log_path):
+            # Build tld dictionary, return a proper name for the distributions
+            name_to_distribution, sample_size_log, full_export = self.build_tld(**tld_kwargs)
 
-        # build the aggregated TLDs, and link back to above
-        agg_name_to_dist, name_to_agg_name, agg_sample_size_log, agg_full_export = self.build_aggregated_tlds(
-            aggregated_exclude_segments=aggregated_exclude_segments,
-            **tld_kwargs
-        )
-
-        # Are any of the sample sizes small enough for further checks?
-        for name, dist in name_to_distribution.items():
-            if dist.sample_size > check_sample_size:
-                continue
-
-            LOG.info(
-                "%s has a sample size less than %s."
-                % (name, check_sample_size)
-            )
-            if not self._passing_tld_checks(dist):
-                LOG.info(
-                    "%s did not pass further checks. Reverting to "
-                    "aggregated TLD." % name
+            # build the aggregated TLDs, and link back to above
+            if aggregated_exclude_segments is not None:
+                agg_tld_data = self.build_aggregated_tlds(
+                    aggregated_exclude_segments=aggregated_exclude_segments,
+                    **tld_kwargs
                 )
-                # Adjust the aggregated dist to sample size of this segment
-                mask = sample_size_log['name'] == name
-                sample_size = sample_size_log[mask]["records"].squeeze()
-
-                agg_dist = agg_name_to_dist[name_to_agg_name[name]]
-                agg_dist.sample_size = sample_size
-                name_to_distribution[name] = agg_dist
             else:
-                LOG.info("%s looks OK. Leaving as is." % name)
+                agg_tld_data = (None, None, None, None)
+            agg_name_to_dist, name_to_agg_name, agg_sample_size_log, agg_full_export = agg_tld_data
+
+            # Are any of the sample sizes small enough for further checks?
+            for name, dist in name_to_distribution.items():
+                if dist.sample_size > check_sample_size:
+                    continue
+
+                LOG.info(f"{name} has a sample size less than {check_sample_size}.")
+                if self._passing_tld_checks(dist):
+                    LOG.info(f"{name} looks OK. Leaving as is.")
+                else:
+                    if agg_name_to_dist is not None:
+                        LOG.info(
+                            f"{name} did not pass further checks. Reverting to aggregated TLD."
+                        )
+                        # Adjust the aggregated dist to sample size of this segment
+                        mask = sample_size_log['name'] == name
+                        sample_size = sample_size_log[mask]["records"].squeeze()
+
+                        agg_dist = agg_name_to_dist[name_to_agg_name[name]]
+                        agg_dist.sample_size = sample_size
+                        name_to_distribution[name] = agg_dist
+                    else:
+                        LOG.warning(
+                            f"{name} did not pass further checks, and there is no "
+                            f"aggregated TLD to fall back to. Use {name} with "
+                            f"caution! Try setting `aggregated_exclude_segments` "
+                            f"to generate aggregated TLDs."
+                        )
 
         # ## WRITE THINGS OUT ## #
         # Write the run log
@@ -1370,7 +1382,7 @@ class TripLengthDistributionBuilder:
             cost_units=cost_units,
         )
 
-        output_path = tld_out_path / self._running_log_fname
+        output_path = tld_out_path / self._input_params_fname
         with open(output_path, "w") as f:
             f.write(run_log_str)
 
@@ -1379,16 +1391,18 @@ class TripLengthDistributionBuilder:
         report_path = tld_out_path / seg_report_fname
         file_ops.safe_dataframe_to_csv(sample_size_log, report_path, index=False)
 
-        agg_seg_report_fname = self._agg_seg_report_fname.format(seg_name=segmentation.name)
-        report_path = tld_out_path / agg_seg_report_fname
-        file_ops.safe_dataframe_to_csv(agg_sample_size_log, report_path, index=False)
+        if agg_sample_size_log is not None:
+            agg_seg_report_fname = self._agg_seg_report_fname.format(seg_name=segmentation.name)
+            report_path = tld_out_path / agg_seg_report_fname
+            file_ops.safe_dataframe_to_csv(agg_sample_size_log, report_path, index=False)
 
         # Write final compiled tlds
         full_export_path = tld_out_path / self._full_export_fname
         file_ops.safe_dataframe_to_csv(full_export, full_export_path, index=False)
 
-        full_export_path = tld_out_path / self._agg_full_export_fname
-        file_ops.safe_dataframe_to_csv(agg_full_export, full_export_path, index=False)
+        if agg_full_export is not None:
+            full_export_path = tld_out_path / self._agg_full_export_fname
+            file_ops.safe_dataframe_to_csv(agg_full_export, full_export_path, index=False)
 
         # Write individual tlds
         for name, tld in name_to_distribution.items():
