@@ -42,8 +42,8 @@ TRAM_EXPORT_HOME = r"I:\NorMITs Demand\Tram"
 # Distribution running args
 BASE_YEAR = 2018
 SCENARIO = nd.Scenario.SC01_JAM
-TARGET_TLD_VERSION = 'v2.1'
-DM_ITERATION_NAME = '9.10.3'
+TARGET_TLD_VERSION = 'v2.2'
+DM_ITERATION_NAME = '9.10.5'
 DM_IMPORT_HOME = r"I:\NorMITs Demand\import"
 DM_EXPORT_HOME = r"F:\NorMITs Demand\Distribution Model"
 
@@ -71,13 +71,13 @@ def main():
 
     # Choose what to run
     run_hb = True
-    run_nhb = False
+    run_nhb = True
 
     run_all = False
-    run_upper_model = False
-    run_lower_model = False
+    run_upper_model = True
+    run_lower_model = True
     run_pa_matrix_reports = False
-    run_pa_to_od = False
+    run_pa_to_od = True
     run_pa_split_by_tp = False
     run_od_matrix_reports = False
     compile_to_assignment = True
@@ -109,7 +109,7 @@ def main():
         geo_constraint_type = 'trip_OD'
 
         upper_calibration_area = 'gb'
-        upper_calibration_bands = 'dm_highway_bands'
+        upper_calibration_bands = 'dynamic'
         upper_target_tld_dir = os.path.join(geo_constraint_type, upper_calibration_bands)
         upper_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m')
         upper_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_tp')
@@ -124,7 +124,7 @@ def main():
         # upper_calibration_naming = {1: 'north', 2: 'other'}
 
         lower_calibration_area = 'north_and_mids'
-        lower_calibration_bands = 'dm_highway_bands'
+        lower_calibration_bands = 'dynamic'
         lower_target_tld_dir = os.path.join(geo_constraint_type, lower_calibration_bands)
         lower_hb_target_tld_dir = os.path.join(lower_target_tld_dir, 'hb_p_m')
         lower_nhb_target_tld_dir = os.path.join(lower_target_tld_dir, 'nhb_p_m_tp')
