@@ -500,7 +500,8 @@ class TripLengthDistributionBuilder:
             raise ValueError("`final_val` is lower than `max_value`.")
 
         n_bins = int(max_value ** n_bin_pow)
-        bins = (np.array(range(2, n_bins)) / n_bins) ** log_factor * max_value
+        bins = (np.array(range(2, n_bins + 1)) / n_bins) ** log_factor * max_value
+        bins = np.floor(bins)
 
         # Add the first and last item
         bins = np.insert(bins, 0, 0)
@@ -1019,6 +1020,13 @@ class TripLengthDistributionBuilder:
             the trip_length_distribution generation
         """
 
+        # Build the band edges if not given
+        if band_edges is None:
+            conv_factor = self.input_cost_units.get_conversion_factor(cost_units)
+            band_edges = self._dynamically_pick_log_bins(
+                max_value=np.max(raw_tld_data[self.trip_distance_col]) * conv_factor
+            )
+
         # Filter to data for this segment
         data_subset = raw_tld_data.copy()
         data_subset = self._filter_nts_data(data_subset, segment_params)
@@ -1027,13 +1035,6 @@ class TripLengthDistributionBuilder:
         # Build the sample size log
         log_line = segment_params.copy()
         log_line["records"] = sample_size
-
-        # Build the band edges if not given
-        if band_edges is None:
-            conv_factor = self.input_cost_units.get_conversion_factor(cost_units)
-            band_edges = self._dynamically_pick_log_bins(
-                max_value=np.max(data_subset[self.trip_distance_col]) * conv_factor
-            )
 
         # If sample size is too small, set warning to be dealt with later
         if sample_size < sample_threshold:
