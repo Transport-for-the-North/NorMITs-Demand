@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
+r"""
 Module for creating inputs for EDDIE from TfN land use data.
 
 Flowchart detailing the methodolgy in the module is given here:
@@ -15,7 +15,7 @@ import pathlib
 import re
 import string
 import sys
-from typing import Any, NamedTuple, Optional, TypeVar
+from typing import Any, NamedTuple, Optional, Sequence, TypeVar
 
 # Third party imports
 from matplotlib import pyplot as plt
@@ -79,7 +79,8 @@ NORTH_REGIONS = ("north east", "north west", "yorkshire & the humber")
 
 
 ##### CLASSES #####
-class WorksheetParams(pydantic.BaseModel):
+# BaseModel subclasses are for storing data pylint: disable=too-few-public-methods
+class WorksheetParams(pydantic.BaseModel):  # pylint: disable=no-member
     """Parameters for an individual worksheet."""
 
     sheet_name: str
@@ -88,7 +89,7 @@ class WorksheetParams(pydantic.BaseModel):
     column_letters: Optional[str] = None
 
 
-class EDDIEWorkbookParams(pydantic.BaseModel):
+class EDDIEWorkbookParams(pydantic.BaseModel):  # pylint: disable=no-member
     """Parameters for the worksheets in the EDDIE workbook."""
 
     landuse: WorksheetParams
@@ -97,7 +98,7 @@ class EDDIEWorkbookParams(pydantic.BaseModel):
     employment_industry: WorksheetParams
 
 
-class NPIERScenarioLandUseParameters(pydantic.BaseModel):
+class NPIERScenarioLandUseParameters(pydantic.BaseModel):  # pylint: disable=no-member
     """Parameters for the land use data from a NPIER scenario."""
 
     base_folder: pathlib.Path
@@ -128,11 +129,11 @@ class NPIERScenarioLandUseParameters(pydantic.BaseModel):
     def _check_files(  # pylint: disable=no-self-argument
         cls, values: dict[str, Any]
     ) -> dict[str, Any]:
-        missing = []
+        missing: list[str] = []
         for path in cls._build_landuse_paths(
-            values.get("base_folder"), values.get("scenario")
+            values.get("base_folder"), values.get("scenario")  # type: ignore
         ).values():
-            if not path.is_file:
+            if not path.is_file():
                 missing.append(f'"{path}"')
 
         if missing:
@@ -148,7 +149,7 @@ class NPIERScenarioLandUseParameters(pydantic.BaseModel):
         return self._land_use_files.copy()
 
 
-class RawTransformationalParameters(pydantic.BaseModel):
+class RawTransformationalParameters(pydantic.BaseModel):  # pylint: disable=no-member
     """Parameters for the NPIER raw land use data from the Oxford economics workbooks."""
 
     npier_data_workbook: pathlib.Path
@@ -197,6 +198,8 @@ class RawTransformationalParameters(pydantic.BaseModel):
 
 
 class NPIERInputType(enumerations.IsValidEnumWithAutoNameLower):
+    """Type of NPIER data used as input for infilling."""
+
     NPIER_SCENARIO_LANDUSE = enum.auto()
     NPIER_RAW_TRANSFORMATIONAL = enum.auto()
 
@@ -222,7 +225,7 @@ class EDDIEComparisonParameters(config_base.BaseConfig):
     ) -> Any:
         """Check if the required parameters are given for the NPIER input type."""
         # Ignore any data given if not using that input type
-        npier_input: NPIERInputType = values.get("npier_input")
+        npier_input: NPIERInputType = values.get("npier_input")  # type: ignore
         if npier_input is None:
             raise ValueError("missing value npier_input")
 
@@ -256,6 +259,9 @@ class EDDIEComparisonParameters(config_base.BaseConfig):
             return value["path"], value["id_column"]
         except KeyError as err:
             raise TypeError(f"missing {err} value") from err
+
+
+# pylint: enable=too-few-public-methods
 
 
 class EDDIELandUseData(NamedTuple):
@@ -299,10 +305,14 @@ class NPIERRegionsLandUse(NamedTuple):
     industry_employment: pd.DataFrame
 
 
-NPIERLandUseType = TypeVar("NPIERLandUseType", NPIERRegionsLandUse, NPIERNorthernLandUse)
+NPIERLandUseType = TypeVar(  # pylint: disable=invalid-name
+    "NPIERLandUseType", NPIERRegionsLandUse, NPIERNorthernLandUse
+)
 
 
 class NPIEREDDIEFormatLandUse(NamedTuple):
+    """NPIER adjusted DataFrames in the EDDIE format."""
+
     population: pd.DataFrame
     employment: pd.DataFrame
     industry_employment: pd.DataFrame
@@ -310,21 +320,26 @@ class NPIEREDDIEFormatLandUse(NamedTuple):
     wor: Optional[pd.DataFrame] = None
 
     def copy(self) -> NPIEREDDIEFormatLandUse:
+        """Create a new instance with a shallow copy of all the attributes."""
         return NPIEREDDIEFormatLandUse(
             population=self.population.copy(),
             employment=self.employment.copy(),
-            wap=self.wap.copy(),
-            wor=self.wor.copy(),
+            wap=None if self.wap is None else self.wap.copy(),
+            wor=None if self.wor is None else self.wor.copy(),
             industry_employment=self.industry_employment.copy(),
         )
 
 
-class InfillMethod(enum.StrEnum):
+class InfillMethod(str, enumerations.IsValidEnumWithAutoNameLower):
     """Method to use when finding which Na columns require infilling."""
 
     ANY = enum.auto()
     ALL = enum.auto()
     NONE = enum.auto()
+
+    def __str__(self) -> str:
+        """Value of the enum."""
+        return self.value
 
 
 ##### FUNCTIONS #####
@@ -400,18 +415,17 @@ def load_landuse_eddie(
     # Calculate yearly average
     years: dict[str, list[str]] = {}
     for col in data.columns:
-        year = re.match(r"(\d{4})_q\d", col, re.I)
-        if year is None:
+        year_match = re.match(r"(\d{4})_q\d", col, re.I)
+        if year_match is None:
             continue
 
-        if year.group(1) in years:
-            years[year.group(1)].append(year.group(0))
+        if year_match.group(1) in years:
+            years[year_match.group(1)].append(year_match.group(0))
         else:
-            years[year.group(1)] = [year.group(0)]
+            years[year_match.group(1)] = [year_match.group(0)]
 
-    for yr, columns in years.items():
-        data.loc[:, yr] = data[columns].mean(axis=1)
-        # data = data.drop(columns=columns)
+    for year, columns in years.items():
+        data.loc[:, year] = data[columns].mean(axis=1)
 
     # Add zone code column to index
     lad_replace = lad_lookup.set_index("cebr_lad")["lad13cd"].to_dict()
@@ -463,6 +477,7 @@ def translate_tfn_landuse(
     """
     LOG.info("Translating land use from '%s' to '%s' zoning", from_zone.name, to_zone.name)
 
+    # TODO(MB) Update ZoningSystem to make this method public
     translation = from_zone._get_translation_definition(to_zone)
 
     translated = data.merge(translation, on=from_zone.col_name, validate="m:1")
@@ -493,7 +508,10 @@ def load_landuse_tfn(npier_parameters: NPIERScenarioLandUseParameters) -> LandUs
 
     # landuse_indices = {LandUseType.POPULATION: ["soc", "ns"], LandUseType.EMPLOYMENT: ["soc"]}
     # For now just aggregating to population and employment totals
-    landuse_indices = {LandUseType.POPULATION: [], LandUseType.EMPLOYMENT: []}
+    landuse_indices: dict[LandUseType, list[str]] = {
+        LandUseType.POPULATION: [],
+        LandUseType.EMPLOYMENT: [],
+    }
 
     for pop_emp, index_columns in landuse_indices.items():
         file = npier_parameters.land_use_files[pop_emp]
@@ -522,6 +540,23 @@ def load_landuse_tfn(npier_parameters: NPIERScenarioLandUseParameters) -> LandUs
 def read_excel_sheet(
     file: pathlib.Path, parameters: WorksheetParams, **kwargs
 ) -> pd.DataFrame:
+    """Load data from Excel sheet, then run `tidy_dataframe`.
+
+    Parameters
+    ----------
+    file : pathlib.Path
+        Path to Excel workbook.
+    parameters : WorksheetParams
+        Parameters for the Excel worksheet to load.
+    kwargs : keyword arguments, optional
+        Keyword arguments to pass to `pd.read_excel`
+        and `pandas_utils.tidy_dataframe`.
+
+    Returns
+    -------
+    pd.DataFrame
+        Data from Excel worksheet and running `tidy_dataframe`
+    """
     tidy_args = ["rename", "drop_unnamed", "nan_columns", "nan_rows", "nan_index"]
     tidy_argument_values = {}
     for arg in tidy_args:
@@ -551,8 +586,10 @@ def _read_raw_demographics(
     population_index = "Local area total population (thousands)"
     labour_index = "Local area labour force (thousands)"
 
-    population = demographics.loc[population_index:labour_index].dropna(axis=0, how="all")
-    labour = demographics.loc[labour_index:].dropna(axis=0, how="all")
+    # Ignoring "Slice index must be an integer or None" type errors
+    # because DataFrames can have str values for slices
+    population = demographics.loc[population_index:labour_index].dropna(axis=0, how="all")  # type: ignore
+    labour = demographics.loc[labour_index:].dropna(axis=0, how="all")  # type: ignore
 
     return population, labour
 
@@ -566,11 +603,13 @@ def _read_raw_economics(
     employment_index = "Employment (thousands, jobs)"
     productivity_index = "Productivity (£ thousands constant 2016 prices, GVA per job)"
 
-    gva = economics.loc[gva_index:employment_index].dropna(axis=0, how="all")
+    # Ignoring "Slice index must be an integer or None" type errors
+    # because DataFrames can have str values for slices
+    gva = economics.loc[gva_index:employment_index].dropna(axis=0, how="all")  # type: ignore
     gva *= 1e6
-    employment = economics.loc[employment_index:productivity_index].dropna(axis=0, how="all")
+    employment = economics.loc[employment_index:productivity_index].dropna(axis=0, how="all")  # type: ignore
     employment *= 1000
-    productivity = economics.loc[productivity_index:].dropna(axis=0, how="all")
+    productivity = economics.loc[productivity_index:].dropna(axis=0, how="all")  # type: ignore
     productivity *= 1000
 
     return gva, employment, productivity
@@ -584,8 +623,10 @@ def _read_north_wor_wap(
     wap = wor_wap.loc["16-64 population"]
     wap.name = "NPIER"
 
+    # Ignoring "Slice index must be an integer or None" type errors
+    # because DataFrames can have str values for slices
     wor = wor_wap.loc[
-        "Labour force by age and gender":"Participation rate by age and gender"
+        "Labour force by age and gender":"Participation rate by age and gender"  # type: ignore
     ].dropna(axis=0, how="all")
     working_ages = ["16-19", "20-24", "25-34", "35-49", "50-64"]
     working_ages = [f"All persons - {i}" for i in working_ages]
@@ -613,8 +654,8 @@ def _read_employment_industries(
         if np.isinf(j):
             zone_industries = industries.iloc[i:]
         else:
-            zone_industries = industries.iloc[i:j]
-        zone_industries = zone_industries.loc["Industry section":].dropna(axis=0, how="all")
+            zone_industries = industries.iloc[i:j]  # type: ignore
+        zone_industries = zone_industries.loc["Industry section":].dropna(axis=0, how="all")  # type: ignore
         zone_industries.index = pd.MultiIndex.from_product(((zone,), zone_industries.index))
         all_industries.append(zone_industries)
 
@@ -742,8 +783,8 @@ def _load_wor_wap(path: pathlib.Path, sheet_params: WorksheetParams) -> pd.DataF
     wor_wap = wor_wap.set_index(index_columns)
 
     numeric_wor_wap = []
-    for c in wor_wap.columns:
-        numeric_wor_wap.append(pd.to_numeric(wor_wap[c]))
+    for column in wor_wap.columns:
+        numeric_wor_wap.append(pd.to_numeric(wor_wap[column]))
 
     return pd.concat(numeric_wor_wap, axis=1)
 
@@ -798,8 +839,8 @@ def load_disaggregated_eddie(
 
         df.loc[:, "region"] = _normalise_region_names(df["region"])
         df = df.set_index(index_columns)
-        for c in df.columns:
-            df.loc[:, c] = pd.to_numeric(df[c], downcast="unsigned", errors="coerce")
+        for column in df.columns:
+            df.loc[:, column] = pd.to_numeric(df[column], downcast="unsigned", errors="coerce")
 
         emp_data[name] = df
 
@@ -835,6 +876,7 @@ def compare_landuse(
         'Difference' and '% Difference', each containing a column for
         each year.
     """
+    # TODO(MB) Split function into new sub-functions
     output_file_base.parent.mkdir(exist_ok=True, parents=True)
 
     LOG.info("Comparing EDDIE to TfN land use")
@@ -842,7 +884,7 @@ def compare_landuse(
     for pop_emp in LandUseType.to_list():
         eddie_data = eddie.data[pop_emp].copy()
         # Only keep average year columns
-        columns = [c for c in eddie_data.columns if re.match("^\d+$", c) is not None]
+        columns = [c for c in eddie_data.columns if re.match(r"^\d+$", c) is not None]
         eddie_data = eddie_data.loc[:, columns]
 
         eddie_data.columns = pd.MultiIndex.from_product((("EDDIE",), eddie_data.columns))
@@ -867,7 +909,9 @@ def compare_landuse(
         )
         merged = merged.drop(columns="_merge")
 
-        merge_stats = dict(zip(*np.unique(join_check["Data Found"], return_counts=True)))
+        merge_stats: dict[str, int] = dict(
+            zip(*np.unique(join_check["Data Found"], return_counts=True))  # type: ignore
+        )
         if merge_stats.get("EDDIE only", 0) > 0 or merge_stats.get("TfN only", 0) > 0:
             LOG.warning(
                 "EDDIE & TfN do not share all LADs, counts of LADs found in %s", merge_stats
@@ -894,14 +938,14 @@ def compare_landuse(
             else:
                 merged.loc[index_slice, :] = merged.loc[region].sum(axis=0)
 
-        for _, yr in eddie_data.columns:
+        for _, year in eddie_data.columns:
             try:
-                tfn_col = merged[("TfN", yr)]
+                tfn_col = merged[("TfN", year)]
             except KeyError:
                 continue
 
-            eddie_col = merged[("EDDIE", yr)]
-            merged.loc[:, ("Difference", yr)] = tfn_col - eddie_col
+            eddie_col = merged[("EDDIE", year)]
+            merged.loc[:, ("Difference", year)] = tfn_col - eddie_col
 
             perc_diff = (
                 np.divide(
@@ -912,7 +956,7 @@ def compare_landuse(
                 )
                 - 1
             )
-            merged.loc[:, ("% Difference", yr)] = np.where(
+            merged.loc[:, ("% Difference", year)] = np.where(
                 np.isnan(tfn_col) | np.isnan(eddie_col), np.nan, perc_diff
             )
 
@@ -920,7 +964,7 @@ def compare_landuse(
 
         file = output_file_base.with_name(output_file_base.stem + f"-{pop_emp.value}.xlsx")
         LOG.info("Writing: %s", file)
-        with pd.ExcelWriter(file) as excel:
+        with pd.ExcelWriter(file) as excel:  # pylint: disable=abstract-class-instantiated
             for name in merged.columns.get_level_values(0).unique():
                 merged.loc[:, name].to_excel(excel, sheet_name=name)
 
@@ -936,17 +980,17 @@ def _calculate_yearly_quarters(data: pd.DataFrame) -> pd.DataFrame:
     original year column.
     """
     quarters = []
-    for yr in data.columns:
-        previous = str(int(yr) - 1)
+    for year in data.columns:
+        previous = str(int(year) - 1)
         if previous in data.columns:
             # Use previous year value for Q1 as we're dealing with financial years
             col = data[previous].copy()
-            col.name = f"{yr}_q1"
+            col.name = f"{year}_q1"
             quarters.append(col)
 
         for q in range(2, 5):
-            col = data[yr].copy()
-            col.name = f"{yr}_q{q}"
+            col = data[year].copy()
+            col.name = f"{year}_q{q}"
             quarters.append(col)
 
     return pd.concat(quarters, axis=1)
@@ -985,11 +1029,11 @@ def _disaggregate_tfn_wor_wap(
     tfn_pop_regions = _calculate_yearly_quarters(tfn_pop_regions)
 
     tfn_wor_wap = pd.DataFrame(index=eddie_wor_wap.index)
-    for c in eddie_wor_wap.columns:
-        if c in tfn_pop_regions.columns:
-            tfn_wor_wap.loc[:, c] = eddie_wor_wap[c] * tfn_pop_regions[c]
+    for column in eddie_wor_wap.columns:
+        if column in tfn_pop_regions.columns:
+            tfn_wor_wap.loc[:, column] = eddie_wor_wap[column] * tfn_pop_regions[column]
         else:
-            tfn_wor_wap.loc[:, c] = np.nan
+            tfn_wor_wap.loc[:, column] = np.nan
 
     return tfn_wor_wap
 
@@ -1027,8 +1071,10 @@ def _disaggregate_tfn_employment(
     disagg_emp = disagg_emp.set_index(geo_cols + [disagg_column])
 
     # Calculate proportion of employment for each disaggregation
-    for c in columns:
-        disagg_emp.loc[:, c] = disagg_emp[f"{c}_disagg"] / disagg_emp[f"{c}_tot"]
+    for column in columns:
+        disagg_emp.loc[:, column] = (
+            disagg_emp[f"{column}_disagg"] / disagg_emp[f"{column}_tot"]
+        )
     disagg_emp = disagg_emp.loc[:, columns]
 
     disagg_emp = disagg_emp.reset_index().merge(
@@ -1037,11 +1083,13 @@ def _disaggregate_tfn_employment(
     disagg_emp = disagg_emp.set_index(geo_cols + [disagg_column])
 
     # Apply proportion of employment to TfN totals
-    for c in columns:
-        if f"{c}_tfn" in disagg_emp.columns:
-            disagg_emp.loc[:, c] = disagg_emp[f"{c}_prop"] * disagg_emp[f"{c}_tfn"]
+    for column in columns:
+        if f"{column}_tfn" in disagg_emp.columns:
+            disagg_emp.loc[:, column] = (
+                disagg_emp[f"{column}_prop"] * disagg_emp[f"{column}_tfn"]
+            )
         else:
-            disagg_emp.loc[:, c] = np.nan
+            disagg_emp.loc[:, column] = np.nan
 
     return disagg_emp.loc[:, columns]
 
@@ -1151,7 +1199,6 @@ def write_eddie_format(
 ) -> None:
     """Write NPIER data to workbook in EDDIE format.
 
-
     Parameters
     ----------
     comparisons : dict[LandUseType, pd.DataFrame]
@@ -1162,7 +1209,7 @@ def write_eddie_format(
         Excel workbook file to write to.
     """
     LOG.info("Writing TfN land use to EDDIE format")
-    with pd.ExcelWriter(output_file) as excel:
+    with pd.ExcelWriter(output_file) as excel:  # pylint: disable=abstract-class-instantiated
         for pop_emp, data in comparisons.items():
             eddie_years = data.loc[:, "EDDIE"].columns.tolist()
             data = data.loc[
@@ -1171,14 +1218,14 @@ def write_eddie_format(
 
             # Use original columns for EDDIE even if they are empty
             quarters = []
-            for yr in eddie_years:
+            for year in eddie_years:
                 for q in range(1, 5):
-                    if yr in data.columns:
-                        series = data[yr].copy()
+                    if year in data.columns:
+                        series = data[year].copy()
                     else:
                         series = pd.Series(index=data.index)
 
-                    series.name = f"{yr} Q{q}"
+                    series.name = f"{year} Q{q}"
                     quarters.append(series)
 
             data = pd.concat(quarters, axis=1)
@@ -1237,6 +1284,20 @@ def merge_with_eddie(
     north_cols: list[str],
     **kwargs,
 ) -> pd.DataFrame:
+    """Merge `eddie` data with `north`, using `fuzzy_merge`.
+
+    Parameters
+    ----------
+    eddie, north : pd.DataFrame
+        Land use data.
+    eddie_cols, north_cols : list[str]
+        Names of the columns to use for the merge.
+
+    Returns
+    -------
+    pd.DataFrame
+        Merged `eddie` and `north` data.
+    """
     lad_rename = {"kingston upon hull, city of": "kingston upon hull"}
 
     eddie = eddie.copy()
@@ -1295,7 +1356,18 @@ def _infill_columns(
 def output_eddie_format(
     land_use_dataframes: NPIEREDDIEFormatLandUse, output_file: pathlib.Path
 ) -> None:
-    with pd.ExcelWriter(output_file) as excel:
+    """Write `land_use_dataframes` to Excel `output_file`.
+
+    Converts units of WOR to 000s to match EDDIE format.
+
+    Parameters
+    ----------
+    land_use_dataframes : NPIEREDDIEFormatLandUse
+        Data to be written.
+    output_file : pathlib.Path
+        Path to Excel file to create.
+    """
+    with pd.ExcelWriter(output_file) as excel:  # pylint: disable=abstract-class-instantiated
         for nm, df in land_use_dataframes._asdict().items():
             if df is None:
                 continue
@@ -1312,6 +1384,29 @@ def output_eddie_format(
 def split_column_names(
     name: str, eddie_suffix: str = "eddie", npier_suffix: str = "north"
 ) -> tuple[str, str]:
+    """Separate EDDIE / NPIER suffix from column name.
+
+    Parameters
+    ----------
+    name : str
+        Column name to split
+    eddie_suffix : str, default "eddie"
+        EDDIE suffix.
+    npier_suffix : str, default "north"
+        NPIER suffix.
+
+    Returns
+    -------
+    str
+        Suffix
+    str
+        The rest of the name.
+
+    Raises
+    ------
+    ValueError
+        If `name` isn't in the expected format.
+    """
     pattern = rf"^(.*?)(?:_({eddie_suffix}|{npier_suffix}))?$"
     match = re.match(pattern, name)
     if match is None:
@@ -1329,8 +1424,28 @@ def write_north_only_eddie_format(
     npier_north: NPIERNorthernLandUse,
     output_file: pathlib.Path,
 ) -> NPIEREDDIEFormatLandUse:
+    """Infill Northern values into EDDIE and save to Excel.
+
+    Add in Northern values from NPIER raw but don't change the external areas
+
+    Parameters
+    ----------
+    eddie : EDDIELandUseData
+        EDDIE population and employment land use data.
+    disaggregated_eddie : DisaggregatedLandUse
+        EDDIE WOR, WAP and industry employment
+    npier_north : NPIERNorthernLandUse
+        NPIER land use.
+    output_file : pathlib.Path
+        Path to Excel file to write.
+
+    Returns
+    -------
+    NPIEREDDIEFormatLandUse
+        EDDIE data infilled with Northern values.
+    """
+    # TODO(MB) Split function up to make it easier to understand
     LOG.info("Creating NPIER North only EDDIE format")
-    # Add in Northern values from NPIER raw but don't change the external areas
     kwargs = dict(
         how="left",
         validate="1:1",
@@ -1431,45 +1546,27 @@ def _infill_external_regions_single(
     return data.reset_index().set_index(original_index)
 
 
-def _split_quarterly_columns(
-    columns: list[str], min_year: int, max_year: int
-) -> tuple[list[str], list[str]]:
-    quarterly_columns = []
-    yearly_columns = []
-    for yr in range(min_year, max_year + 1):
-        yr = str(yr)
-        if yr in columns:
-            yearly_columns.append(yr)
-
-        for q in "1234":
-            quarter = f"{yr}_q{q}"
-            if quarter in columns:
-                quarterly_columns.append(quarter)
-
-    return quarterly_columns, yearly_columns
-
-
 def _infill_external_regions(
     eddie_format_npier_data: NPIEREDDIEFormatLandUse, method: InfillMethod
 ) -> NPIEREDDIEFormatLandUse:
-    LAD_INDEX = "lad_2017_zone_id"
-    REGION_INDEX = "region"
+    lad_index = "lad_2017_zone_id"
+    region_index = "region"
 
     infilled_population = _infill_external_regions_single(
         eddie_format_npier_data.population.drop(columns="_merge", errors="ignore"),
-        LAD_INDEX,
+        lad_index,
         method,
     )
     infilled_employment = _infill_external_regions_single(
         eddie_format_npier_data.employment.drop(columns="_merge", errors="ignore"),
-        LAD_INDEX,
+        lad_index,
         method,
     )
     infilled_wap = _infill_external_regions_single(
-        eddie_format_npier_data.wap, REGION_INDEX, method
+        eddie_format_npier_data.wap, region_index, method
     )
     infilled_wor = _infill_external_regions_single(
-        eddie_format_npier_data.wor, REGION_INDEX, method
+        eddie_format_npier_data.wor, region_index, method
     )
     infilled_industry = _infill_external_regions_single(
         eddie_format_npier_data.industry_employment.drop(columns="_merge", errors="ignore"),
@@ -1505,12 +1602,15 @@ def _add_year_columns(
 
 
 def _factor_eddie_regions(
-    base: pd.DataFrame, target: pd.DataFrame, columns: list[str], external: bool = True
+    base: pd.DataFrame, target: pd.DataFrame, columns: Sequence[str], external: bool = True
 ) -> pd.DataFrame:
+    # lambda makes it easier to have 2 possible filters
+    # pylint: disable=unnecessary-lambda-assignment
     if external:
         region_filter = lambda r: r not in NORTH_REGIONS
     else:
         region_filter = lambda r: r in NORTH_REGIONS
+    # pylint: enable=unnecessary-lambda-assignment
 
     regions = [r for r in base.index.get_level_values("region").unique() if region_filter(r)]
 
@@ -1529,7 +1629,29 @@ def write_factored_external_eddie_format(
     output_file: pathlib.Path,
     infill: InfillMethod = InfillMethod.NONE,
 ) -> NPIEREDDIEFormatLandUse:
-    # Add in Northern values from NPIER raw and factor external areas to match NPIER external regions
+    """Factor external regions to NPIER region totals.
+
+    Takes data with infilled Northern values and factors external
+    areas to match NPIER external regions
+
+    Parameters
+    ----------
+    npier_regions : NPIERRegionsLandUse
+        NPIER land use totals for external regions.
+    eddie_format_npier_north : NPIEREDDIEFormatLandUse
+        EDDIE data with infilled Northern values, from
+        `write_north_only_eddie_format`.
+    output_file : pathlib.Path
+        Excel file to save output to.
+    infill : InfillMethod, default InfillMethod.NONE
+        Method for infilling Nans in the external regions.
+
+    Returns
+    -------
+    NPIEREDDIEFormatLandUse
+        EDDIE land use with NPIER values in the North and
+        external regions factored.
+    """
     if infill in (InfillMethod.ANY, InfillMethod.ALL):
         infilled_npier_north = _infill_external_regions(eddie_format_npier_north, infill)
     else:
@@ -1578,7 +1700,30 @@ def write_factored_north_eddie_format(
     output_file: pathlib.Path,
     infill: InfillMethod = InfillMethod.ALL,
 ) -> NPIEREDDIEFormatLandUse:
-    # Add in Northern values from NPIER factored to EDDIE region totals and leave external area alone
+    """Factor North regions to EDDIE region totals.
+
+    Take the EDDIE data with Northern values and factor Northern
+    regions to EDDIE region totals so it has the distribution of the
+    NPIER data but the same region totals as EDDIE.
+
+    Parameters
+    ----------
+    eddie : EDDIELandUseData
+        EDDIE population and employment data.
+    disaggregated_eddie : DisaggregatedLandUse
+        EDDIE WOR, WAP and industry employment data.
+    eddie_format_npier_north : NPIEREDDIEFormatLandUse
+        EDDIE data with North values infilled from NPIER.
+    output_file : pathlib.Path
+        Path to Excel file to save outputs to.
+    infill : InfillMethod, default InfillMethod.ALL
+        Method to infill Nans with.
+
+    Returns
+    -------
+    NPIEREDDIEFormatLandUse
+        EDDIE data with Northern distribution and EDDIE region totals.
+    """
     if infill in (InfillMethod.ALL, InfillMethod.ANY):
         infilled_npier_north = _infill_external_regions(eddie_format_npier_north, infill)
         infilled_eddie = _infill_external_regions(
@@ -1715,13 +1860,14 @@ def _npier_eddie_comparisons_heatmaps_plot(
     regions: Optional[gpd.GeoSeries] = None,
     lads: Optional[gpd.GeoSeries] = None,
 ) -> None:
-    YEAR_KEYS = (
+    # TODO(MB) Split function up
+    year_keys = (
         "industry_employment",
         "industry_employment_regions",
     )
 
     def get_grouped_data(key: str) -> tuple[pd.DataFrame, str, list[str]]:
-        if key in YEAR_KEYS:
+        if key in year_keys:
             years = [str(y) for y in plot_years]
         else:
             # Use Q1 data for heatmaps
@@ -1747,14 +1893,14 @@ def _npier_eddie_comparisons_heatmaps_plot(
             ):
                 data, data_name, data_years = get_grouped_data(data_key)
 
-                for yr in data_years:
+                for year in data_years:
                     _npier_eddie_heatmap(
                         lads,
                         data,
                         join_column,
-                        str(yr),
-                        f"{plot_type} {data_name} - {yr}",
-                        plot_folder / (fname + f" {data_name} {yr}.png"),
+                        str(year),
+                        f"{plot_type} {data_name} - {year}",
+                        plot_folder / (fname + f" {data_name} {year}.png"),
                         legend_label_fmt=legend_fmt,
                     )
 
@@ -1775,14 +1921,14 @@ def _npier_eddie_comparisons_heatmaps_plot(
                 except KeyError:
                     continue
 
-                for yr in data_years:
+                for year in data_years:
                     _npier_eddie_heatmap(
                         regions,
                         data,
                         join_column,
-                        str(yr),
-                        f"{plot_type} {data_name} - {yr}",
-                        plot_folder / (fname + f" {data_name} {yr}.png"),
+                        str(year),
+                        f"{plot_type} {data_name} - {year}",
+                        plot_folder / (fname + f" {data_name} {year}.png"),
                         legend_label_fmt=legend_fmt,
                     )
 
@@ -1800,13 +1946,34 @@ def npier_eddie_comparison_heatmaps(
     regions: Optional[gpd.GeoSeries] = None,
     lads: Optional[gpd.GeoSeries] = None,
 ):
+    """Create heatmaps comparing original and NPIER adjusted EDDIE.
+
+    Parameters
+    ----------
+    eddie : EDDIELandUseData
+        Original EDDIE population and employment data.
+    disaggregated_eddie : DisaggregatedLandUse
+        EDDIE WOR, WAP and industry employment.
+    npier : NPIEREDDIEFormatLandUse
+        NPIER adjusted EDDIE data.
+    output_folder : pathlib.Path
+        Folder to save plots to.
+    plot_years : list[int]
+        Years to create plots for.
+    regions : gpd.GeoSeries, optional
+        Geospatial data for the regions, if not given
+        region plots aren't created.
+    lads : gpd.GeoSeries, optional
+        Geospatial data for the LADs, if not given
+        LAD plots aren't created.
+    """
     LOG.info("Creating %s", output_folder.stem)
     output_folder.mkdir(exist_ok=True)
 
     comparisons: dict[str, pd.DataFrame] = {}
 
     for nm in ("population", "employment"):
-        eddie_data = eddie.data[LandUseType(nm)]
+        eddie_data: pd.DataFrame = eddie.data[LandUseType(nm)]
         npier_data: pd.DataFrame = getattr(npier, nm)
         comparisons[nm] = _npier_eddie_comparison(eddie_data, npier_data, ["local_authority"])
         comparisons[f"{nm}_regions"] = _npier_eddie_comparison(
@@ -1814,8 +1981,8 @@ def npier_eddie_comparison_heatmaps(
         )
 
     for nm in ("industry",):
-        eddie_data: pd.DataFrame = getattr(disaggregated_eddie, f"employment_{nm}")
-        npier_data: pd.DataFrame = getattr(npier, f"{nm}_employment")
+        eddie_data = getattr(disaggregated_eddie, f"employment_{nm}")
+        npier_data = getattr(npier, f"{nm}_employment")
         comparisons[f"{nm}_employment"] = _npier_eddie_comparison(
             eddie_data, npier_data, ["local_authority", f"cebr_{nm}"]
         )
@@ -1825,9 +1992,7 @@ def npier_eddie_comparison_heatmaps(
             ["region", f"cebr_{nm}"],
         )
         comparisons[f"{nm}_employment_regions"] = _npier_eddie_comparison(
-            eddie_data.groupby("region").sum(),
-            npier_data.groupby("region").sum(),
-            ["region"]
+            eddie_data.groupby("region").sum(), npier_data.groupby("region").sum(), ["region"]
         )
 
     if npier.wap is not None:
@@ -1859,7 +2024,9 @@ def npier_eddie_comparison_heatmaps(
     LOG.info("Writing comparison spreadsheets & heatmaps")
     for nm, df in comparisons.items():
         excel_file = output_folder / f"NPIER_EDDIE_inputs_comparison-{nm}.xlsx"
+        # pylint: disable=abstract-class-instantiated
         with pd.ExcelWriter(excel_file, engine="openpyxl") as excel:
+            # pylint: enable=abstract-class-instantiated
             for sheet in df.columns.get_level_values(0).unique():
                 df.loc[:, sheet].to_excel(excel, sheet_name=sheet.replace("/", "div"))
 
@@ -1870,17 +2037,17 @@ def npier_eddie_comparison_heatmaps(
     )
 
 
-def main(params: EDDIEComparisonParameters, init_logger: bool = True):
+def main(parameters: EDDIEComparisonParameters, init_logger: bool = True):
     """Compare EDDIE land use inputs to NPIER.
 
     Parameters
     ----------
-    params : EDDIEComparisonParameters
+    parameters : EDDIEComparisonParameters
         Parameters for running comparison.
     init_logger : bool, default True
         Whether to initialise a logger.
     """
-    output_folder = params.output_folder / params.npier_input.value
+    output_folder: pathlib.Path = parameters.output_folder / parameters.npier_input.value
     if not output_folder.is_dir():
         output_folder.mkdir(parents=True)
 
@@ -1893,23 +2060,26 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
         )
         nd_log.capture_warnings(file_handler_args=dict(log_file=output_folder / LOG_FILE))
 
-    LOG.debug("Input parameters:\n%s", params.to_yaml())
+    LOG.debug("Input parameters:\n%s", parameters.to_yaml())
     params_out_file = output_folder / "EDDIE_comparison_parameters.yml"
     LOG.info("Written input parameters to %s", params_out_file)
-    params.save_yaml(params_out_file)
+    parameters.save_yaml(params_out_file)
 
     eddie = load_landuse_eddie(
-        params.eddie_file,
-        params.workbook_parameters.landuse,
-        params.workbook_parameters.lad_lookup,
+        parameters.eddie_file,
+        parameters.workbook_parameters.landuse,
+        parameters.workbook_parameters.lad_lookup,
     )
     disaggregated_eddie = load_disaggregated_eddie(
-        params.eddie_file, params.workbook_parameters
+        parameters.eddie_file, parameters.workbook_parameters
     )
 
-    if params.npier_input == NPIERInputType.NPIER_SCENARIO_LANDUSE:
-        # Used when using UZC data, probably no longer user
-        tfn = load_landuse_tfn(params.npier_scenario_landuse)
+    if parameters.npier_input == NPIERInputType.NPIER_SCENARIO_LANDUSE:
+        # Used when using UZC data, probably no longer used
+        if parameters.npier_scenario_landuse is None:
+            raise ValueError("missing required parameters: npier_scenario_landuse")
+
+        tfn = load_landuse_tfn(parameters.npier_scenario_landuse)
 
         output_file_base = output_folder / "EDDIE_TfN_landuse_comparison"
         comparisons = compare_landuse(eddie, tfn, output_file_base)
@@ -1934,19 +2104,26 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
         )
 
         comparison_heatmaps(
-            comparisons, eddie_geom, eddie_zone.col_name, params.map_years, output_file_base
+            comparisons,
+            eddie_geom,
+            eddie_zone.col_name,
+            parameters.map_years,
+            output_file_base,
         )
 
     else:
         # NPIER transformational raw data
+        if parameters.npier_raw_transformational is None:
+            raise ValueError("missing required parameters: npier_raw_transformational")
+
         npier_raw_north, npier_raw_regions = load_raw_transformational(
-            params.npier_raw_transformational
+            parameters.npier_raw_transformational
         )
 
         reformatted_north = convert_to_eddie_years(npier_raw_north)
         reformatted_regions = convert_to_eddie_years(npier_raw_regions)
 
-        heatmap_kwargs = dict(plot_years=parameters.map_years)
+        heatmap_kwargs: dict[str, Any] = dict(plot_years=parameters.map_years)
         if parameters.regions_geospatial_file is None:
             LOG.warning("Regions geospatial file not given")
             heatmap_kwargs["regions"] = None
@@ -2002,8 +2179,12 @@ def main(params: EDDIEComparisonParameters, init_logger: bool = True):
         )
 
 
-if __name__ == "__main__":
+def _run() -> None:
     # TODO(MB) Add argument for config file path
     parameters = EDDIEComparisonParameters.load_yaml(CONFIG_FILE)
 
     main(parameters)
+
+
+if __name__ == "__main__":
+    _run()

@@ -50,6 +50,7 @@ class DDGType(enum.StrEnum):
     POPSHORTINDEX = "PopShortIndex"
 
     def get_ddg_index(self) -> list[str]:
+        """Get the names of the index columns for the specific DDG."""
         lookup = {
             **dict.fromkeys(
                 [DDGType.EMP, DDGType.POP, DDGType.WORWAP], ["cebr_lad", "lad13cd"]
@@ -71,7 +72,11 @@ class DDGType(enum.StrEnum):
             raise KeyError(f"{name} is not a valid DDGType") from error
 
 
-class RegionsDataParams(pydantic.BaseModel):
+class RegionsDataParams(
+    pydantic.BaseModel
+):  # pylint: disable=no-member,too-few-public-methods
+    """Parameters for the regions shapefile and lookup."""
+
     lad_lookup: pathlib.Path
     shapefile: pathlib.Path
     id_column: str
@@ -87,12 +92,16 @@ class RegionsDataParams(pydantic.BaseModel):
 
 @dataclasses.dataclass
 class RegionsData:
+    """Geospatial data for the regions and lookup."""
+
     lad_lookup: pd.DataFrame
     geodata: gpd.GeoDataFrame
     join_column: str
 
 
-class DDGComparisonParameters(config_base.BaseConfig):
+class DDGComparisonParameters(
+    config_base.BaseConfig
+):  # pylint: disable=too-few-public-methods
     """Parameters for running EDDIE DDG comparison script."""
 
     output_folder: pathlib.Path
@@ -109,6 +118,8 @@ class DDGComparisonParameters(config_base.BaseConfig):
 
 @dataclasses.dataclass
 class ComparisonData:
+    """DataFrames containing the EDDIE DDG comparison."""
+
     base: pd.DataFrame
     regions: Optional[pd.DataFrame] = None
 
@@ -142,8 +153,8 @@ def find_ddg_files(
     ValueError
         If multiple of the same DDGs are found.
     """
-    invalid = {"filename": [], "date": [], "scenario": []}
-    files = {}
+    invalid: dict[str, list[pathlib.Path]] = {"filename": [], "date": [], "scenario": []}
+    files: dict[DDGType, pathlib.Path] = {}
 
     for file in folder.glob("*.csv"):
         match = re.match(DDG_FILENAME_FORMAT, file.stem, re.I)
@@ -170,9 +181,9 @@ def find_ddg_files(
 
     LOG.info('Found %s DDGs in "%s"', len(files), folder)
 
-    for nm, ls in invalid.items():
-        if ls:
-            LOG.debug("Found %s files with invalid %s", len(ls), nm)
+    for name, invalid_files in invalid.items():
+        if invalid_files:
+            LOG.debug("Found %s files with invalid %s", len(invalid_files), name)
 
     return files
 
@@ -256,9 +267,9 @@ def _multilevel_dataframe_to_excel(df: pd.DataFrame, file: pathlib.Path, **kwarg
     file : pathlib.Path
         Excel file to write to.
     """
-    with pd.ExcelWriter(file) as excel:
-        for c in df.columns.get_level_values(0).unique():
-            df.loc[:, c].to_excel(excel, sheet_name=c, **kwargs)
+    with pd.ExcelWriter(file) as excel:  # pylint: disable=abstract-class-instantiated
+        for column in df.columns.get_level_values(0).unique():
+            df.loc[:, column].to_excel(excel, sheet_name=column, **kwargs)
 
     LOG.info('Written "%s"', file)
 
@@ -296,6 +307,7 @@ def compare_ddg(
         % {npier_scenario} - EDDIE. Each column group contains
         different columns for the different years.
     """
+    # TODO(MB) Refactor and simplify this function
     LOG.info("Comparing %s DDG", ddg_type)
 
     npier = _read_ddg(npier_file, npier_scenario, ddg_type)
@@ -328,10 +340,10 @@ def compare_ddg(
             - 1,
         }
 
-        for nm, df in differences.items():
+        for name, df in differences.items():
             df = df.dropna(axis=1, how="all")
-            df.columns = pd.MultiIndex.from_product(((nm,), df.columns))
-            differences[nm] = df
+            df.columns = pd.MultiIndex.from_product(((name,), df.columns))
+            differences[name] = df
         differences[perc_name].fillna(0, inplace=True)
         differences[perc_name].replace([np.inf, -np.inf], np.nan, inplace=True)
 
@@ -393,23 +405,23 @@ def comparison_heatmap(
         data, on=geom_id_column, how="left", validate="1:1"
     )
 
-    for yr in years:
+    for year in years:
         # pos_bins = np.linspace(0, np.max(np.abs(geodata[yr])), 5)
         # neg_bins = np.sort(-1 * pos_bins)
 
         fig = plots._heatmap_figure(
             geodata,
-            yr,
-            f"{title} - {yr}",
+            year,
+            f"{title} - {year}",
             n_bins=5,
             positive_negative_colormaps=True,
             legend_label_fmt=legend_label_fmt,
-            legend_title=f"{plot_data_column} {yr}",
+            legend_title=f"{plot_data_column} {year}",
             # bins=np.concatenate([neg_bins, pos_bins]),
             zoomed_bounds=plots.Bounds(290000, 340000, 550000, 670000),
         )
 
-        file = output_file_base.with_name(output_file_base.stem + f"-{yr}.png")
+        file = output_file_base.with_name(output_file_base.stem + f"-{year}.png")
         fig.savefig(file)
         LOG.info("Written: %s", file)
 
@@ -448,7 +460,11 @@ def get_regions_data(regions: RegionsDataParams) -> RegionsData:
 
 
 def growth_comparison(
-    data: pd.DataFrame, base_year: str, output_file: pathlib.Path, ddg_name: str, npier_scenario: str
+    data: pd.DataFrame,
+    base_year: str,
+    output_file: pathlib.Path,
+    ddg_name: str,
+    npier_scenario: str,
 ) -> pd.DataFrame:
     """Calculate DDG growth and compare between NPIER and EDDIE.
 
@@ -481,10 +497,10 @@ def growth_comparison(
 
     growth[f"{npier_scenario} - EDDIE"] = growth[npier_scenario] - growth["EDDIE"]
 
-    for nm, df in growth.items():
+    for name, df in growth.items():
         df = df.dropna(axis=1, how="all")
-        df.columns = pd.MultiIndex.from_product(((nm,), df.columns))
-        growth[nm] = df
+        df.columns = pd.MultiIndex.from_product(((name,), df.columns))
+        growth[name] = df
 
     growth = pd.concat(growth.values(), axis=1)
 
@@ -503,6 +519,7 @@ def main(params: DDGComparisonParameters, init_logger: bool = True):
     init_logger : bool, default True
         Whether to initialise a logger.
     """
+    # TODO(MB) Group some of this functionality into new functions
     if not params.output_folder.is_dir():
         params.output_folder.mkdir(parents=True)
 
@@ -535,21 +552,29 @@ def main(params: DDGComparisonParameters, init_logger: bool = True):
         folders[f].mkdir(exist_ok=True)
 
     # Cannot map other DDG types because they're matrices
-    MAP_TYPES = [DDGType.EMP, DDGType.POP, DDGType.WORWAP]
+    map_types = [DDGType.EMP, DDGType.POP, DDGType.WORWAP]
 
     for ddg_type in ddg_types:
         fname = f"DD_{params.date}_{params.npier_scenario}_{params.eddie_scenario}_{ddg_type}"
         out_file = folders["comparison"] / (fname + "_comparison.xlsx")
 
-        region_data = regions if ddg_type in MAP_TYPES else None
+        region_data = regions if ddg_type in map_types else None
 
         comparison = compare_ddg(
-            npier_files[ddg_type], eddie_files[ddg_type], ddg_type, out_file, params.npier_scenario, region_data
+            npier_files[ddg_type],
+            eddie_files[ddg_type],
+            ddg_type,
+            out_file,
+            params.npier_scenario,
+            region_data,
         )
         comparison.base.index.set_names(eddie_zone.col_name, level=1, inplace=True)
 
-        if ddg_type in MAP_TYPES:
-            for plt_data in (f"{params.npier_scenario} - EDDIE", f"% {params.npier_scenario} - EDDIE"):
+        if ddg_type in map_types:
+            for plt_data in (
+                f"{params.npier_scenario} - EDDIE",
+                f"% {params.npier_scenario} - EDDIE",
+            ):
                 plt_nm = plt_data.replace("%", "Percentage")
                 fname = (
                     out_file.stem + "_" + plt_nm.lower().replace(" - ", "-").replace(" ", "_")
@@ -589,7 +614,7 @@ def main(params: DDGComparisonParameters, init_logger: bool = True):
             params.npier_scenario,
         )
 
-        if ddg_type in MAP_TYPES:
+        if ddg_type in map_types:
             for plt_data in growth.columns.get_level_values(0).unique():
                 fname = (
                     out_file.stem

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Script for producing maps and graphs for the NTEM forecasting report."""
 
+# backlog: Move this to caf.vis and make more robust and flexible
+
 ##### IMPORTS #####
 from __future__ import annotations
 
@@ -139,6 +141,8 @@ class CustomCmap:
 
 
 class Bounds(NamedTuple):
+    """Coordinates for geospatial extent."""
+
     min_x: int
     min_y: int
     max_x: int
@@ -374,16 +378,16 @@ def _plot_line(
     for x, y in zip(x_data, y_data):
         if x < x_data[-1]:
             text_offset = (10, 0)
-            ha = "left"
+            horizontal_align = "left"
         else:
             text_offset = (-10, 0)
-            ha = "right"
+            horizontal_align = "right"
         ax.annotate(
             f"{y:{label_fmt}}",
             (x, y),
             xytext=text_offset,
             textcoords="offset pixels",
-            ha=ha,
+            ha=horizontal_align,
             va="center",
             bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.8),
         )
@@ -511,7 +515,7 @@ def _heatmap_figure(
     legend_title: Optional[str] = None,
     zoomed_bounds: Optional[Bounds] = Bounds(300000, 340000, 550000, 650000),
 ):
-    LEGEND_KWARGS = dict(title_fontsize="large", fontsize="medium")
+    legend_kwargs = dict(title_fontsize="large", fontsize="medium")
 
     ncols = 1 if zoomed_bounds is None else 2
 
@@ -531,10 +535,7 @@ def _heatmap_figure(
         if analytical_area is not None:
             add_analytical_area(ax, analytical_area)
     if analytical_area is not None:
-        axes[0].legend(**LEGEND_KWARGS, loc="upper right")
-
-    # Drop nan
-    # geodata = geodata.loc[~geodata[column_name].isna()]
+        axes[0].legend(**legend_kwargs, loc="upper right")
 
     kwargs = dict(
         column=column_name,
@@ -543,7 +544,7 @@ def _heatmap_figure(
         k=7,
         legend_kwds=dict(
             title=legend_title if legend_title else str(column_name).title(),
-            **LEGEND_KWARGS,
+            **legend_kwargs,
             loc="upper right",
         ),
         # missing_kwds={
@@ -631,7 +632,7 @@ def _heatmap_figure(
                 text = f"{lower:.0%} - {upper:.0%}"
             label.set_text(text)
 
-    if ncols == 2:
+    if ncols == 2 and zoomed_bounds is not None:
         axes[1].set_xlim(zoomed_bounds.min_x, zoomed_bounds.max_x)
         axes[1].set_ylim(zoomed_bounds.min_y, zoomed_bounds.max_y)
     axes[ncols - 1].annotate(
@@ -760,10 +761,10 @@ def ntem_pa_plots(
             base_trip_ends[base_key],
             trip_ends,
             out_folder
-            / "NTEM_forecast_growth_{}_{}_{}-{}.pdf".format(
+            / "NTEM_forecast_growth_{}_{}_{}-{}.pdf".format(  # pylint: disable=consider-using-f-string
                 params["year"], *base_key, plot_zoning
             ),
-            "NTEM Forecast {} - {} {}".format(
+            "NTEM Forecast {} - {} {}".format(  # pylint: disable=consider-using-f-string
                 params["year"],
                 params["trip_origin"].upper(),
                 params["user_class"].title(),
@@ -839,7 +840,7 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
                     tight_layout=True,
                 )
 
-                filtered = growth.loc[:, to.get_name(), pa, :]
+                filtered = growth.loc[:, to.value, pa, :]
 
                 # Use different markers for internal/external zones
                 cmap_norm = colors.LogNorm(
@@ -1271,9 +1272,11 @@ def main(params: PAPlotsParameters) -> None:
 
 
 def _mapclassify_natural(
-    y: np.ndarray, k: int = 5, initial: int = 10
+    y: np.ndarray,
+    k: int = 5,  # pylint: disable=invalid-name
+    initial: int = 10,
 ) -> mapclassify.NaturalBreaks:
-    """Wrapper around NaturalBreaks to try smaller values of k on error.
+    """Try smaller values of k on error of NaturalBreaks.
 
     Parameters
     ----------
@@ -1361,18 +1364,18 @@ def _colormap_classify(
     return CustomCmap(bin_categories, colours, legend)
 
 
-def _autoplot_func(
+def _autoplot_func(  # pylint: disable=too-many-arguments,too-many-local-variables
     years: list,
     df: pd.DataFrame,
     zone_shape: gpd.GeoDataFrame,
     out_folder: Path,
     hb_nhb: str,
     pa: str,
-    iter: str,
-    level: str = None,
-    pct=False,
-    diff=False,
-    plot_type="heatmap",
+    iteration: str,
+    level: Optional[str] = None,
+    pct: bool = False,
+    diff: bool = False,
+    plot_type: str = "heatmap",
 ):
     for i in range(len(years) - 1):
         if pct:
@@ -1382,7 +1385,7 @@ def _autoplot_func(
         with backend_pdf.PdfPages(
             os.path.join(
                 out_folder,
-                f"iter{iter}",
+                f"iter{iteration}",
                 "NTEM",
                 f"{hb_nhb}_{pa}",
                 "reports",
@@ -1510,7 +1513,7 @@ def plot_tripend_iters(
                     plot_type=plot_type,
                     hb_nhb=hb_nhb,
                     pa=pa,
-                    iter=scenario,
+                    iteration=scenario,
                 )
         else:
             data = {}
@@ -1550,48 +1553,18 @@ def plot_tripend_iters(
                 plot_type=plot_type,
                 hb_nhb=hb_nhb,
                 pa=pa,
-                iter=scenario,
+                iteration=scenario,
             )
 
 
 ##### MAIN #####
 if __name__ == "__main__":
-    # iteration_folder = Path(r"I:\NorMITs Demand\noham\NTEM\iter1d")
-    # forecast_matrix_folder = iteration_folder / r"Matrices\24hr VDM PA Matrices"
-
-    # pa_parameters = PAPlotsParameters(
-    #     base_matrix_folder=Path(r"I:\NorMITs Demand\import\noham\post_me\tms_seg_pa"),
-    #     forecast_matrix_folder=forecast_matrix_folder,
-    #     matrix_zoning="noham",
-    #     plot_zoning="lad_2020_internal_noham",
-    #     output_folder=forecast_matrix_folder / "Plots",
-    #     geospatial_file=GeoSpatialFile(
-    #         Path(
-    #             r"Y:\Data Strategy\GIS Shapefiles"
-    #             r"\lad_2020_internal_noham\lad_2020_internal_noham_zoning.shp"
-    #         ),
-    #         "zone_name",
-    #     ),
-    #     analytical_area_shape=GeoSpatialFile(
-    #         Path(
-    #             r"Y:\Data Strategy\GIS Shapefiles\North Analytical Area"
-    #             r"\Boundary\north_analytical_area_simple_boundary.shp"
-    #         ),
-    #         "Name",
-    #     ),
-    #     tempro_comparison_folder=iteration_folder / r"Matrices\PA\TEMPro Comparisons",
-    #     tempro_comparison_summary_zoning="3_sector",
-    #     base_year=2018,
-    # )
-
-    # main(pa_parameters)
-
-    for i in ["hb"]:
+    for trip_origin in ["hb"]:
         for j in ["productions", "attractions"]:
             plot_tripend_iters(
                 scenario="9.7-COVID",
                 pa=j,
-                hb_nhb=i,
+                hb_nhb=trip_origin,
                 zone_name="lad_2020",
                 segmentation="hb_p_tp_week",
                 years=[2021, 2030, 2040],

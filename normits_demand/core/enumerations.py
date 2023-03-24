@@ -400,6 +400,7 @@ class AssignmentModel(IsValidEnum):
 @enum.unique
 class LandUseType(IsValidEnumWithAutoNameLower):
     """Types of land use data available."""
+
     POPULATION = enum.auto()
     EMPLOYMENT = enum.auto()
 

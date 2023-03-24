@@ -11,7 +11,7 @@ disable = [
 
 # Pylint settings
 [tool.pylint.basic]
-good-names = ["df", "ca", "tp", "to", "x", "i", "f", "q"]
+good-names = ["df", "ca", "tp", "to", "x", "y", "i", "j", "f", "q", "ax", "pa", "nm"]
 
 [tool.pylint.design]
 max-args = 10
@@ -20,6 +20,7 @@ max-statements = 100
 
 [tool.mypy]
 ignore_missing_imports = true
+allow_redefinition = true
 
 [tool.pydocstyle]
 convention = "numpy"

@@ -24,6 +24,7 @@ LOG_FILE = "Extrapolate_DDGs.log"
 CONFIG_PATH = pathlib.Path("config/helper/Extrapolate_DDGs_config.yml")
 
 ##### CLASSES #####
+# pylint: disable=too-few-public-methods
 class ExtrapolateDDGsParameters(config_base.BaseConfig):
     """Class for handling config file and parameters."""
 
@@ -32,6 +33,8 @@ class ExtrapolateDDGsParameters(config_base.BaseConfig):
     final_year: int
     number_calculation_years: int
 
+
+# pylint: enable=too-few-public-methods
 
 ##### FUNCTIONS #####
 def _check_columns(ddg: pd.DataFrame) -> tuple[pd.DataFrame, list[int]]:
@@ -145,7 +148,7 @@ def extrapolate_ddg(
 
 
 def main(params: ExtrapolateDDGsParameters, init_logger: bool = True) -> None:
-    """Main function for running extrapolate DDGs.
+    """Run extrapolate DDGs.
 
     Parameters
     ----------
@@ -189,7 +192,11 @@ def main(params: ExtrapolateDDGsParameters, init_logger: bool = True) -> None:
     os.startfile(params.output_folder)
 
 
-##### MAIN #####
-if __name__ == "__main__":
+def _run() -> None:
     parameters = ExtrapolateDDGsParameters.load_yaml(CONFIG_PATH)
     main(parameters)
+
+
+##### MAIN #####
+if __name__ == "__main__":
+    _run()

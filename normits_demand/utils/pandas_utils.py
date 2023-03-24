@@ -11,13 +11,15 @@ File purpose:
 Collection of utility functions specifically for manipulating pandas
 """
 # Builtins
+from __future__ import annotations
+
 import os
 import operator
 import re
 import warnings
 import functools
 
-from typing import Any, Union
+from typing import Any
 from typing import Dict
 from typing import List
 from typing import Callable
@@ -1163,7 +1165,7 @@ def tidy_dataframe(
     drop_unnamed: bool = True,
     nan_columns: bool = True,
     nan_rows: bool = True,
-    nan_index: bool = True
+    nan_index: bool = True,
 ) -> pd.DataFrame:
     """Drop Nans and normalise column names.
 
@@ -1209,12 +1211,12 @@ def tidy_dataframe(
 def fuzzy_merge(
     left: pd.DataFrame,
     right: pd.DataFrame,
-    left_columns: Union[list[str], str],
-    right_columns: Union[list[str], str],
+    left_columns: list[str] | str,
+    right_columns: list[str] | str,
     drop_fuzzy: bool = True,
     **kwargs,
 ) -> pd.DataFrame:
-    """Wrapper around `pd.merge` which normalises column values before merging.
+    """Normalise column values before merging, wraps `pd.merge`.
 
     Converts the column values to lowercase then removes all
     whitespace and punctuation before performing the join.
@@ -1223,7 +1225,7 @@ def fuzzy_merge(
     ----------
     left, right : pd.DataFrame
         DataFrames to merge together.
-    left_columns, right_columns : Union[list[str], str]
+    left_columns, right_columns : list[str] | str
         Name(s) of the column in the DataFrame's to do the merge on.
     drop_fuzzy : bool, default True
         Whether or not to drop the fuzzy column created for this function.
@@ -1239,9 +1241,9 @@ def fuzzy_merge(
         if arg in kwargs:
             raise ValueError(f"argument {arg} not allowed")
 
-    PATTERN = r"""[!"#$%&'()*+,\-./:;<=>?@\\[\]^_`{|}~\s]+"""
+    removal_pattern = r"""[!"#$%&'()*+,\-./:;<=>?@\\[\]^_`{|}~\s]+"""
     dataframes = {"left": left, "right": right}
-    fuzzy_columns = {"left": [], "right": []}
+    fuzzy_columns: dict[str, list[str]] = {"left": [], "right": []}
 
     for side, columns in (("left", left_columns), ("right", right_columns)):
         if isinstance(columns, str):
@@ -1250,7 +1252,7 @@ def fuzzy_merge(
         for col in columns:
             fuzzy_col = f"{col}_fuzzy_join_column"
             dataframes[side].loc[:, fuzzy_col] = (
-                dataframes[side][col].str.lower().str.replace(PATTERN, "", regex=True)
+                dataframes[side][col].str.lower().str.replace(removal_pattern, "", regex=True)
             )
             fuzzy_columns[side].append(fuzzy_col)
 

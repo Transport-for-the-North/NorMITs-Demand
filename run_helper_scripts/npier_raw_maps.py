@@ -6,15 +6,12 @@
 import pathlib
 import sys
 
-
 # Third party imports
 import geopandas as gpd
 import pandas as pd
 
 # Local imports
-sys.path.append("..")
-sys.path.append(".")
-sys.path.append("./run_checker_scripts")
+sys.path.extend(("..", ".", "./run_checker_scripts"))
 # pylint: disable=import-error,wrong-import-position
 import eddie_npier_infill
 import normits_demand as nd
@@ -33,7 +30,9 @@ LAD_NAME_COLUMN = "lad_name"
 
 
 ##### CLASSES #####
-class NPIERMappingParams(config_base.BaseConfig):
+class NPIERMappingParams(config_base.BaseConfig):  # pylint: disable=too-few-public-methods
+    """Parameters for producing NPIER maps."""
+
     npier_file: eddie_npier_infill.RawTransformationalParameters
     output_folder: pathlib.Path
     plot_years: list[str]
@@ -44,6 +43,18 @@ class NPIERMappingParams(config_base.BaseConfig):
 def load_npier(
     npier_file: eddie_npier_infill.RawTransformationalParameters,
 ) -> dict[str, pd.DataFrame]:
+    """Load NPIER population and employment data.
+
+    Parameters
+    ----------
+    npier_file : eddie_npier_infill.RawTransformationalParameters
+        Parameters for the input file.
+
+    Returns
+    -------
+    dict[str, pd.DataFrame]
+        Land use data from NPIER with keys "population" and "employment".
+    """
     npier_data, _ = eddie_npier_infill.load_raw_transformational(npier_file)
 
     npier_lads = {}
@@ -63,6 +74,31 @@ def translate_npier(
     factor_column: str,
     output_file: pathlib.Path,
 ) -> pd.DataFrame:
+    """Translate NPIER data zone system using given `translation`.
+
+    Parameters
+    ----------
+    npier : pd.DataFrame
+        Data to be translated.
+    translation : pd.DataFrame
+        Lookup from current to new zone system.
+    translation_join_column : str
+        Name of column in `translation` to use when joining
+        to `npier`.
+    new_zone_column : str
+        Name of column in `translation` containing the new
+        zone system.
+    factor_column : str
+        Name of the column in `translation` containing the
+        splitting factors.
+    output_file : pathlib.Path
+        Path to save output CSV to.
+
+    Returns
+    -------
+    pd.DataFrame
+        Translated NPIER data.
+    """
     data_columns = npier.columns.tolist()
 
     # Inner join because we expect only Northern values in NPIER but
@@ -78,11 +114,6 @@ def translate_npier(
 
     merged.loc[:, data_columns] = merged[data_columns].mul(merged[factor_column], axis=0)
     grouped = merged.groupby(new_zone_column)[data_columns].sum()
-
-    # Comparing merged totals to NPIER North value
-    # (ignoring the non-LADs which are present in NPIER)
-    npier.loc["North"]
-    grouped.sum(axis=0)
 
     grouped.to_csv(output_file)
     LOG.info("Saved: %s", output_file)
@@ -107,6 +138,25 @@ def plot_heatmaps(
     title: str,
     legend_label_fmt: str,
 ) -> None:
+    """Join `data` to `geodata` and create heatmap plots.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Data to use for heatmap plots.
+    geodata : gpd.GeoDataFrame
+        Geospatial polygons for plotting.
+    data_join_column : str
+        Name of column in `data` which corresponds to `geodata` index.
+    plot_columns : list[str]
+        Name(s) of columns in `data` to create heatmaps for.
+    output_folder : pathlib.Path
+        Folder to save heatmaps to.
+    title : str
+        Figure title for heatmaps.
+    legend_label_fmt : str
+        Format of the legend numbering.
+    """
     npier_geodata = data.merge(
         geodata, left_on=data_join_column, right_index=True, validate="1:1"
     )
@@ -130,6 +180,7 @@ def plot_heatmaps(
 def calculate_growth(
     data: pd.DataFrame, base_year: str, output_file: pathlib.Path
 ) -> pd.DataFrame:
+    """Calculate growth in `data` from `base_year`."""
     sector_growth = data.div(data[base_year], axis=0) - 1
     sector_growth.to_csv(output_file)
     LOG.info("Saved: %s", output_file)
@@ -138,6 +189,15 @@ def calculate_growth(
 
 
 def main(params: NPIERMappingParams, init_logger: bool = True) -> None:
+    """Create NPIER heatmaps.
+
+    Parameters
+    ----------
+    params : NPIERMappingParams
+        Config parameters for running.
+    init_logger : bool, default True
+        Whether or not to initlise a log file.
+    """
     params.output_folder.mkdir(exist_ok=True, parents=True)
 
     if init_logger:
@@ -210,8 +270,7 @@ def main(params: NPIERMappingParams, init_logger: bool = True) -> None:
         )
 
 
-##### MAIN #####
-if __name__ == "__main__":
+def _run() -> None:
     parameters = NPIERMappingParams(
         npier_file=eddie_npier_infill.RawTransformationalParameters(
             npier_data_workbook=r"I:\Data\EDDIE Inputs\NPIER Transformational\NPIER Transformational Raw Inputs\NPIER Technical Update database (November 2019).xlsx",
@@ -222,3 +281,8 @@ if __name__ == "__main__":
         base_year=2018,
     )
     main(parameters)
+
+
+##### MAIN #####
+if __name__ == "__main__":
+    _run()
