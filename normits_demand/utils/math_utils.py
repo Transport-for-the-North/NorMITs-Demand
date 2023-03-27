@@ -18,6 +18,7 @@ from typing import Any
 from typing import Dict
 from typing import Union
 from typing import Tuple
+from typing import Optional
 
 # Third Party
 import numpy as np
@@ -392,24 +393,29 @@ def get_pa_diff(new_p, p_target, new_a, a_target):
     return pa_diff
 
 
-def interpolate_array(a: np.ndarray) -> np.ndarray:
+def interpolate_array(y_vals: np.ndarray, x_vals: Optional[np.ndarray] = None) -> np.ndarray:
     """Uses numpy to linearly interpolate 0 values in array
 
     note that 0 values at the edges of the array will not be interpolated
 
     Parameters
     ----------
-    a:
+    y_vals:
         The array to interpolate values for.
+
+    x_vals:
+        The indexes of the y values used for interpolation. Used to
+        approximate some function f: y = f(x). If None, then linear values
+        will be used.
 
     Returns
     -------
-    interpolated_a:
-        A copy of a, with the 0 values linearly interpolated.
+    interpolated_x:
+        A copy of x_vals, with the 0 values interpolated.
     """
     # Init
-    y_vals = a.copy()
-    x_vals = np.arange(len(y_vals))
+    if x_vals is None:
+        x_vals = np.arange(len(y_vals))
 
     # Build the interpolation function
     non_zero_idx = np.nonzero(y_vals)

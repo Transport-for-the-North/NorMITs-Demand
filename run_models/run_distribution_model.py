@@ -32,6 +32,9 @@ from normits_demand.pathing.distribution_model import DistributionModelArgumentB
 # Trip end import args
 NOTEM_ITERATION_NAME = '9.10'
 TOUR_PROPS_VERSION = f"v{NOTEM_ITERATION_NAME}"
+RUNNING_TIME_FORMAT = nd.core.TimeFormat.AVG_WEEK
+OUTPUT_TIME_FORMAT = nd.core.TimeFormat.AVG_DAY
+
 
 NOTEM_EXPORT_HOME = r"I:\NorMITs Demand\NoTEM"
 TRAM_EXPORT_HOME = r"I:\NorMITs Demand\Tram"
@@ -39,10 +42,10 @@ TRAM_EXPORT_HOME = r"I:\NorMITs Demand\Tram"
 # Distribution running args
 BASE_YEAR = 2018
 SCENARIO = nd.Scenario.SC01_JAM
-TARGET_TLD_VERSION = 'v2.1'
-DM_ITERATION_NAME = '9.10.3'
+TARGET_TLD_VERSION = 'v2.2'
+DM_ITERATION_NAME = '9.10.5'
 DM_IMPORT_HOME = r"I:\NorMITs Demand\import"
-DM_EXPORT_HOME = r"E:\NorMITs Demand\Distribution Model"
+DM_EXPORT_HOME = r"F:\NorMITs Demand\Distribution Model"
 
 # General constants
 INIT_PARAMS_BASE = '{trip_origin}_{zoning}_{area}_init_params_{seg}.csv'
@@ -55,9 +58,9 @@ NHB_SUBSET_SEG_BASE_NAME = '{te_model_name}_{trip_origin}_output_reduced'
 
 
 def main():
-    # mode = nd.Mode.CAR
+    mode = nd.Mode.CAR
     # mode = nd.Mode.BUS
-    mode = nd.Mode.TRAIN
+    # mode = nd.Mode.TRAIN
     # mode = nd.Mode.TRAM
 
     # Running options
@@ -71,10 +74,10 @@ def main():
     run_nhb = True
 
     run_all = False
-    run_upper_model = False
-    run_lower_model = False
+    run_upper_model = True
+    run_lower_model = True
     run_pa_matrix_reports = False
-    run_pa_to_od = False
+    run_pa_to_od = True
     run_pa_split_by_tp = False
     run_od_matrix_reports = False
     compile_to_assignment = True
@@ -106,7 +109,7 @@ def main():
         geo_constraint_type = 'trip_OD'
 
         upper_calibration_area = 'gb'
-        upper_calibration_bands = 'dm_highway_bands'
+        upper_calibration_bands = 'dynamic'
         upper_target_tld_dir = os.path.join(geo_constraint_type, upper_calibration_bands)
         upper_hb_target_tld_dir = os.path.join(upper_target_tld_dir, 'hb_p_m')
         upper_nhb_target_tld_dir = os.path.join(upper_target_tld_dir, 'nhb_p_m_tp')
@@ -121,7 +124,7 @@ def main():
         # upper_calibration_naming = {1: 'north', 2: 'other'}
 
         lower_calibration_area = 'north_and_mids'
-        lower_calibration_bands = 'dm_highway_bands'
+        lower_calibration_bands = 'dynamic'
         lower_target_tld_dir = os.path.join(geo_constraint_type, lower_calibration_bands)
         lower_hb_target_tld_dir = os.path.join(lower_target_tld_dir, 'hb_p_m')
         lower_nhb_target_tld_dir = os.path.join(lower_target_tld_dir, 'nhb_p_m_tp')
@@ -425,7 +428,7 @@ def main():
         'base_year': BASE_YEAR,
         'scenario': SCENARIO,
         'notem_iteration_name': NOTEM_ITERATION_NAME,
-        'time_format': nd.core.TimeFormat.AVG_DAY,
+        'time_format': RUNNING_TIME_FORMAT,
     }
     if use_tram:
         trip_end_getter = converters.TramToDistributionModel(
@@ -602,9 +605,15 @@ def main():
     #  Fudged to get this to work for now. Handle this better!
     if compile_to_assignment:
         if 'hb_distributor' in locals():
-            hb_distributor.compile_to_assignment_format()
+            hb_distributor.compile_to_assignment_format(
+                from_time_format=RUNNING_TIME_FORMAT,
+                to_time_format=OUTPUT_TIME_FORMAT,
+            )
         elif 'nhb_distributor' in locals():
-            nhb_distributor.compile_to_assignment_format()
+            nhb_distributor.compile_to_assignment_format(
+                from_time_format=RUNNING_TIME_FORMAT,
+                to_time_format=OUTPUT_TIME_FORMAT,
+            )
         else:
             trip_origin = nd.TripOrigin.HB
             arg_builder = DistributionModelArgumentBuilder(
@@ -626,7 +635,10 @@ def main():
                 **arg_builder.build_distribution_model_init_args(),
             )
 
-            hb_distributor.compile_to_assignment_format()
+            hb_distributor.compile_to_assignment_format(
+                from_time_format=RUNNING_TIME_FORMAT,
+                to_time_format=OUTPUT_TIME_FORMAT,
+            )
 
 
 if __name__ == '__main__':
