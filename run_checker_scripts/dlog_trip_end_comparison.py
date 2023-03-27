@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
 """Compare the D-Log trip ends to the base year trip ends."""
+# BACKLOG(MB): Combine D-Log TE comparison with `notem_iter_comparison` script
+# Create a script which combines the functionality of both to allow for a more
+# flexible way to compare various different runs of the trip end model.
+
 
 ##### IMPORTS #####
 # Standard imports
@@ -321,7 +325,7 @@ def _comparison_heatmaps(
     data_name: str,
     title: str,
     comparison_attribute: str = "percentage",
-    legend_label_fmt: str="{:.0%}"
+    legend_label_fmt: str = "{:.0%}",
 ) -> None:
     """Produce heatmaps of the percetanage difference for each column in `comparison`."""
     data: pd.DataFrame = getattr(comparison, comparison_attribute)
