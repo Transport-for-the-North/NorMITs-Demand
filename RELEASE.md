@@ -30,6 +30,9 @@ Below, a brief summary of patches made since the previous version can be found.
   - Renamed the incorrectly named "TemproExtractor" to "NTEM Extractor"
     - Updated tool to extract different versions of NTEM data
     - Updated tool to extract different scenarios of NTEM data
+  - TLD Builder
+    - Fixed a bug where demand on bounds was being dropped
+    - Added functionality to generate dynamic bands to create a log curve for demand
 - Core
   - Added Midlands Connect zoning systems as built-ins
   - Added functionality to convert matrices into SATURN and CUBE formats
@@ -38,6 +41,7 @@ Below, a brief summary of patches made since the previous version can be found.
   - Adapted NoTEM to optionally perform steps needed for Midlands Models
     -  Including optional localised trip end adjustments
   - Added a temporary front end script for `Midlands Distribution Model`
+  - Fixed a bug in the default distribution model run, running at the incorrect time format
   - Created a generic front end for all forecasting functionality
     - Can run NTEM based forecasts, or synthetic trip end based forecasts from 
       the same front end
