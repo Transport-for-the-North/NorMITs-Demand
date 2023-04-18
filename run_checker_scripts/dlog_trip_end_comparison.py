@@ -63,6 +63,8 @@ class DLogTEComparisonParameters(config_base.BaseConfig):
 
 
 class _Config:
+    """Configure the pydantic dataclasses."""
+
     arbitrary_types_allowed = True
 
 
@@ -132,7 +134,7 @@ def _load_dvector(
 
 
 def _compound_growth(arr: np.ndarray, growth: float, year: int, base_year: int) -> np.ndarray:
-    """Applies growth percentage to `arr` for the number of years since `base_year`."""
+    """Apply growth percentage to `arr` for the number of years since `base_year`."""
     return arr * growth ** (year - base_year)
 
 
@@ -291,7 +293,9 @@ def _write_comparisons(
     """Write all `comparisons` to separate sheets in the same Excel workbook."""
     excel_path.parent.mkdir(exist_ok=True)
 
+    # pylint: disable=abstract-class-instantiated
     with pd.ExcelWriter(excel_path) as excel:
+        # pylint: enable=abstract-class-instantiated
         for name, comp in comparisons.items():
             for field in fields(comp):
                 data: pd.DataFrame = getattr(comp, field.name).copy()

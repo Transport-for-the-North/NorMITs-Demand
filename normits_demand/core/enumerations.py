@@ -434,6 +434,7 @@ class TripEndType(str, IsValidEnumWithAutoNameLower):
 
     @staticmethod
     def trip_origin_lookup() -> dict[TripEndType, TripOrigin]:
+        """Lookup between TripEndType and TripOrigin."""
         return {
             TripEndType.HB_PRODUCTIONS: TripOrigin.HB,
             TripEndType.HB_ATTRACTIONS: TripOrigin.HB,
@@ -443,6 +444,7 @@ class TripEndType(str, IsValidEnumWithAutoNameLower):
 
     @property
     def trip_origin(self) -> TripOrigin:
+        """TripOrigin related to the current TripEndType."""
         return self.trip_origin_lookup()[self]
 
     def formatted(self) -> str:
@@ -451,4 +453,5 @@ class TripEndType(str, IsValidEnumWithAutoNameLower):
         return f"{to.upper()} {pa.title()}"
 
     def __str__(self) -> str:
+        """Lowercase name of the trip end type."""
         return self.value

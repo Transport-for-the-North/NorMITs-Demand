@@ -52,6 +52,8 @@ class _LandUsePaths:
 
 
 class DLogTEMParameters(config_base.BaseConfig):
+    """Load and manage parameters for running D-Log TEM."""
+
     raw_dlog_landuse: _LandUsePaths
     notem_import_home: pydantic.DirectoryPath  # pylint: disable=no-member
     base_year: int
@@ -80,6 +82,7 @@ class DLogTEMParameters(config_base.BaseConfig):
 def _find_any_landuse_file(
     scenario_folder: pathlib.Path, landuse: Literal["pop", "emp"]
 ) -> pathlib.Path:
+    """Find files called 'land_use_{year}_{landuse}' for any year."""
     for path in scenario_folder.with_name(nd.Scenario.SC01_JAM.value).iterdir():
         if not path.is_file():
             continue
@@ -93,6 +96,7 @@ def _find_any_landuse_file(
 
 
 def _infill_zones(landuse_data: pd.DataFrame) -> pd.DataFrame:
+    """Infill missing zones with 0."""
     zoning = nd.get_zoning_system(LANDUSE_ZONING)
 
     unique_indices = []
@@ -112,6 +116,7 @@ def _infill_zones(landuse_data: pd.DataFrame) -> pd.DataFrame:
 def _infill_area_type(
     scenario_folder: pathlib.Path, landuse_data: pd.DataFrame
 ) -> pd.DataFrame:
+    """Infill area type in `landuse_data` using any existing land use files."""
     index_columns = RAW_LANDUSE_INDEX_COLUMNS["population"].copy()
     area_col = "area_type"
 
@@ -245,6 +250,7 @@ def split_raw_landuse(
 
 
 def main(params: DLogTEMParameters, init_logger: bool = True) -> None:
+    """Run NoTEM with D-Log data."""
     if init_logger:
         # Add log file output to main package logger
         log_file = params.export_folder / LOG_FILE
