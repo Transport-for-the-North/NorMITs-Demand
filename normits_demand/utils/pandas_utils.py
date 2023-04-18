@@ -11,8 +11,11 @@ File purpose:
 Collection of utility functions specifically for manipulating pandas
 """
 # Builtins
+from __future__ import annotations
+
 import os
 import operator
+import re
 import warnings
 import functools
 
@@ -1133,3 +1136,137 @@ def prepend_cols(
         df.insert(loc=0, column=name, value=val, allow_duplicates=allow_duplicates)
 
     return df
+
+
+def column_name_tidy(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert column names to lowercase and replace spaces with '_'.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Pandas DataFrame to be updated, will be edited inplace.
+
+    Returns
+    -------
+    pd.DataFrame
+        `df` with updated column names.
+    """
+
+    def rename(col) -> str:
+        return re.sub(r"\s+", "_", str(col).lower().strip())
+
+    df.columns = [rename(c) for c in df.columns]
+    return df
+
+
+def tidy_dataframe(
+    df: pd.DataFrame,
+    rename: bool = True,
+    drop_unnamed: bool = True,
+    nan_columns: bool = True,
+    nan_rows: bool = True,
+    nan_index: bool = True,
+) -> pd.DataFrame:
+    """Drop Nans and normalise column names.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame to update, will not be edited inplace.
+    rename : bool, default True
+        Whether to run `column_name_tidy`.
+    drop_unnamed : bool, default True
+        Whether to drop columns starting with 'unnamed'.
+    nan_columns : bool, default True
+        Whether to drop columns with all Nans.
+    nan_rows : bool, default True
+        Whether to drop rows with all Nans.
+    nan_index : bool, default True
+        Whether to drop rows with Nan index value.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of `df` with filtering or renaming done.
+    """
+    if rename:
+        df = column_name_tidy(df.copy())
+
+    if drop_unnamed:
+        unnamed = [c for c in df.columns if c.startswith("unnamed:")]
+        df = df.drop(columns=unnamed)
+
+    if nan_columns:
+        df = df.dropna(axis=1, how="all")
+
+    if nan_rows:
+        df = df.dropna(axis=0, how="all")
+
+    if nan_index:
+        df = df.loc[~df.index.isna()]
+
+    return df
+
+
+def fuzzy_merge(
+    left: pd.DataFrame,
+    right: pd.DataFrame,
+    left_columns: list[str] | str,
+    right_columns: list[str] | str,
+    drop_fuzzy: bool = True,
+    **kwargs,
+) -> pd.DataFrame:
+    """Normalise column values before merging, wraps `pd.merge`.
+
+    Converts the column values to lowercase then removes all
+    whitespace and punctuation before performing the join.
+
+    Parameters
+    ----------
+    left, right : pd.DataFrame
+        DataFrames to merge together.
+    left_columns, right_columns : list[str] | str
+        Name(s) of the column in the DataFrame's to do the merge on.
+    drop_fuzzy : bool, default True
+        Whether or not to drop the fuzzy column created for this function.
+    kawrgs : keyword arguments
+        Keyword arguments passed to `pandas.DataFrame.merge`.
+
+    Returns
+    -------
+    pd.DataFrame
+        Merged DataFrame.
+    """
+    for arg in ("on", "left_on", "right_on", "left_index", "right_index"):
+        if arg in kwargs:
+            raise ValueError(f"argument {arg} not allowed")
+
+    removal_pattern = r"""[!"#$%&'()*+,\-./:;<=>?@\\[\]^_`{|}~\s]+"""
+    dataframes = {"left": left, "right": right}
+    fuzzy_columns: dict[str, list[str]] = {"left": [], "right": []}
+
+    for side, columns in (("left", left_columns), ("right", right_columns)):
+        if isinstance(columns, str):
+            columns = [columns]
+
+        for col in columns:
+            fuzzy_col = f"{col}_fuzzy_join_column"
+            dataframes[side].loc[:, fuzzy_col] = (
+                dataframes[side][col].str.lower().str.replace(removal_pattern, "", regex=True)
+            )
+            fuzzy_columns[side].append(fuzzy_col)
+
+    merged = dataframes["left"].merge(
+        dataframes["right"],
+        left_on=fuzzy_columns["left"],
+        right_on=fuzzy_columns["right"],
+        **kwargs,
+    )
+
+    for side, df in dataframes.items():
+        df.drop(columns=fuzzy_columns[side], inplace=True)
+
+    if drop_fuzzy:
+        merged.drop(columns=fuzzy_columns["left"] + fuzzy_columns["right"], inplace=True)
+
+    return merged

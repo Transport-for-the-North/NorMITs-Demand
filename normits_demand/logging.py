@@ -10,6 +10,8 @@ Other updates made by:
 File purpose:
 Initialiser for all logging in normits_demand
 """
+from __future__ import annotations
+
 # Builtins
 from __future__ import annotations
 
@@ -331,6 +333,7 @@ def capture_warnings(
 
     if file_handler_args is not None:
         warning_logger.addHandler(get_file_handler(**file_handler_args))
+
 
 class TemporaryLogFile:
     """Add temporary log file to a logger."""

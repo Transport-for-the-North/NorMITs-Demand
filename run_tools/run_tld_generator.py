@@ -30,7 +30,7 @@ from normits_demand.tools import trip_length_distributions as tlds
 # GLOBAL
 TLB_FOLDER = "I:/NTS/outputs/tld"
 TLB_VERSION = "nts_tld_data_v3.1.csv"
-OUTPUT_FOLDER = r"I:\NorMITs Demand\import\trip_length_distributions\tld_tool_outputs"
+OUTPUT_FOLDER = r"E:\NorMITs Demand\import\trip_length_distributions\tld_tool_outputs"
 TLD_HOME = r"I:\NorMITs Demand\import\trip_length_distributions\config"
 
 BAND_DIR = os.path.join(TLD_HOME, "bands")
@@ -139,9 +139,13 @@ def build_new_dimo_tlds():
 
     for geo_area in [tlds.GeoArea.GB, tlds.GeoArea.NORTH_AND_MIDS]:
         # ## GENERATE HIGHWAY ## #
-        hway_bands = "dm_highway_bands"
+        # hway_bands = "dm_highway_bands"
+        hway_bands = "dynamic"
         hway_kwargs = generate_kwargs.copy()
-        hway_kwargs.update({"geo_area": geo_area, "bands_name": hway_bands})
+        hway_kwargs.update({
+            "geo_area": geo_area,
+            "bands_name": hway_bands,
+        })
 
         # HB TLDs
         segmentation = nd_core.get_segmentation_level("hb_p_m")
@@ -282,5 +286,5 @@ if __name__ == "__main__":
     # run_test()
 
     # run_all_combinations()
-    # build_new_dimo_tlds()
-    build_new_traveller_segment_tlds()
+    build_new_dimo_tlds()
+    # build_new_traveller_segment_tlds()

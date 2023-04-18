@@ -411,6 +411,19 @@ class AssignmentModel(IsValidEnum):
         return {cls.NOHAM, cls.NORMS}
 
 
+@enum.unique
+class LandUseType(IsValidEnumWithAutoNameLower):
+    """Types of land use data available."""
+
+    POPULATION = enum.auto()
+    EMPLOYMENT = enum.auto()
+
+    def get_abbreviation(self) -> str:
+        """Abbreviation of the type name."""
+        abbrs = {LandUseType.POPULATION: "pop", LandUseType.EMPLOYMENT: "emp"}
+        return abbrs[self]
+
+
 class TripEndType(str, IsValidEnumWithAutoNameLower):
     """Defined trip end types."""
 
