@@ -2,6 +2,7 @@
 """EDGE Replicant process to grow demand."""
 # ## IMPORTS ## #
 # Standard imports
+import sys
 import logging
 import itertools
 import pathlib
@@ -795,6 +796,9 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         # create empty dictionary to store matrices
         factored_matrices = {}
         factored_24hr_matrices = {}
+        # declare global demand total variables
+        overall_base_demand = 0
+        overall_not_grown_demand = 0
         # empty dataframe for growth summary
         growth_summary = pd.DataFrame(
             {
@@ -832,7 +836,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             splitting_matrices = produce_ticketype_splitting_matrices(
                 edge_flows, model_stations_tlcs, dist_mx, flow_cats, ticket_splits_df
             )
-            LOG.debug(
+            LOG.info(
                 f"{'Time_Period':>12}{'Demand_Segment':>15}"
                 f"{'Base_Demand':>12}{f'{forecast_year}_Demand':>12}"
             )
@@ -867,7 +871,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                     factored_matrices[time_period][segment] = long_mx_2_wide_mx(
                         zonal_base_demand_mx
                     )
-                    LOG.debug(f"{time_period:>12}{segment:>15}" f"{0:>12}{0:>12}")
+                    LOG.info(f"{time_period:>12}{segment:>15}" f"{0:>12}{0:>12}")
                     continue
                 # reduce probabilities to current userclass
                 irsj_probs_segment = irsj_props.loc[
@@ -883,6 +887,8 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 )
                 # store matrix total demand
                 tot_input_demand = round(np_stn2stn_base_demand_mx.sum())
+                # add to overall base demand
+                overall_base_demand = overall_base_demand + tot_input_demand
                 # apply growth
                 np_stn2stn_grown_demand_mx = apply_demand_growth(
                     np_stn2stn_base_demand_mx,
@@ -893,10 +899,15 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                     growth_method,
                     to_home,
                 )
-                # TODO (MI): Check the proportion of the demand that is not being grown, if > 1% then terminate
+                # get movements where no growth has been applied
+                no_growth_movements = np_stn2stn_base_demand_mx[
+                    np_stn2stn_base_demand_mx == np_stn2stn_grown_demand_mx
+                ]
+                # Add to the total not grown demand
+                overall_not_grown_demand = overall_not_grown_demand + no_growth_movements.sum()
                 # store matrix total demand
                 tot_output_demand = round(np_stn2stn_grown_demand_mx.sum())
-                LOG.debug(
+                LOG.info(
                     f"{time_period:>12}{segment:>15}"
                     f"{tot_input_demand:>12}{tot_output_demand:>12}"
                 )
@@ -911,8 +922,6 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                     }
                 )
                 growth_summary = pd.concat([growth_summary, segment_growth_summary], axis=0)
-                # calculate applied growth factor
-                # np_stn2stn_growth_mx = np_stn2stn_grown_demand_mx / np_stn2stn_base_demand_mx
                 # convert back to zonal level demand
                 zonal_grown_demand_mx = convert_stns_to_zonal_demand(
                     np_stn2stn_grown_demand_mx,
@@ -922,7 +931,19 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 )
                 # add to grown matrices dictionary
                 factored_matrices[time_period][segment] = zonal_grown_demand_mx
-
+        # calculate proportion of not grown demand
+        not_grown_demand_pcent = overall_not_grown_demand / overall_base_demand
+        # if proportion is greater than 1%, terminate the program
+        if not_grown_demand_pcent > 0.01:
+            LOG.critical(
+                f" Percentage of the demand not being grown {round(not_grown_demand_pcent * 100,3)}% is > 1%.\n"
+                "User must review growth factors used."
+            )
+            sys.exit()
+        else:
+            LOG.warning(
+                f" Percentage of the demand not being grown {round(not_grown_demand_pcent * 100,3)}%."
+            )
         # prepare 24Hr level demand matrices
         for i, row in demand_segments.iterrows():
             # declare current segment's details
