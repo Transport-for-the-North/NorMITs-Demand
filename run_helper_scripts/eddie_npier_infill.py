@@ -1880,6 +1880,7 @@ def _npier_eddie_heatmap(
         n_bins=5,
         positive_negative_colormaps=True,
         legend_label_fmt=legend_label_fmt,
+        zoomed_bounds=plots.Bounds(290000, 345000, 555000, 660000),
     )
 
     fig.savefig(output_file)
