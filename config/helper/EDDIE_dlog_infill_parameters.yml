@@ -1,0 +1,26 @@
+output_folder: C:\Users\ukmjb018\OneDrive - WSP O365\WSP_Projects\TfN NorMITs Demand Partner 2022\D-Lit Land Use\20230418 DLit - Regression No Negatives
+eddie_file: I:\Data\EDDIE Inputs\Nov21_EDDIE_Proper_DN_v3 - TfN Edited (CENTRAL ONLY).xlsm
+workbook_parameters:
+  landuse:
+    sheet_name: I; CEBR_LA_EMP_POP_GDP
+    header_row: 17
+  lad_lookup:
+    sheet_name: I; Map Full LA-reduced LA list
+    header_row: 15
+  wor_wap:
+    sheet_name: I; CEBR_Regions_WOR_WAP
+    header_row: 16
+  employment_industry:
+    sheet_name: I; CEBR_LA_EMPbyIndustry
+    header_row: 13
+dlit_landuse:
+  folder: I:\Data\D-Log\DLIT\Outputs\20230418 DLit - Regression No Negatives
+map_years:
+  - 2018
+  - 2038
+lad_geospatial_file:
+  path: Y:\Data Strategy\GIS Shapefiles\LAD GB 2017\Local_Authority_Districts_December_2017_Full_Clipped_Boundaries_in_Great_Britain.shp
+  id_column: lad17cd
+regions_geospatial_file:
+  path: Y:\Data Strategy\GIS Shapefiles\UK Regions\ITL1_MAY_2021_UK_BFC.shp
+  id_column: region_nm
