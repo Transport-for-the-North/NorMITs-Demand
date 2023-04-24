@@ -30,7 +30,9 @@ from normits_demand.utils import config_base, plots
 # pylint: enable=import-error,wrong-import-position
 
 ##### CONSTANTS #####
-LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".dlog_trip_end_comparison")
+LOG = nd_log.get_logger(
+    nd_log.get_package_logger_name() + ".dlog_trip_end_comparison"
+)
 LOG_FILE = "DLog_TE_comparison.log"
 TRIP_END_PATH_FMT = (
     "{folder}/iter{iter}/{scenario}/{trip_end_type}"
@@ -38,7 +40,10 @@ TRIP_END_PATH_FMT = (
 )
 ANNUAL_GROWTH = 1.01
 COMPARISON_ZONING = "lad_2020"
-COMPARISON_SEGMENTATIONS = {nd.TripOrigin.HB: "hb_p_m", nd.TripOrigin.NHB: "nhb_p_m"}
+COMPARISON_SEGMENTATIONS = {
+    nd.TripOrigin.HB: "hb_p_m",
+    nd.TripOrigin.NHB: "nhb_p_m",
+}
 KEY_LOOKUP = {"p": "purpose", "m": "mode"}
 
 
@@ -133,7 +138,9 @@ def _load_dvector(
     return nd.DVector.load(path)
 
 
-def _compound_growth(arr: np.ndarray, growth: float, year: int, base_year: int) -> np.ndarray:
+def _compound_growth(
+    arr: np.ndarray, growth: float, year: int, base_year: int
+) -> np.ndarray:
     """Apply growth percentage to `arr` for the number of years since `base_year`."""
     return arr * growth ** (year - base_year)
 
@@ -145,7 +152,11 @@ def _iterate_comparison_aggregations(
     weighting: Optional[str] = None,
 ) -> Iterator[tuple[str, pd.DataFrame]]:
     """Iterate through different aggregations of the trip ends."""
-    raw_dvec = dvec.translate_zoning(zoning, weighting).aggregate(segmentation).to_df()
+    raw_dvec = (
+        dvec.translate_zoning(zoning, weighting)
+        .aggregate(segmentation)
+        .to_df()
+    )
 
     for agg in (None, "p", "m", "total"):
         if agg is None:
@@ -154,7 +165,11 @@ def _iterate_comparison_aggregations(
 
         elif agg == "total":
             key = agg
-            data = raw_dvec.groupby(zoning.col_name)["val"].sum().to_frame()
+            data = (
+                raw_dvec.groupby(zoning.col_name)["val"]
+                .sum()
+                .to_frame()
+            )
             data.rename(columns={"val": "Trip Ends"}, inplace=True)
 
         else:
@@ -200,14 +215,20 @@ def _compare_dvectors(
         "{segmentation name}", "purpose", "mode" and "total".
     """
     iterator = zip(
-        _iterate_comparison_aggregations(dlog, segmentation, zoning, weighting),
-        _iterate_comparison_aggregations(other, segmentation, zoning, weighting),
+        _iterate_comparison_aggregations(
+            dlog, segmentation, zoning, weighting
+        ),
+        _iterate_comparison_aggregations(
+            other, segmentation, zoning, weighting
+        ),
     )
 
     comparisons = {}
     for (key, dlog_data), (_, other_data) in iterator:
         # Remove any zones / segmentations with no D-Log data
-        dlog_index = dlog_data.index[(dlog_data != 0).any(axis=1).values]
+        dlog_index = dlog_data.index[
+            (dlog_data != 0).any(axis=1).values
+        ]
         dlog_data = dlog_data.loc[dlog_index]
         other_data = other_data.loc[dlog_index]
 
@@ -215,7 +236,10 @@ def _compare_dvectors(
         perc_diff = dlog_data / other_data
 
         comparisons[key] = _DVecComparison(
-            dlog=dlog_data, grown_base=other_data, difference=diff, percentage=perc_diff
+            dlog=dlog_data,
+            grown_base=other_data,
+            difference=diff,
+            percentage=perc_diff,
         )
 
     return comparisons
@@ -256,15 +280,23 @@ def _growth_comparisons(
         keys "{segmentation name}", "purpose", "mode" and "total".
     """
     iterator = zip(
-        _iterate_comparison_aggregations(base, segmentation, zoning, weighting),
-        _iterate_comparison_aggregations(dlog, segmentation, zoning, weighting),
-        _iterate_comparison_aggregations(grown_base, segmentation, zoning, weighting),
+        _iterate_comparison_aggregations(
+            base, segmentation, zoning, weighting
+        ),
+        _iterate_comparison_aggregations(
+            dlog, segmentation, zoning, weighting
+        ),
+        _iterate_comparison_aggregations(
+            grown_base, segmentation, zoning, weighting
+        ),
     )
 
     comparisons = {}
     for (key, base_data), (_, dlog_data), (_, grown_data) in iterator:
         # Remove any zones / segmentations with no D-Log data
-        dlog_index = dlog_data.index[(dlog_data != 0).any(axis=1).values]
+        dlog_index = dlog_data.index[
+            (dlog_data != 0).any(axis=1).values
+        ]
         base_data = base_data.loc[dlog_index]
         dlog_data = dlog_data.loc[dlog_index]
         grown_data = grown_data.loc[dlog_index]
@@ -314,9 +346,13 @@ def _write_comparisons(
                     # Order index so the first 2 columns are zone ID and zone name
                     index = list(data.index.names)
                     index.remove(name_column)
-                    data = data.reorder_levels([index[0], name_column, *index[1:]])
+                    data = data.reorder_levels(
+                        [index[0], name_column, *index[1:]]
+                    )
 
-                data.to_excel(excel, sheet_name=f"{name} - {field.name}")
+                data.to_excel(
+                    excel, sheet_name=f"{name} - {field.name}"
+                )
 
     LOG.info("Written: %s", excel_path)
 
@@ -335,7 +371,10 @@ def _comparison_heatmaps(
     data: pd.DataFrame = getattr(comparison, comparison_attribute)
 
     plot_data = geodata.merge(
-        data.reset_index(), on=zoning.col_name, how="left", validate="1:1"
+        data.reset_index(),
+        on=zoning.col_name,
+        how="left",
+        validate="1:1",
     )
 
     for column in data.columns:
@@ -349,7 +388,9 @@ def _comparison_heatmaps(
             legend_title=f"{data_name.title()} {column}",
             # bins=np.concatenate([neg_bins, pos_bins]),
             zoomed_bounds=plots.Bounds(290000, 340000, 550000, 670000),
-            missing_kwds=dict(color=(1, 0.75, 0.75, 1), label="No Developments"),
+            missing_kwds=dict(
+                color=(1, 0.75, 0.75, 1), label="No Developments"
+            ),
         )
 
         file = output_folder / f"{title} - {column}.png"
@@ -357,7 +398,9 @@ def _comparison_heatmaps(
         LOG.info("Written: %s", file)
 
 
-def main(params: DLogTEComparisonParameters, init_logger: bool = True) -> None:
+def main(
+    params: DLogTEComparisonParameters, init_logger: bool = True
+) -> None:
     """Produce comparisons between D-Log and grown base trip ends.
 
     Base trip ends are grown by 1% annually.
@@ -385,7 +428,9 @@ def main(params: DLogTEComparisonParameters, init_logger: bool = True) -> None:
             "Running D-Log Trip End Comparisons",
             log_version=True,
         )
-        nd_log.capture_warnings(file_handler_args=dict(log_file=log_file))
+        nd_log.capture_warnings(
+            file_handler_args=dict(log_file=log_file)
+        )
         LOG.info("Log file saved to %s", log_file)
 
     LOG.debug("Input parameters:\n%s", params.to_yaml())
@@ -396,7 +441,9 @@ def main(params: DLogTEComparisonParameters, init_logger: bool = True) -> None:
         :, [zone_meta.shapefile_id_col, "geometry"]
     ]
     geodata = geodata.rename(
-        columns={zone_meta.shapefile_id_col: comparison_zone_system.col_name}
+        columns={
+            zone_meta.shapefile_id_col: comparison_zone_system.col_name
+        }
     )
 
     for te_type in nd.TripEndType:
@@ -419,13 +466,16 @@ def main(params: DLogTEComparisonParameters, init_logger: bool = True) -> None:
             comparisons = _compare_dvectors(
                 dlog,
                 factored_base,
-                nd.get_segmentation_level(COMPARISON_SEGMENTATIONS[te_type.trip_origin]),
+                nd.get_segmentation_level(
+                    COMPARISON_SEGMENTATIONS[te_type.trip_origin]
+                ),
                 comparison_zone_system,
             )
             comparison_folder = output_folder / "raw comparisons"
             _write_comparisons(
                 comparisons,
-                comparison_folder / f"{te_type.formatted()} - {year}.xlsx",
+                comparison_folder
+                / f"{te_type.formatted()} - {year}.xlsx",
                 comparison_zone_system,
             )
 
@@ -433,7 +483,9 @@ def main(params: DLogTEComparisonParameters, init_logger: bool = True) -> None:
                 base,
                 dlog,
                 factored_base,
-                nd.get_segmentation_level(COMPARISON_SEGMENTATIONS[te_type.trip_origin]),
+                nd.get_segmentation_level(
+                    COMPARISON_SEGMENTATIONS[te_type.trip_origin]
+                ),
                 comparison_zone_system,
             )
             growth_folder = output_folder / "growth comparisons"
@@ -444,7 +496,10 @@ def main(params: DLogTEComparisonParameters, init_logger: bool = True) -> None:
             )
 
             for name in ("total", "purpose", "mode"):
-                plot_folder = comparison_folder / f"{te_type.formatted()} {year} - heatmaps"
+                plot_folder = (
+                    comparison_folder
+                    / f"{te_type.formatted()} {year} - heatmaps"
+                )
                 plot_folder.mkdir(exist_ok=True)
                 _comparison_heatmaps(
                     geodata,
@@ -455,7 +510,10 @@ def main(params: DLogTEComparisonParameters, init_logger: bool = True) -> None:
                     f"{te_type.formatted()} {year} {name.title()}",
                 )
 
-                plot_folder = growth_folder / f"{te_type.formatted()} {year} - heatmaps"
+                plot_folder = (
+                    growth_folder
+                    / f"{te_type.formatted()} {year} - heatmaps"
+                )
                 plot_folder.mkdir(exist_ok=True)
 
                 for attribute in (

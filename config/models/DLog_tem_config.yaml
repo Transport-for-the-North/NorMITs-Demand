@@ -1,13 +1,13 @@
 raw_dlog_landuse:
-  population: C:\Users\ukmjb018\OneDrive - WSP O365\WSP_Projects\TfN NorMITs Demand Partner 2022\DLog Matrix\Inputs\D-LIT outputs\residential_msoa_build_out.csv
-  employment: C:\Users\ukmjb018\OneDrive - WSP O365\WSP_Projects\TfN NorMITs Demand Partner 2022\DLog Matrix\Inputs\D-LIT outputs\employment_msoa_build_out.csv
+  population: I:\Data\D-Log\DLIT\Outputs\residential_msoa_build_out.csv
+  employment: I:\Data\D-Log\DLIT\Outputs\employment_msoa_build_out.csv
 notem_import_home: I:\NorMITs Demand\import\NoTEM
 base_year: 2018
 years:
   - 2025
   - 2030
 # Iteration and location of the base TfN land use, which was used in D-Lit
-land_use_import_home: C:\Users\ukmjb018\OneDrive - WSP O365\WSP_Projects\TfN NorMITs Demand Partner 2022\DLog Matrix\Outputs
+land_use_import_home: I:\
 land_use_iteration:
   base: iter3e
   future: iter3e
@@ -16,6 +16,6 @@ import_version:
   hb_attraction: 2.3
   nhb_production: 3.0
 trip_end_iteration: 1.0
-export_folder: C:\Users\ukmjb018\OneDrive - WSP O365\WSP_Projects\TfN NorMITs Demand Partner 2022\DLog Matrix\Outputs\DLogTEM
+export_folder: E:\dlit\DLIT_output\dlog_tem
 scenario: DLOG
-overwrite_intermediary_landuse: false
+overwrite_intermediary_landuse: true
