@@ -19,10 +19,11 @@ sys.path.append(".")
 # pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
 from normits_demand.models.forecasting import (
+    edge_replicant,
     tem_forecast,
     ntem_forecast,
     tempro_trip_ends,
-    forecast_cnfg,
+    forecast_cnfg
 )
 from normits_demand import logging as nd_log
 from normits_demand.reports import ntem_forecast_checks
@@ -108,6 +109,8 @@ def main(
         params = forecast_cnfg.TEMForecastParameters.load_yaml(config_path)
     elif model == forecast_cnfg.ForecastModel.NTEM:
         params = forecast_cnfg.NTEMForecastParameters.load_yaml(config_path)
+    elif model == forecast_cnfg.ForecastModel.EDGE:
+        params = forecast_cnfg.EDGEParameters.load_yaml(config_path)
     else:
         raise NotImplementedError(f"forecasting not implemented for {model.value}")
 
@@ -132,6 +135,8 @@ def main(
 
     if model in (forecast_cnfg.ForecastModel.TRIP_END, forecast_cnfg.ForecastModel.NTEM):
         tem_forecasting(params, model)
+    elif model == forecast_cnfg.ForecastModel.EDGE:
+        edge_replicant.run_edge_growth(params)
 
     LOG.info(
         "%s forecasting completed in %s",

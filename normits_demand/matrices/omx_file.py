@@ -82,8 +82,9 @@ class OMXFile(tables.File):
                 self.root._v_attrs["OMX_VERSION"].decode()
             )
             self._shape = self._check_shape(self.root._v_attrs["SHAPE"])
-            self._zones = self._check_zones(self.get_node("/lookup", "ZoneNames"))
+            self._zones = self._get_zones()
             self.get_node("/data")
+
         elif self.mode == "w":
             if omx_version is None or shape is None:
                 raise ValueError(
@@ -92,6 +93,7 @@ class OMXFile(tables.File):
                 )
             self.omx_version = omx_version
             self.shape = shape
+
         else:
             raise ValueError(f"unknown mode '{mode}' should be one of 'r', 'a', 'r+' or 'w'")
 
@@ -130,6 +132,15 @@ class OMXFile(tables.File):
                 f"zones should be a 1D array with length {self.shape[0]} not {value.shape}"
             )
         return value
+
+    def _get_zones(self) -> np.ndarray:
+        """Attempt to read ZoneNames from file, otherwise uses sequential zones from 1."""
+        try:
+            zones = self.get_node("/lookup", "ZoneNames")
+        except tables.NoSuchNodeError:
+            zones = np.arange(1, self.shape[0] + 1)
+
+        return self._check_zones(zones)
 
     @property
     def omx_version(self) -> str:

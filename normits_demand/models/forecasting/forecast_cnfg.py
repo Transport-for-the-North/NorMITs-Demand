@@ -10,12 +10,19 @@ from normits_demand.utils import config_base, ntem_extractor
 from normits_demand.core import enumerations as nd_enum
 
 
+EXPORT_PATH_FORMAT = (
+    "{export_folder}/Forecasting/{forecast_model}/"
+    "{forecast_version}/iter{iteration}/{scenario}/{mode}"
+)
+
+
 class ForecastModel(nd_enum.IsValidEnumWithAutoNameLower):
     """Forecasting models available."""
 
     NTEM = enum.auto()
     TRIP_END = enum.auto()
     EFS = enum.auto()
+    EDGE = enum.auto()
 
 
 class ForecastParameters(config_base.BaseConfig):
@@ -27,10 +34,7 @@ class ForecastParameters(config_base.BaseConfig):
     base_year: int
     future_years: list[int]
     export_folder: Path
-    export_path_fmt: str = (
-        "{export_folder}/Forecasting/{forecast_model}/"
-        "{forecast_version}/iter{iteration}/{scenario}/{mode}"
-    )
+    export_path_fmt: str = EXPORT_PATH_FORMAT
     matrix_import_path: Path
     hb_purposes_needed: list[int]
     nhb_purposes_needed: list[int]
@@ -193,6 +197,95 @@ class NTEMForecastParameters(ForecastParameters):
             raise ValueError("expected scenario for NTEM version > 7.2")
 
         return self._build_export_path("NTEM", str(self.ntem_parameters.version), scenario)
+
+
+class EDGEParameters(config_base.BaseConfig):
+    """Parameters for the EDGE forecasting model."""
+
+    forecast_years: dict[int, Any]
+
+    # Used to build output path
+    iteration: str
+    forecast_version: str = "1.0"
+    forecast_scenario: str
+    export_folder: Path
+    assignment_model: nd.AssignmentModel = nd.AssignmentModel.NORMS
+
+    # Input folders
+    matrices_to_grow_dir: Path
+
+    # Input files
+    demand_segments: Path
+    flow_cat_path: Path
+    ticket_type_splits_path: Path
+    norms_to_edge_stns_path: Path
+    cube_exe: Path
+
+    # EDGE file
+    edge_flows_path: Path
+
+    # EDGE outputs
+    edge_growth_dir: Path
+
+    _export_path_fmt: str = pydantic.PrivateAttr(EXPORT_PATH_FORMAT)
+
+    @classmethod
+    @pydantic.validator("edge_growth_dir", "matrices_to_grow_dir")
+    def _check_folder(cls, value: Path) -> Path:
+        if not value.is_dir():
+            raise ValueError(f"folder doesn't exist: {value}")
+        return value
+
+    @classmethod
+    @pydantic.validator(
+        "demand_segments",
+        "flow_cat_path",
+        "ticket_type_splits_path",
+        "norms_to_edge_stns_path",
+        "edge_flows_path",
+        "cube_exe",
+    )
+    def _check_file(cls, value: Path) -> Path:
+        if not value.is_file():
+            raise ValueError(f"file doesn't exist: {value}")
+        return value
+
+    @pydantic.root_validator(skip_on_failure=True)
+    def _check_factors_path(  # pylint: disable=no-self-argument
+        cls, values: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Check the factors Path."""
+        path: Path = values["edge_growth_dir"]
+        if not path.is_dir():
+            raise ValueError(f"EDGE factors folder doesn't exist: {path}")
+
+        return values
+
+    @pydantic.root_validator(skip_on_failure=True)
+    def _check_factors_file(  # pylint: disable=no-self-argument
+        cls, values: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Check the factors file."""
+        for forecast_year in values["forecast_years"]:
+            path: Path = Path(values["edge_growth_dir"]) / values["forecast_years"][
+                forecast_year
+            ].format(**values)
+            if not path.is_file():
+                raise ValueError(f"EDGE factors file doesn't exist: {path}")
+
+        return values
+
+    @property
+    def export_path(self) -> Path:
+        """Build export path from `export_path_fmt`."""
+        return Path(
+            self._export_path_fmt.format(
+                forecast_model=ForecastModel.EDGE.value,
+                scenario=self.forecast_scenario,
+                mode=self.assignment_model.get_mode().get_name(),
+                **self.dict(),
+            )
+        )
 
 
 # TODO(MB) Function to create an example config file
