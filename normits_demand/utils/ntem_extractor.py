@@ -124,7 +124,7 @@ class TemproParser:
         self.ntem_trans_path = os.path.join(config_path, 'tblLookupGeo76.csv')
         self.ntem_code_zone_trans_path = os.path.join(config_path, 'ntem_code_to_zone.csv')
         self.ntem_lad_trans_path = os.path.join(config_path, 'ntem_lad_pop_weighted_lookup.csv')
-        self.ntem_to_msoa_path = r"I:\NorMITs Demand\import\zone_translation\weighted\ntem_msoa_pop_weighted_lookup.csv"
+        self.ntem_to_msoa_path = r"I:\NorMITs Demand\import\ntem_extractor\zone translation\ntem_msoa_pop_weighted_lookup.csv"
 
     def get_available_dbs(self):
         """

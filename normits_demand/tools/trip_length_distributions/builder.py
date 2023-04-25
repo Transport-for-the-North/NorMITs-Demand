@@ -15,6 +15,7 @@ import os
 import pathlib
 
 from typing import Any
+from typing import Optional
 
 # Third Party
 import numpy as np
@@ -42,11 +43,12 @@ LOG = nd_log.get_logger(__name__)
 
 class TripLengthDistributionBuilder:
     # Class constants
-    _running_log_fname = "1. input_params.txt"
-    _full_export_fname = "2. full_export.csv"
-    _seg_report_fname = "3. {seg_name}_report.csv"
-    _agg_full_export_fname = "4. aggregated_full_export.csv"
-    _agg_seg_report_fname = "5. {seg_name}_aggregated_report.csv"
+    _input_params_fname = "1. input_params.txt"
+    _running_log_fname = "2. run_log.log"
+    _full_export_fname = "3. full_export.csv"
+    _seg_report_fname = "4. {seg_name}_report.csv"
+    _agg_full_export_fname = "5. aggregated_full_export.csv"
+    _agg_seg_report_fname = "6. {seg_name}_aggregated_report.csv"
 
     _distribution_fname_desc = "cost_distribution"
 
@@ -202,19 +204,26 @@ class TripLengthDistributionBuilder:
         return output_dat
 
     @staticmethod
-    def _distribution_smoothing_interpolation(distribution: np.ndarray, segment_params: dict[str, Any]) -> np.ndarray:
+    def _distribution_smoothing_interpolation(
+        distribution: np.ndarray,
+        mean_costs: np.ndarray,
+        segment_params: dict[str, Any],
+    ) -> np.ndarray:
         """Uses interpolation to smooth gaps in a distribution"""
         # Check for zero values
         if (distribution == 0).sum() <= 0:
             return distribution
 
-        # Trim the 0s off the edges
+        # Get indexes of non-zero values in array
         min_ = np.argwhere(distribution).min().squeeze()
         max_ = np.argwhere(distribution).max().squeeze()
-        trimmed = distribution[min_:max_+1]     # Plus one as not inclusive
+
+        # Trim away non-zero values - max + 1 one as not inclusive
+        trimmed_dist = distribution[min_:max_+1]
+        trimmed_cost = mean_costs[min_:max_+1]
 
         # Check again for 0s within data
-        if (trimmed == 0).sum() <= 0:
+        if (trimmed_dist == 0).sum() <= 0:
             return distribution
 
         # If here, we need to interpolate something
@@ -226,7 +235,7 @@ class TripLengthDistributionBuilder:
 
         # Interpolate, and fit back in place
         interpolated = distribution.copy()
-        interpolated[min_:max_+1] = math_utils.interpolate_array(trimmed)
+        interpolated[min_:max_+1] = math_utils.interpolate_array(trimmed_dist, trimmed_cost)
         return interpolated
 
     @staticmethod
@@ -303,7 +312,6 @@ class TripLengthDistributionBuilder:
         trip_count_col = self.trip_count_col if trip_count_col is None else trip_count_col
         trip_dist_col = self.trip_distance_col if trip_dist_col is None else trip_dist_col
         data = data.copy()
-        sample_size = data[trip_count_col].values.sum()
 
         # Convert distances to output cost
         conv_factor = self.input_cost_units.get_conversion_factor(output_cost_units)
@@ -314,7 +322,7 @@ class TripLengthDistributionBuilder:
         all_band_mean_cost = list()
         for lower, upper in func_utils.pairwise(band_edges):
             # Filter to trips in this band
-            mask = (data[trip_dist_col] > lower) & (data[trip_dist_col] < upper)
+            mask = (data[trip_dist_col] >= lower) & (data[trip_dist_col] < upper)
             band_data = data[mask].copy()
 
             # Calculate mean miles and total trips
@@ -337,7 +345,8 @@ class TripLengthDistributionBuilder:
         # Check for gaps. If gaps, then interpolate - add this as an option
         if inter_smoothing:
             np_all_band_trips = self._distribution_smoothing_interpolation(
-                distribution=np.array(np_all_band_trips),
+                distribution=np_all_band_trips,
+                mean_costs=np_all_band_mean_cost,
                 segment_params=segment_params,
             )
 
@@ -448,6 +457,55 @@ class TripLengthDistributionBuilder:
             fname = f"{band_or_seg_name}.csv"
             name = band_or_seg_name
         return fname, name
+
+    @staticmethod
+    def _dynamically_pick_log_bins(
+        max_value: float,
+        n_bin_pow: float = 0.51,
+        log_factor: float = 2.2,
+        final_val: float = 1500.0,
+    ) -> np.ndarray:
+        """Dynamically choose the bins based on the maximum possible value
+
+        `n_bins = int(max_value ** n_bin_pow)` Is used to choose the number of bins to use.
+        `bins = (np.array(range(2, n_bins)) / n_bins) ** log_factor * max_value` is
+        used to determine the bins being used
+
+        Parameters
+        ----------
+        max_value:
+            The maximum value seen in the data, this is used to scale the bins
+            appropriately.
+
+        n_bin_pow:
+            The power used to determine the number of bins to use, depending
+            on the max value. This value should be between 0 and 1.
+            `max_value ** n_bin_pow`.
+
+        log_factor:
+            The log factor to determine the bin spacing. This should be a
+            value greater than 1. Larger numbers mean closer bins
+
+        final_val:
+            The final value to append to the end of the bin edges. The second
+            to last bin will be less than `max_value`, therefore this number
+            needs to be larger than the max value.
+
+        Returns
+        -------
+        bin_edges:
+            A numpy array of bin edges.
+        """
+        if final_val < max_value:
+            raise ValueError("`final_val` is lower than `max_value`.")
+
+        n_bins = int(max_value ** n_bin_pow)
+        bins = (np.array(range(2, n_bins + 1)) / n_bins) ** log_factor * max_value
+        bins = np.floor(bins)
+
+        # Add the first and last item
+        bins = np.insert(bins, 0, 0)
+        return np.insert(bins, len(bins), final_val)
 
     def build_output_path(
         self,
@@ -642,7 +700,7 @@ class TripLengthDistributionBuilder:
             tp_copy=True,
         )
 
-        output_path = output_path / self._running_log_fname
+        output_path = output_path / self._input_params_fname
         with open(output_path, "w") as f:
             f.write(run_log_str)
 
@@ -732,7 +790,7 @@ class TripLengthDistributionBuilder:
             copy_definition_name=copy_definition_name,
         )
 
-        output_path = output_path / self._running_log_fname
+        output_path = output_path / self._input_params_fname
         with open(output_path, "w") as f:
             f.write(run_log_str)
 
@@ -886,13 +944,13 @@ class TripLengthDistributionBuilder:
         segment_params: dict[str, Any],
         segment_naming_order: list[str],
         raw_tld_data: pd.DataFrame,
-        band_edges: np.ndarray,
         cost_units: nd_core.CostUnits,
         sample_threshold: int,
         inter_smoothing: bool,
         trip_count_col: str,
         trip_dist_col: str,
         tld_name_template: str,
+        band_edges: Optional[np.ndarray] = None,
         segment_types: dict[str, type] = None,
     ) -> tuple[cost.CostDistribution, str, dict[str, str]]:
         """Build a single trip length distribution
@@ -916,7 +974,8 @@ class TripLengthDistributionBuilder:
 
         band_edges:
             The edges to use for each band in the distribution. E.g.
-            `[1, 2, 3]` defines 2 bands: 1->2 and 2->3
+            `[1, 2, 3]` defines 2 bands: 1->2 and 2->3. if None, the bands
+            are dynamically chosen based on the maximum value.
 
         cost_units:
             The cost units to use in the output. The data will be multiplied
@@ -960,6 +1019,13 @@ class TripLengthDistributionBuilder:
             A dictionary of names and log values, logging the performance of
             the trip_length_distribution generation
         """
+
+        # Build the band edges if not given
+        if band_edges is None:
+            conv_factor = self.input_cost_units.get_conversion_factor(cost_units)
+            band_edges = self._dynamically_pick_log_bins(
+                max_value=np.max(raw_tld_data[self.trip_distance_col]) * conv_factor
+            )
 
         # Filter to data for this segment
         data_subset = raw_tld_data.copy()
@@ -1008,10 +1074,10 @@ class TripLengthDistributionBuilder:
     def build_tld(
         self,
         tld_data: pd.DataFrame,
-        bands: pd.DataFrame,
         segmentation: nd_core.SegmentationLevel,
         cost_units: nd_core.CostUnits,
         sample_threshold: int,
+        bands: Optional[pd.DataFrame] = None,
         trip_count_col: str = None,
         trip_dist_col: str = None,
         inter_smoothing: bool = False,
@@ -1025,7 +1091,8 @@ class TripLengthDistributionBuilder:
             Dataframe of pre-processed trip length distribution data
 
         bands: pd.DataFrame:
-            Dataframe of bands with headings lower, upper
+            Dataframe of bands with headings lower, upper. If None, then the
+            bands will be dynamically chosen
 
         segmentation:
             The segmentation to generate a group of TLDs for
@@ -1067,9 +1134,12 @@ class TripLengthDistributionBuilder:
         trip_dist_col = self.trip_distance_col if trip_dist_col is None else trip_dist_col
 
         # Calculate band edges
-        min_bounds = bands["lower"].values
-        max_bounds = bands["upper"].values
-        band_edges = np.array([min_bounds[0]] + max_bounds.tolist())
+        if bands is not None:
+            min_bounds = bands["lower"].values
+            max_bounds = bands["upper"].values
+            band_edges = np.array([min_bounds[0]] + max_bounds.tolist())
+        else:
+            band_edges = None
 
         # Generate a TLD for each segment
         name_to_distribution = dict()
@@ -1187,11 +1257,11 @@ class TripLengthDistributionBuilder:
         self,
         bands_name: str,
         segmentation: nd_core.SegmentationLevel,
-        aggregated_exclude_segments: list[str],
         geo_area: tld_enums.GeoArea,
         sample_period: tld_enums.SampleTimePeriods,
         trip_filter_type: tld_enums.TripFilter,
         cost_units: nd_core.CostUnits = nd_core.CostUnits.MILES,
+        aggregated_exclude_segments: Optional[list[str]] = None,
         inter_smoothing: bool = False,
         check_sample_size: int = 400,
         min_sample_size: int = 40,
@@ -1211,6 +1281,7 @@ class TripLengthDistributionBuilder:
         ----------
         bands_name:
             Name of the bands to use, as named in self.bands_definition_dir
+            Set to "dynamic" for dynamic, exponential bands.
             # TODO(BT): Make this an object
 
         segmentation:
@@ -1297,8 +1368,11 @@ class TripLengthDistributionBuilder:
         LOG.info(f"Generating TLD at: {tld_out_path}...")
 
         # Try read in the bands and segmentation
-        fname, bands_name = self._get_name_and_fname(bands_name)
-        bands = pd.read_csv(os.path.join(self.bands_definition_dir, fname))
+        if bands_name.strip().lower() == "dynamic":
+            bands = None
+        else:
+            fname, bands_name = self._get_name_and_fname(bands_name)
+            bands = pd.read_csv(os.path.join(self.bands_definition_dir, fname))
 
         # Map categories not classified in classified build
         # Car availability
@@ -1326,38 +1400,48 @@ class TripLengthDistributionBuilder:
             "inter_smoothing": inter_smoothing,
         }
 
-        # Build tld dictionary, return a proper name for the distributions
-        name_to_distribution, sample_size_log, full_export = self.build_tld(**tld_kwargs)
+        log_path = tld_out_path / self._running_log_fname
+        with nd.logging.TemporaryLogFile(LOG, log_path):
+            # Build tld dictionary, return a proper name for the distributions
+            name_to_distribution, sample_size_log, full_export = self.build_tld(**tld_kwargs)
 
-        # build the aggregated TLDs, and link back to above
-        agg_name_to_dist, name_to_agg_name, agg_sample_size_log, agg_full_export = self.build_aggregated_tlds(
-            aggregated_exclude_segments=aggregated_exclude_segments,
-            **tld_kwargs
-        )
-
-        # Are any of the sample sizes small enough for further checks?
-        for name, dist in name_to_distribution.items():
-            if dist.sample_size > check_sample_size:
-                continue
-
-            LOG.info(
-                "%s has a sample size less than %s."
-                % (name, check_sample_size)
-            )
-            if not self._passing_tld_checks(dist):
-                LOG.info(
-                    "%s did not pass further checks. Reverting to "
-                    "aggregated TLD." % name
+            # build the aggregated TLDs, and link back to above
+            if aggregated_exclude_segments is not None:
+                agg_tld_data = self.build_aggregated_tlds(
+                    aggregated_exclude_segments=aggregated_exclude_segments,
+                    **tld_kwargs
                 )
-                # Adjust the aggregated dist to sample size of this segment
-                mask = sample_size_log['name'] == name
-                sample_size = sample_size_log[mask]["records"].squeeze()
-
-                agg_dist = agg_name_to_dist[name_to_agg_name[name]]
-                agg_dist.sample_size = sample_size
-                name_to_distribution[name] = agg_dist
             else:
-                LOG.info("%s looks OK. Leaving as is." % name)
+                agg_tld_data = (None, None, None, None)
+            agg_name_to_dist, name_to_agg_name, agg_sample_size_log, agg_full_export = agg_tld_data
+
+            # Are any of the sample sizes small enough for further checks?
+            for name, dist in name_to_distribution.items():
+                if dist.sample_size > check_sample_size:
+                    continue
+
+                LOG.info(f"{name} has a sample size less than {check_sample_size}.")
+                if self._passing_tld_checks(dist):
+                    LOG.info(f"{name} looks OK. Leaving as is.")
+                else:
+                    if agg_name_to_dist is not None:
+                        LOG.info(
+                            f"{name} did not pass further checks. Reverting to aggregated TLD."
+                        )
+                        # Adjust the aggregated dist to sample size of this segment
+                        mask = sample_size_log['name'] == name
+                        sample_size = sample_size_log[mask]["records"].squeeze()
+
+                        agg_dist = agg_name_to_dist[name_to_agg_name[name]]
+                        agg_dist.sample_size = sample_size
+                        name_to_distribution[name] = agg_dist
+                    else:
+                        LOG.warning(
+                            f"{name} did not pass further checks, and there is no "
+                            f"aggregated TLD to fall back to. Use {name} with "
+                            f"caution! Try setting `aggregated_exclude_segments` "
+                            f"to generate aggregated TLDs."
+                        )
 
         # ## WRITE THINGS OUT ## #
         # Write the run log
@@ -1370,7 +1454,7 @@ class TripLengthDistributionBuilder:
             cost_units=cost_units,
         )
 
-        output_path = tld_out_path / self._running_log_fname
+        output_path = tld_out_path / self._input_params_fname
         with open(output_path, "w") as f:
             f.write(run_log_str)
 
@@ -1379,16 +1463,18 @@ class TripLengthDistributionBuilder:
         report_path = tld_out_path / seg_report_fname
         file_ops.safe_dataframe_to_csv(sample_size_log, report_path, index=False)
 
-        agg_seg_report_fname = self._agg_seg_report_fname.format(seg_name=segmentation.name)
-        report_path = tld_out_path / agg_seg_report_fname
-        file_ops.safe_dataframe_to_csv(agg_sample_size_log, report_path, index=False)
+        if agg_sample_size_log is not None:
+            agg_seg_report_fname = self._agg_seg_report_fname.format(seg_name=segmentation.name)
+            report_path = tld_out_path / agg_seg_report_fname
+            file_ops.safe_dataframe_to_csv(agg_sample_size_log, report_path, index=False)
 
         # Write final compiled tlds
         full_export_path = tld_out_path / self._full_export_fname
         file_ops.safe_dataframe_to_csv(full_export, full_export_path, index=False)
 
-        full_export_path = tld_out_path / self._agg_full_export_fname
-        file_ops.safe_dataframe_to_csv(agg_full_export, full_export_path, index=False)
+        if agg_full_export is not None:
+            full_export_path = tld_out_path / self._agg_full_export_fname
+            file_ops.safe_dataframe_to_csv(agg_full_export, full_export_path, index=False)
 
         # Write individual tlds
         for name, tld in name_to_distribution.items():
