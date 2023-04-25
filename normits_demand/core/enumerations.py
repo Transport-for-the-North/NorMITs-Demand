@@ -109,9 +109,7 @@ class Mode(IsValidEnum):
         }
 
         if self not in conversion:
-            raise nd.NormitsDemandError(
-                f"No definition exists for {self} mode_values"
-            )
+            raise nd.NormitsDemandError(f"No definition exists for {self} mode_values")
 
         return conversion[self]
 
@@ -205,8 +203,7 @@ class TripOrigin(IsValidEnum):
                 return to
 
         raise ValueError(
-            f"No TripOrigin exists with the value '{val}'. "
-            f"Expected one of: {valid_values}"
+            f"No TripOrigin exists with the value '{val}'. " f"Expected one of: {valid_values}"
         )
 
 
@@ -248,16 +245,11 @@ class UserClass(IsValidEnumWithAutoNameLower):
         }
 
         # Add combinations of other values
-        b_val = (
-            p_dict[UserClass.HB_BUSINESS]
-            + p_dict[UserClass.NHB_BUSINESS]
-        )
+        b_val = p_dict[UserClass.HB_BUSINESS] + p_dict[UserClass.NHB_BUSINESS]
         p_dict[UserClass.BUSINESS] = b_val
 
         p_dict[UserClass.COMMUTE] = p_dict[UserClass.HB_COMMUTE]
-        p_dict[UserClass.OTHER] = (
-            p_dict[UserClass.HB_OTHER] + p_dict[UserClass.NHB_OTHER]
-        )
+        p_dict[UserClass.OTHER] = p_dict[UserClass.HB_OTHER] + p_dict[UserClass.NHB_OTHER]
 
         return p_dict
 
@@ -327,10 +319,7 @@ class CostUnits(IsValidEnum):
 
     @staticmethod
     def _miles_to_m_factor() -> float:
-        return (
-            CostUnits._miles_to_km_factor()
-            * CostUnits._km_to_m_factor()
-        )
+        return CostUnits._miles_to_km_factor() * CostUnits._km_to_m_factor()
 
     @staticmethod
     def _m_to_km_factor() -> float:
@@ -379,9 +368,7 @@ class AssignmentModel(IsValidEnum):
             if model.value.lower() == name:
                 return model
 
-        raise ValueError(
-            f"'{model_name}' isn't a valid AssignmentModel"
-        )
+        raise ValueError(f"'{model_name}' isn't a valid AssignmentModel")
 
     def get_name(self) -> str:
         """Return the model name."""

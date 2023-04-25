@@ -178,7 +178,7 @@ class NoTEM(NoTEMExportPaths):
             generate_nhb: bool = False,
             generate_nhb_production: bool = False,
             generate_nhb_attraction: bool = False,
-            non_resi_path: bool = True,
+            non_resi_path: bool = True, # TODO Remove this temporary parameter, see issue #981
             ) -> None:
         """
         Runs the notem trip end models based on the criteria given.

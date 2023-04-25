@@ -161,17 +161,17 @@ class HBAttractionModel(HBAttractionModelPaths):
             Defaults to consts.PROCESS_COUNT.
         """
         # Check that the paths we need exist!
-        _ = [
-            file_ops.check_file_exists(x, find_similar=True) for x in employment_paths.values()
-        ]
-        _ = [file_ops.check_file_exists(x) for x in production_balance_paths.values()]
-        _ = file_ops.check_file_exists(trip_weights_path, find_similar=True)
+        for path in employment_paths.values():
+            file_ops.check_file_exists(path, find_similar=True)
+
+        for path in production_balance_paths.values():
+            file_ops.check_file_exists(path)
+
+        file_ops.check_file_exists(trip_weights_path, find_similar=True)
 
         if constraint_paths is not None:
-            _ = [
-                file_ops.check_file_exists(x, find_similar=True)
-                for x in constraint_paths.values()
-            ]
+            for path in constraint_paths.values():
+                file_ops.check_file_exists(path, find_similar=True)
 
         # Validate that we have data for all the years we're running for
         for year in employment_paths.keys():
