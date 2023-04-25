@@ -19,7 +19,7 @@ there.
 
 Below, a brief summary of patches made since the previous version can be found.
 
-### V0.5.3
+### V0.6.0
 - Tools
   - Traveller Segment Tool
     - Added parameters for custom input matrix segmentation
