@@ -149,6 +149,14 @@ class Bounds(NamedTuple):
     max_y: int
 
 
+@dataclasses.dataclass
+class LegendLabelValues:
+    lower: float
+    upper: float
+    lower_formatted: str
+    upper_formatted: str
+
+
 ##### FUNCTIONS #####
 def match_files(folder: Path, pattern: re.Pattern) -> Iterator[tuple[dict[str, str], Path]]:
     """Iterate through all files in folder which match `pattern`.
@@ -503,6 +511,30 @@ def get_geo_data(file: GeoSpatialFile) -> gpd.GeoSeries:
     return geo["geometry"]
 
 
+def _extract_legend_values(text: str) -> Optional[LegendLabelValues]:
+    """Extract numbers and formatted strings from legend label."""
+    number = r"\d+(?:\.\d*)?"
+    units = r"%?"
+    pattern = (
+        rf"(?P<lower>{number})"
+        rf"(?P<lower_units>{units})"
+        r"[,\s]+"  # separator
+        rf"(?P<upper>{number})"
+        rf"(?P<upper_units>{units})"
+    )
+
+    match: Optional[re.Match] = re.search(pattern, text)
+    if match is None:
+        return match
+
+    return LegendLabelValues(
+        lower=float(match.group("lower")),
+        upper=float(match.group("upper")),
+        lower_formatted="{}{}".format(match.group("lower"), match.group("lower_units")),
+        upper_formatted="{}{}".format(match.group("upper"), match.group("upper_units")),
+    )
+
+
 def _heatmap_figure(
     geodata: gpd.GeoDataFrame,
     column_name: str,
@@ -513,7 +545,8 @@ def _heatmap_figure(
     positive_negative_colormaps: bool = False,
     legend_label_fmt: str = "{:.1%}",
     legend_title: Optional[str] = None,
-    zoomed_bounds: Optional[Bounds] = Bounds(300000, 340000, 550000, 650000),
+    zoomed_bounds: Optional[Bounds] = Bounds(300000, 150000, 600000, 500000),
+    missing_kwds: Optional[dict[str, Any]] = None,
 ):
     legend_kwargs = dict(title_fontsize="large", fontsize="medium")
 
@@ -537,6 +570,9 @@ def _heatmap_figure(
     if analytical_area is not None:
         axes[0].legend(**legend_kwargs, loc="upper right")
 
+    # Drop nan
+    # geodata = geodata.loc[~geodata[column_name].isna()]
+
     kwargs = dict(
         column=column_name,
         cmap="viridis_r",
@@ -547,15 +583,18 @@ def _heatmap_figure(
             **legend_kwargs,
             loc="upper right",
         ),
-        # missing_kwds={
-        #     "color": "lightgrey",
-        #     "edgecolor": "red",
-        #     "hatch": "///",
-        #     "label": "Missing values",
-        # },
+        missing_kwds={
+            "color": "lightgrey",
+            "edgecolor": "red",
+            "hatch": "///",
+            "label": "Missing values",
+        },
         linewidth=0.0,
         edgecolor="black",
     )
+
+    if missing_kwds is not None:
+        kwargs["missing_kwds"].update(missing_kwds)
 
     if positive_negative_colormaps:
         # Calculate, and apply, separate colormaps for positive and negative values
@@ -586,6 +625,7 @@ def _heatmap_figure(
                 color=cmap.colours.values,
                 linewidth=kwargs["linewidth"],
                 edgecolor=kwargs["edgecolor"],
+                missing_kwds=kwargs["missing_kwds"],
             )
         axes[ncols - 1].legend(handles=cmap.legend_elements, **kwargs.pop("legend_kwds"))
 
@@ -616,25 +656,23 @@ def _heatmap_figure(
         # Format legend text
         legend = axes[ncols - 1].get_legend()
         for label in legend.get_texts():
-            text = label.get_text()
-            values = [float(s.strip()) for s in text.split(",")]
-            lower = np.floor(values[0] * 100) / 100
-            upper = np.ceil(values[1] * 100) / 100
-            # Set to 0 if 0 or -0
-            lower = 0 if lower == 0 else lower
-            upper = 0 if upper == 0 else upper
+            # Don't attempt to rename the label
+            # if it isn't in the expected format
+            values = _extract_legend_values(label.get_text())
+            if values is None:
+                continue
 
-            if lower == -np.inf:
-                text = f"< {upper:.0%}"
-            elif upper == np.inf:
-                text = f"> {lower:.0%}"
+            if values.lower == -np.inf:
+                label.set_text(f"< {values.upper_formatted}")
+            elif values.upper == np.inf:
+                label.set_text(f"> {values.lower_formatted}")
             else:
-                text = f"{lower:.0%} - {upper:.0%}"
-            label.set_text(text)
+                label.set_text(f"{values.lower_formatted} - {values.upper_formatted}")
 
-    if ncols == 2 and zoomed_bounds is not None:
+    if ncols == 2:
         axes[1].set_xlim(zoomed_bounds.min_x, zoomed_bounds.max_x)
         axes[1].set_ylim(zoomed_bounds.min_y, zoomed_bounds.max_y)
+
     axes[ncols - 1].annotate(
         "Source: NorMITs Demand",
         xy=(0.9, 0.01),

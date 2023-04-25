@@ -13,6 +13,8 @@ Initialiser for all logging in normits_demand
 from __future__ import annotations
 
 # Builtins
+from __future__ import annotations
+
 import logging
 from typing import Any, Dict
 
@@ -338,6 +340,7 @@ class TemporaryLogFile:
 
     def __init__(self, logger: logging.Logger, log_file: nd.PathLike, **kwargs) -> None:
         """Add temporary log file handler to `logger`.
+
         Parameters
         ----------
         logger : logging.Logger

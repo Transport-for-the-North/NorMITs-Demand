@@ -315,7 +315,7 @@ class NPIEREDDIEFormatLandUse(NamedTuple):
 
     population: pd.DataFrame
     employment: pd.DataFrame
-    industry_employment: pd.DataFrame
+    industry_employment: Optional[pd.DataFrame] = None
     wap: Optional[pd.DataFrame] = None
     wor: Optional[pd.DataFrame] = None
 
@@ -489,6 +489,50 @@ def translate_tfn_landuse(
     return translated.groupby([to_zone.col_name] + index_columns).sum()
 
 
+def load_landuse(
+    path: pathlib.Path,
+    from_zone: nd.ZoningSystem,
+    to_zone: nd.ZoningSystem,
+    index_columns: list[str],
+) -> pd.DataFrame:
+    """Load landuse from `path` and convert zone system.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Path to land use CSV.
+    from_zone : nd.ZoningSystem
+        Zone system to convert from.
+    to_zone : nd.ZoningSystem
+        Zone system to convert to.
+    index_columns : list[str]
+        Names of columns to be consider indices.
+
+    Returns
+    -------
+    pd.DataFrame
+        Converted land use data.
+    """
+    data = file_ops.read_df(path)
+
+    # Convert to DVectors and translate to LAD
+    years = []
+    for col in data.columns:
+        year = re.match(r"\d{2,4}", col)
+        if year is None:
+            continue
+        years.append(year.group(0))
+
+    landuse = translate_tfn_landuse(
+        data.loc[:, [from_zone.col_name] + index_columns + years],
+        from_zone,
+        to_zone,
+        index_columns,
+        years,
+    )
+    return landuse
+
+
 def load_landuse_tfn(npier_parameters: NPIERScenarioLandUseParameters) -> LandUseData:
     """Load NPIER landuse data.
 
@@ -516,23 +560,7 @@ def load_landuse_tfn(npier_parameters: NPIERScenarioLandUseParameters) -> LandUs
     for pop_emp, index_columns in landuse_indices.items():
         file = npier_parameters.land_use_files[pop_emp]
         LOG.info("Loading %s land use data from '%s'", pop_emp.value, file)
-        data = file_ops.read_df(file)
-
-        # Convert to DVectors and translate to LAD
-        years = []
-        for col in data.columns:
-            year = re.match(r"\d{2,4}", col)
-            if year is None:
-                continue
-            years.append(year.group(0))
-
-        landuse[pop_emp] = translate_tfn_landuse(
-            data.loc[:, [from_zone.col_name] + index_columns + years],
-            from_zone,
-            to_zone,
-            index_columns,
-            years,
-        )
+        landuse[pop_emp] = load_landuse(file, from_zone, to_zone, index_columns)
 
     return LandUseData(npier_parameters.scenario, landuse)
 
@@ -1787,13 +1815,16 @@ def write_factored_north_eddie_format(
 
 
 def _npier_eddie_comparison(
-    eddie: pd.DataFrame, npier: pd.DataFrame, join_columns: list[str]
+    eddie: pd.DataFrame,
+    npier: pd.DataFrame,
+    join_columns: list[str],
+    npier_name: str = "NPIER",
 ) -> pd.DataFrame:
     for col in join_columns:
         if col not in eddie.index.names:
             raise KeyError(f"column '{col}' missing from EDDIE index")
         if col not in npier.index.names:
-            raise KeyError(f"column '{col}' missing from NPIER index")
+            raise KeyError(f"column '{col}' missing from {npier_name} index")
 
     eddie = eddie.copy()
     npier = npier.copy()
@@ -1805,7 +1836,7 @@ def _npier_eddie_comparison(
     columns = [c for c in npier.columns if c in eddie.columns]
     eddie = eddie.loc[:, columns]
 
-    npier.columns = pd.MultiIndex.from_product((("NPIER",), npier.columns))
+    npier.columns = pd.MultiIndex.from_product(((npier_name,), npier.columns))
     eddie.columns = pd.MultiIndex.from_product((("EDDIE",), eddie.columns))
 
     merged = npier.merge(
@@ -1813,16 +1844,18 @@ def _npier_eddie_comparison(
     )
     missing = merged["_merge"] != "both"
     if missing.any():
-        raise ValueError(f"merging NPIER to EDDIE found {missing.sum()} missing LAs")
+        raise ValueError(f"merging {npier_name} to EDDIE found {missing.sum()} missing LAs")
     merged = merged.drop(columns="_merge")
 
-    diff = merged.loc[:, "NPIER"].subtract(merged.loc[:, "EDDIE"])
+    diff = merged.loc[:, npier_name].subtract(merged.loc[:, "EDDIE"])
     diff = diff.dropna(axis=1, how="all")
-    diff.columns = pd.MultiIndex.from_product((("NPIER - EDDIE",), diff.columns))
+    diff.columns = pd.MultiIndex.from_product(((f"{npier_name} - EDDIE",), diff.columns))
 
-    perc_diff = merged.loc[:, "NPIER"].divide(merged.loc[:, "EDDIE"]) - 1
+    perc_diff = merged.loc[:, npier_name].divide(merged.loc[:, "EDDIE"]) - 1
     perc_diff = perc_diff.dropna(axis=1, how="all")
-    perc_diff.columns = pd.MultiIndex.from_product((("NPIER / EDDIE (%)",), perc_diff.columns))
+    perc_diff.columns = pd.MultiIndex.from_product(
+        ((f"{npier_name} / EDDIE (%)",), perc_diff.columns)
+    )
 
     return pd.concat([merged, diff, perc_diff], axis=1)
 
@@ -1847,6 +1880,7 @@ def _npier_eddie_heatmap(
         n_bins=5,
         positive_negative_colormaps=True,
         legend_label_fmt=legend_label_fmt,
+        zoomed_bounds=plots.Bounds(290000, 345000, 555000, 660000),
     )
 
     fig.savefig(output_file)
@@ -1859,6 +1893,7 @@ def _npier_eddie_comparisons_heatmaps_plot(
     output_folder: pathlib.Path,
     regions: Optional[gpd.GeoSeries] = None,
     lads: Optional[gpd.GeoSeries] = None,
+    npier_name: str = "NPIER",
 ) -> None:
     # TODO(MB) Split function up
     year_keys = (
@@ -1878,7 +1913,7 @@ def _npier_eddie_comparisons_heatmaps_plot(
         data.columns = data.columns.droplevel(0)
         return data.reset_index(), key.replace("_", " ").title(), years
 
-    for plot_type in ("NPIER - EDDIE", "NPIER / EDDIE (%)"):
+    for plot_type in (f"{npier_name} - EDDIE", f"{npier_name} / EDDIE (%)"):
         fname = plot_type.replace("/", "div")
         plot_folder = output_folder / fname
         plot_folder.mkdir(exist_ok=True)
@@ -1891,6 +1926,9 @@ def _npier_eddie_comparisons_heatmaps_plot(
                 "employment",
                 "industry_employment",
             ):
+                if data_key not in comparisons:
+                    continue
+
                 data, data_name, data_years = get_grouped_data(data_key)
 
                 for year in data_years:
@@ -1945,6 +1983,7 @@ def npier_eddie_comparison_heatmaps(
     plot_years: list[int],
     regions: Optional[gpd.GeoSeries] = None,
     lads: Optional[gpd.GeoSeries] = None,
+    npier_name: str = "NPIER",
 ):
     """Create heatmaps comparing original and NPIER adjusted EDDIE.
 
@@ -1966,6 +2005,8 @@ def npier_eddie_comparison_heatmaps(
     lads : gpd.GeoSeries, optional
         Geospatial data for the LADs, if not given
         LAD plots aren't created.
+    npier_name : str, defaul "NPIER"
+        Name of the NPIER data columns.
     """
     LOG.info("Creating %s", output_folder.stem)
     output_folder.mkdir(exist_ok=True)
@@ -1975,33 +2016,46 @@ def npier_eddie_comparison_heatmaps(
     for nm in ("population", "employment"):
         eddie_data: pd.DataFrame = eddie.data[LandUseType(nm)]
         npier_data: pd.DataFrame = getattr(npier, nm)
-        comparisons[nm] = _npier_eddie_comparison(eddie_data, npier_data, ["local_authority"])
+        comparisons[nm] = _npier_eddie_comparison(
+            eddie_data, npier_data, ["local_authority"], npier_name
+        )
         comparisons[f"{nm}_regions"] = _npier_eddie_comparison(
-            eddie_data.groupby("region").sum(), npier_data.groupby("region").sum(), ["region"]
+            eddie_data.drop(columns="_merge", errors="ignore").groupby("region").sum(),
+            npier_data.drop(columns="_merge", errors="ignore").groupby("region").sum(),
+            ["region"],
+            npier_name,
         )
 
     for nm in ("industry",):
         eddie_data = getattr(disaggregated_eddie, f"employment_{nm}")
         npier_data = getattr(npier, f"{nm}_employment")
+
+        if npier_data is None or eddie_data is None:
+            continue
+
         comparisons[f"{nm}_employment"] = _npier_eddie_comparison(
-            eddie_data, npier_data, ["local_authority", f"cebr_{nm}"]
+            eddie_data, npier_data, ["local_authority", f"cebr_{nm}"], npier_name
         )
         comparisons[f"{nm}_employment_regions_split"] = _npier_eddie_comparison(
             eddie_data.groupby(["region", f"cebr_{nm}"]).sum(),
             npier_data.groupby(["region", f"cebr_{nm}"]).sum(),
             ["region", f"cebr_{nm}"],
+            npier_name,
         )
         comparisons[f"{nm}_employment_regions"] = _npier_eddie_comparison(
-            eddie_data.groupby("region").sum(), npier_data.groupby("region").sum(), ["region"]
+            eddie_data.groupby("region").sum(),
+            npier_data.groupby("region").sum(),
+            ["region"],
+            npier_name,
         )
 
     if npier.wap is not None:
         comparisons["wap"] = _npier_eddie_comparison(
-            disaggregated_eddie.wap, npier.wap, ["region"]
+            disaggregated_eddie.wap, npier.wap, ["region"], npier_name
         )
     if npier.wor is not None:
         comparisons["wor"] = _npier_eddie_comparison(
-            disaggregated_eddie.wor, npier.wor, ["region"]
+            disaggregated_eddie.wor, npier.wor, ["region"], npier_name
         )
 
     # Add LAD IDs to disaggregated employment
@@ -2015,6 +2069,9 @@ def npier_eddie_comparison_heatmaps(
         )
     )
     for nm in ("industry_employment",):
+        if nm not in comparisons:
+            continue
+
         lad_ids = _simplify_strings(
             comparisons[nm].index.get_level_values("local_authority").to_series()
         ).replace(lad_id_lookup)
@@ -2023,7 +2080,7 @@ def npier_eddie_comparison_heatmaps(
 
     LOG.info("Writing comparison spreadsheets & heatmaps")
     for nm, df in comparisons.items():
-        excel_file = output_folder / f"NPIER_EDDIE_inputs_comparison-{nm}.xlsx"
+        excel_file = output_folder / f"{npier_name}_EDDIE_inputs_comparison-{nm}.xlsx"
         # pylint: disable=abstract-class-instantiated
         with pd.ExcelWriter(excel_file, engine="openpyxl") as excel:
             # pylint: enable=abstract-class-instantiated
@@ -2033,7 +2090,7 @@ def npier_eddie_comparison_heatmaps(
         LOG.info("Written: %s", excel_file)
 
     _npier_eddie_comparisons_heatmaps_plot(
-        comparisons, plot_years, output_folder, regions, lads
+        comparisons, plot_years, output_folder, regions, lads, npier_name
     )
 
 
