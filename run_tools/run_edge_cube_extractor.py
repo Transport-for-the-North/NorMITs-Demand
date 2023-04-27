@@ -24,7 +24,7 @@ from normits_demand.matrices.cube_mat_converter import CUBEMatConverter
 # ## USER INPUTS ## #
 # cube catalogue setup
 CUBE_EXE = Path(r"C:\Program Files\Citilabs\CubeVoyager\VOYAGER.EXE")
-CUBE_CAT_PATH = Path(r"C:\NorMITs\NorTMS_T3_Model_v8.16b")
+CUBE_CAT_PATH = Path(r"I:\Transfer\IS\NorTMS_T3_Model_v8.17")
 CAT_RUN_DIR = "Runs"
 CUBE_RUN_ID = "ILP_2018"
 
@@ -32,18 +32,20 @@ CUBE_RUN_ID = "ILP_2018"
 # EXPORT_MATRICES to export NoRMS base matrices into CSVs
 # EXPORT_TLC to NoRMS <-> MOIRA TLCs Lookup
 EXPORT_MATRICES = True
-EXPORT_TLC = True
+EXPORT_TLC = False
 
 # Input files
-TLC_OVERWRITE_PATH = Path(r"C:\NorMITs\inputs\TLC_Overwrite_EDGE.csv")
+# TLC_OVERWRITE_PATH = Path(r"C:\NorMITs\inputs\TLC_Overwrite_EDGE.csv")
 
 # Output location
-OUT_PATH = Path(r"C:\NorMITs\outputs")
+OUT_PATH = Path(r"E:\edge")
 
 # ## CONSTANTS ## #
 # logger
 LOG_FILE = "Export_BaseMatrices_Logfile.Log"
-LOG = nd_log.get_logger(f"{nd_log.get_package_logger_name()}.run_edge_cube_extractor")
+LOG = nd_log.get_logger(
+    f"{nd_log.get_package_logger_name()}.run_edge_cube_extractor"
+)
 
 # Derived from inputs
 CUBE_CAT_RUN_PATH = CUBE_CAT_PATH / CAT_RUN_DIR / CUBE_RUN_ID
@@ -62,7 +64,8 @@ def run_extractor():
         stns_tlc = edge_cube_extractor.stnzone_2_stn_tlc(
             CUBE_CAT_RUN_PATH / "Inputs/Network/Station_Connectors.csv",
             CUBE_CAT_RUN_PATH / "Inputs/Network/TfN_Rail_Nodes.csv",
-            CUBE_CAT_RUN_PATH / "Inputs/Network/External_Station_Nodes.csv",
+            CUBE_CAT_RUN_PATH
+            / "Inputs/Network/External_Station_Nodes.csv",
             tlc_overwrite,
         )
 
@@ -79,23 +82,30 @@ def run_extractor():
         for period in periods:
             # read distance matrix
             file_ops.check_file_exists(
-                CUBE_CAT_RUN_PATH / f"Outputs/BaseAssign/{period}_stn2stn_costs.csv"
+                CUBE_CAT_RUN_PATH
+                / f"Outputs/{period}_stn2stn_costs.csv"
             )
             shutil.copy2(
-                CUBE_CAT_RUN_PATH / f"Outputs/BaseAssign/{period}_stn2stn_costs.csv",
+                CUBE_CAT_RUN_PATH
+                / f"Outputs/{period}_stn2stn_costs.csv",
                 OUT_PATH / f"{period}_stn2stn_costs.csv",
             )
 
             # read iRSj props
             file_ops.check_file_exists(
-                CUBE_CAT_RUN_PATH / f"Outputs/BaseAssign/{period}_iRSj_probabilities.h5"
+                CUBE_CAT_RUN_PATH
+                / f"Outputs/{period}_iRSj_probabilities.h5"
             )
             shutil.copy2(
-                CUBE_CAT_RUN_PATH / f"Outputs/BaseAssign/{period}_iRSj_probabilities.h5",
+                CUBE_CAT_RUN_PATH
+                / f"Outputs/{period}_iRSj_probabilities.h5",
                 OUT_PATH / f"{period}_iRSj_probabilities.h5",
             )
 
-            LOG.info("Distance and Probability matrices for period %s has been copied", period)
+            LOG.info(
+                "Distance and Probability matrices for period %s has been copied",
+                period,
+            )
 
         # PT Demand to time periods F/T
         edge_cube_extractor.pt_demand_from_to(
@@ -104,9 +114,13 @@ def run_extractor():
         LOG.info("NoRMS matrices converted to OMX successfully")
 
         # export to OMX
-        for period in tqdm(periods, desc="Time Periods Loop ", unit="Period"):
+        for period in tqdm(
+            periods, desc="Time Periods Loop ", unit="Period"
+        ):
             c_m = CUBEMatConverter(CUBE_EXE)
-            c_m.mat_2_omx(OUT_PATH / f"PT_{period}.MAT", OUT_PATH, f"PT_{period}")
+            c_m.mat_2_omx(
+                OUT_PATH / f"PT_{period}.MAT", OUT_PATH, f"PT_{period}"
+            )
             # delete .MAT files
             os.remove(f"{OUT_PATH}/PT_{period}.MAT")
             LOG.info(f"{period} NoRMS matrices exported to CSVs")
@@ -125,7 +139,9 @@ def main():
         instantiate_msg="Export NoRMS Base Demand",
         log_version=True,
     )
-    nd_log.capture_warnings(file_handler_args=dict(log_file=OUT_PATH / LOG_FILE))
+    nd_log.capture_warnings(
+        file_handler_args=dict(log_file=OUT_PATH / LOG_FILE)
+    )
     run_extractor()
 
 
