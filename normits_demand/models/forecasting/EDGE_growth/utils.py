@@ -5,13 +5,16 @@ Utils for edge growth, such as conversions between matrix formats.
 # Built-Ins
 import itertools
 import pathlib
+
 # Third Party
 import numpy as np
 import pandas as pd
+
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
 # Local imports here
 from normits_demand.matrices.cube_mat_converter import CUBEMatConverter
+
 # pylint: enable=import-error,wrong-import-position
 
 # # # CONSTANTS # # #
@@ -56,9 +59,12 @@ def long_mx_2_wide_mx(
         value = mx_df.columns[2]
 
     # reshape to wide numpy matrix
-    wide_mx = mx_df.pivot_table(index=row, columns=col, values=value).values
+    wide_mx = mx_df.pivot_table(
+        index=row, columns=col, values=value
+    ).values
 
     return wide_mx
+
 
 def wide_mx_2_long_mx(
     mx_np: np.ndarray,
@@ -89,7 +95,11 @@ def wide_mx_2_long_mx(
         pandas long matrix
     """
     # get omx array to pandas dataframe and reset productions
-    mx_df = pd.DataFrame(mx_np).reset_index().rename(columns={"index": rows})
+    mx_df = (
+        pd.DataFrame(mx_np)
+        .reset_index()
+        .rename(columns={"index": rows})
+    )
     # melt DF to get attractions vector
     mx_df = mx_df.melt(id_vars=[rows], var_name=cols, value_name=values)
     # adjust zone number
@@ -98,7 +108,10 @@ def wide_mx_2_long_mx(
 
     return mx_df
 
-def transpose_matrix(mx_df: pd.DataFrame, stations: bool = False) -> pd.DataFrame:
+
+def transpose_matrix(
+    mx_df: pd.DataFrame, stations: bool = False
+) -> pd.DataFrame:
     """Transpose a matrix O<>D/P<>A.
 
     Parameters
@@ -130,6 +143,7 @@ def transpose_matrix(mx_df: pd.DataFrame, stations: bool = False) -> pd.DataFram
 
     return mx_df
 
+
 def expand_matrix(
     mx_df: pd.DataFrame, zones: int = 1300, stations: bool = False
 ) -> pd.DataFrame:
@@ -155,37 +169,59 @@ def expand_matrix(
         od_cols = ["from_stn_zone_id", "to_stn_zone_id"]
     # create empty dataframe
     expanded_mx = pd.DataFrame(
-        list(itertools.product(range(1, zones + 1), range(1, zones + 1))),
+        list(
+            itertools.product(range(1, zones + 1), range(1, zones + 1))
+        ),
         columns=od_cols,
     )
     # get first matrix
-    expanded_mx = expanded_mx.merge(mx_df, how="outer", on=od_cols).fillna(0)
+    expanded_mx = expanded_mx.merge(
+        mx_df, how="outer", on=od_cols
+    ).fillna(0)
     return expanded_mx
+
 
 def filter_stations(stations_lookup, df):
     """
     I think this is redundant as the df is left merged to stations lookup on
     both filtered columns.
     """
-    used_stations = stations_lookup['STATIONCODE'].to_list()
-    df = df.loc[(df['ZoneCodeFrom'].isin(used_stations)) & (df['ZoneCodeTo'].isin(used_stations))]
+    used_stations = stations_lookup["STATIONCODE"].to_list()
+    df = df.loc[
+        (df["ZoneCodeFrom"].isin(used_stations))
+        & (df["ZoneCodeTo"].isin(used_stations))
+    ]
     return df
 
-def merge_to_stations(stations_lookup, df):
+
+def merge_to_stations(stations_lookup, df, left_from, left_to):
     factors_df = df.merge(
-        stations_lookup, how="left", left_on=["ZoneCodeFrom"], right_on=["STATIONCODE"]
-    )
-    # rename
-    factors_df = factors_df.rename(columns={"stn_zone_id": "from_stn_zone_id"})
-    # merge on destination/attraction
-    factors_df = factors_df.merge(
-        stations_lookup, how="left", left_on=["ZoneCodeTo"], right_on=["STATIONCODE"]
+        stations_lookup,
+        how="right",
+        left_on=[left_from],
+        right_on=["STATIONCODE"],
     )
     # rename
     factors_df = factors_df.rename(
-        columns={"stn_zone_id": "to_stn_zone_id", "Demand_rate": "Demand"}
+        columns={"stn_zone_id": "from_stn_zone_id"}
+    )
+    # merge on destination/attraction
+    factors_df = factors_df.merge(
+        stations_lookup,
+        how="right",
+        left_on=[left_to],
+        right_on=["STATIONCODE"],
+    )
+    factors_df.dropna(axis=0, inplace=True)
+    # rename
+    factors_df = factors_df.rename(
+        columns={
+            "stn_zone_id": "to_stn_zone_id",
+            "Demand_rate": "Demand",
+        }
     )
     return factors_df
+
 
 def convert_csv_2_mat(
     norms_segments: list,
@@ -212,10 +248,15 @@ def convert_csv_2_mat(
     mats_dict = {}
     # create a dictionary of matrices and their paths
     for segment in norms_segments:
-        mats_dict[segment] = pathlib.Path(output_folder, f"{fcast_year}_24Hr_{segment}.csv")
+        mats_dict[segment] = pathlib.Path(
+            output_folder, f"{fcast_year}_24Hr_{segment}.csv"
+        )
 
     # call CUBE convertor class
     c_m = CUBEMatConverter(cube_exe)
     c_m.csv_to_mat(
-        1300, mats_dict, pathlib.Path(output_folder, f"PT_24hr_Demand_{fcast_year}.MAT"), 1
+        1300,
+        mats_dict,
+        pathlib.Path(output_folder, f"PT_24hr_Demand_{fcast_year}.MAT"),
+        1,
     )

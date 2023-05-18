@@ -9,10 +9,12 @@ Splits by tag flow and purpose exist, which need to be converted to splits by st
 # Third Party
 import pandas as pd
 import numpy as np
+
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
 # Local imports here
 import utils
+
 # pylint: enable=import-error,wrong-import-position
 
 # # # CONSTANTS # # #
@@ -24,12 +26,13 @@ def append_dist(row):
     """
     Convert TAG_NonDist to TAG_Flow
     """
-    if row['Distance'] < 25:
-        return row['TAG_NonDist'].lower() + ' <25 miles'
-    elif row['Distance'] < 100:
-        return row['TAG_NonDist'].lower() + ' 25 to 100 miles'
+    if row["Distance"] < 25:
+        return row["TAG_NonDist"].lower() + " <25 miles"
+    elif row["Distance"] < 100:
+        return row["TAG_NonDist"].lower() + " 25 to 100 miles"
     else:
-        return row['TAG_NonDist'].lower() + ' 100 + miles'
+        return row["TAG_NonDist"].lower() + " 100 + miles"
+
 
 def produce_ticketype_splitting_matrices(
     edge_flows: pd.DataFrame,
@@ -59,15 +62,25 @@ def produce_ticketype_splitting_matrices(
         numpy ticket type splitting matrices for all purposes and ticket types
     """
     # normalize flows
-    edge_flows.loc[:, "FlowCatName"] = edge_flows["FlowCatName"].str.lower()
-    flows_lookup.loc[:, "FlowCatName"] = flows_lookup["FlowCatName"].str.lower()
-    flows_lookup.loc[:, "TAG_NonDist"] = flows_lookup["TAG_NonDist"].str.lower()
-    ticket_split_proportions.loc[:, "TAG_Flow"] = ticket_split_proportions[
-        "TAG_Flow"
+    edge_flows.loc[:, "FlowCatName"] = edge_flows[
+        "FlowCatName"
     ].str.lower()
+    flows_lookup.loc[:, "FlowCatName"] = flows_lookup[
+        "FlowCatName"
+    ].str.lower()
+    flows_lookup.loc[:, "TAG_NonDist"] = flows_lookup[
+        "TAG_NonDist"
+    ].str.lower()
+    ticket_split_proportions.loc[
+        :, "TAG_Flow"
+    ] = ticket_split_proportions["TAG_Flow"].str.lower()
     # add flows TAG category
-    edge_flows = edge_flows.merge(flows_lookup, how="left", on=["FlowCatName"])
-    edge_flows = utils.merge_to_stations(stations_lookup, edge_flows)
+    edge_flows = edge_flows.merge(
+        flows_lookup, how="left", on=["FlowCatName"]
+    )
+    edge_flows = utils.merge_to_stations(
+        stations_lookup, edge_flows, "FromCaseZoneID", "ToCaseZoneID"
+    )
     # keep needed columns
     edge_flows = edge_flows[
         [
@@ -81,20 +94,38 @@ def produce_ticketype_splitting_matrices(
     ]
     # merge distance to flows
     edge_flows = edge_flows.merge(
-        distance_mx, how="left", on=["from_stn_zone_id", "to_stn_zone_id"]
+        distance_mx,
+        how="left",
+        on=["from_stn_zone_id", "to_stn_zone_id"],
     )
     # rename
-    edge_flows = edge_flows.rename(columns={"tran_distance": "Distance"})
+    edge_flows = edge_flows.rename(
+        columns={"tran_distance": "Distance"}
+    )
     # fill na
     edge_flows = edge_flows.fillna(0)
     # allocate distance bands
-    edge_flows['TAG_Flow'].apply(append_dist, axis=1)
+    edge_flows["TAG_Flow"] = edge_flows[
+        edge_flows["TAG_NonDist"].str.startswith("outside south east")
+    ].apply(append_dist, axis=1)
+    edge_flows["TAG_Flow"] = edge_flows["TAG_Flow"].fillna(
+        edge_flows["TAG_NonDist"]
+    )
+    # edge_flows.rename(columns={"TAG_NonDist": "TAG_Flow"})
     # keep needed columns
     edge_flows = edge_flows[
-        ["from_stn_zone_id", "to_stn_zone_id", "FromCaseZoneID", "ToCaseZoneID", "TAG_Flow"]
+        [
+            "from_stn_zone_id",
+            "to_stn_zone_id",
+            "FromCaseZoneID",
+            "ToCaseZoneID",
+            "TAG_Flow",
+        ]
     ]
     # merge ticket split factors
-    edge_flows = edge_flows.merge(ticket_split_proportions, how="left", on=["TAG_Flow"])
+    edge_flows = edge_flows.merge(
+        ticket_split_proportions, how="left", on=["TAG_Flow"]
+    )
     # get list of purposes
     purposes = edge_flows["Purpose"].drop_duplicates().to_list()
     # create matrices dictionary
@@ -103,14 +134,22 @@ def produce_ticketype_splitting_matrices(
     for purpose in purposes:
         for ticketype in ["F", "R", "S"]:
             # get current purpose
-            mx_df = edge_flows.loc[edge_flows["Purpose"] == purpose].reset_index(drop=True)
+            mx_df = edge_flows.loc[
+                edge_flows["Purpose"] == purpose
+            ].reset_index(drop=True)
             # keep needed columns
-            mx_df = mx_df[["from_stn_zone_id", "to_stn_zone_id", ticketype]]
+            mx_df = mx_df[
+                ["from_stn_zone_id", "to_stn_zone_id", ticketype]
+            ]
             # rename
             mx_df = mx_df.rename(columns={ticketype: "Demand"})
             # expand matrix
-            mx_df = utils.expand_matrix(mx_df, zones=len(stations_lookup), stations=True)
+            mx_df = utils.expand_matrix(
+                mx_df, zones=len(stations_lookup), stations=True
+            )
             # convert to numpy and add to matrices dictionary
-            splitting_matrices[f"{purpose}_{ticketype}"] = utils.long_mx_2_wide_mx(mx_df)
+            splitting_matrices[
+                f"{purpose}_{ticketype}"
+            ] = utils.long_mx_2_wide_mx(mx_df)
 
     return splitting_matrices

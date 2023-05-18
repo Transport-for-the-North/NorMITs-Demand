@@ -9,10 +9,12 @@ Formats matrices, including converting to numpy arrays, and infills missing grow
 # Third Party
 import pandas as pd
 import numpy as np
+
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
 # Local imports here
 import utils
+
 # pylint: enable=import-error,wrong-import-position
 
 # # # CONSTANTS # # #
@@ -45,14 +47,16 @@ def prepare_growth_matrices(
         numpy growth matrices for all purposes and ticket types
     """
     # get list of purposes
-    purposes = demand_segments_df["Purpose"].unique().to_list()
+    purposes = demand_segments_df["Purpose"].unique()
     # get list of ticket types
-    ticket_types = factors_df["TicketType"].unique().to_list()
+    ticket_types = factors_df["TicketType"].unique()
     # create a list of model used stations
     # factors_df = utils.filter_stations(stations_lookup, factors_df)
     # add stns zones
     # merge on origin/production
-    factors_df = utils.merge_to_stations(stations_lookup, factors_df)
+    factors_df = utils.merge_to_stations(
+        stations_lookup, factors_df, "ZoneCodeFrom", "ZoneCodeTo"
+    )
     # keep needed columns
     factors_df = factors_df[
         [
@@ -72,12 +76,19 @@ def prepare_growth_matrices(
     # get growth matrices for each purpose/ticket type
     for purpose in purposes:
         for ticket_type in ticket_types:
-            mx_df = factors_df[["from_stn_zone_id", "to_stn_zone_id", "Demand"]].loc[
-                (factors_df["purpose"] == purpose) & (factors_df["TicketType"] == ticket_type)
+            mx_df = factors_df[
+                ["from_stn_zone_id", "to_stn_zone_id", "Demand"]
+            ].loc[
+                (factors_df["purpose"] == purpose)
+                & (factors_df["TicketType"] == ticket_type)
             ]
             # expand matrix
-            mx_df = utils.expand_matrix(mx_df, zones=len(stations_lookup), stations=True)
-            growth_matrices[f"{purpose}_{ticket_type}"] = utils.long_mx_2_wide_mx(mx_df)
+            mx_df = utils.expand_matrix(
+                mx_df, zones=len(stations_lookup), stations=True
+            )
+            growth_matrices[
+                f"{purpose}_{ticket_type}"
+            ] = utils.long_mx_2_wide_mx(mx_df)
 
     return growth_matrices
 
@@ -113,17 +124,15 @@ def fill_missing_factors(
     """
     # order S: R, F
     filled_growth_matrices = {}
-    missing_factors = {'f': {},
-                       'r': {},
-                       's': {}}
+    missing_factors = {"f": {}, "r": {}, "s": {}}
     for purpose in purposes:
         # get current matrices
         f_mx = growth_matrices[f"{purpose}_F"]
         r_mx = growth_matrices[f"{purpose}_R"]
         s_mx = growth_matrices[f"{purpose}_S"]
-        missing_factors['f'][purpose] = np.argwhere(f_mx == 0)
-        missing_factors['r'][purpose] = np.argwhere(r_mx == 0)
-        missing_factors['s'][purpose] = np.argwhere(s_mx == 0)
+        missing_factors["f"][purpose] = np.argwhere(f_mx == 0)
+        missing_factors["r"][purpose] = np.argwhere(r_mx == 0)
+        missing_factors["s"][purpose] = np.argwhere(s_mx == 0)
         # create a new growth factors matrix and fill from other ticket types
         # full - order F > R > S
         filled_f_mx = np.where(f_mx == 0, r_mx, f_mx)
