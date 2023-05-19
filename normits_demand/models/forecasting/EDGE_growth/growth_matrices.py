@@ -71,7 +71,7 @@ def prepare_growth_matrices(
     ]
 
     # create matrices dictionary
-    growth_matrices = {}
+    growth_matrices = {i: {} for i in purposes}
 
     # get growth matrices for each purpose/ticket type
     for purpose in purposes:
@@ -86,8 +86,8 @@ def prepare_growth_matrices(
             mx_df = utils.expand_matrix(
                 mx_df, zones=len(stations_lookup), stations=True
             )
-            growth_matrices[
-                f"{purpose}_{ticket_type}"
+            growth_matrices[purpose][
+                ticket_type
             ] = utils.long_mx_2_wide_mx(mx_df)
 
     return growth_matrices
@@ -123,16 +123,16 @@ def fill_missing_factors(
         dict of missing factors. Gives indices of missing factors.
     """
     # order S: R, F
-    filled_growth_matrices = {}
-    missing_factors = {"f": {}, "r": {}, "s": {}}
+    filled_growth_matrices = {i: {} for i in purposes}
+    missing_factors = {i: {} for i in purposes}
     for purpose in purposes:
         # get current matrices
-        f_mx = growth_matrices[f"{purpose}_F"]
-        r_mx = growth_matrices[f"{purpose}_R"]
-        s_mx = growth_matrices[f"{purpose}_S"]
-        missing_factors["f"][purpose] = np.argwhere(f_mx == 0)
-        missing_factors["r"][purpose] = np.argwhere(r_mx == 0)
-        missing_factors["s"][purpose] = np.argwhere(s_mx == 0)
+        f_mx = growth_matrices[purpose]["F"]
+        r_mx = growth_matrices[purpose]["R"]
+        s_mx = growth_matrices[purpose]["S"]
+        missing_factors[purpose]["F"] = np.argwhere(f_mx == 0)
+        missing_factors[purpose]["R"] = np.argwhere(r_mx == 0)
+        missing_factors[purpose]["S"] = np.argwhere(s_mx == 0)
         # create a new growth factors matrix and fill from other ticket types
         # full - order F > R > S
         filled_f_mx = np.where(f_mx == 0, r_mx, f_mx)
@@ -148,8 +148,8 @@ def fill_missing_factors(
         filled_s_mx = np.where(filled_s_mx == 0, 1, filled_s_mx)
 
         # append to filled matrices
-        filled_growth_matrices[f"{purpose}_F"] = filled_f_mx
-        filled_growth_matrices[f"{purpose}_R"] = filled_r_mx
-        filled_growth_matrices[f"{purpose}_S"] = filled_s_mx
+        filled_growth_matrices[purpose]["F"] = filled_f_mx
+        filled_growth_matrices[purpose]["R"] = filled_r_mx
+        filled_growth_matrices[purpose]["S"] = filled_s_mx
 
     return filled_growth_matrices, missing_factors

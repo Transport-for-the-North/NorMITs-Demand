@@ -5,6 +5,7 @@ Utils for edge growth, such as conversions between matrix formats.
 # Built-Ins
 import itertools
 import pathlib
+from typing import Tuple
 
 # Third Party
 import numpy as np
@@ -260,3 +261,115 @@ def convert_csv_2_mat(
         pathlib.Path(output_folder, f"PT_24hr_Demand_{fcast_year}.MAT"),
         1,
     )
+
+
+def zonal_from_to_stations_demand(
+    demand_mx: pd.DataFrame,
+    irsj_props: pd.DataFrame,
+    stations_count: int,
+    userclass: int,
+    to_home: bool = False,
+) -> Tuple[np.ndarray, pd.DataFrame]:
+    """Create a stn2stn matrix and produce a two way conversion lookup (zonal <> stations).
+
+    Parameters
+    ----------
+    demand_mx : pd.DataFrame
+        demand matrix dataframe
+    irsj_props : pd.DataFrame
+        iRSj split probabilities dataframe
+    stations_count : int
+        number of stations
+    userclass : int
+        segments userclass
+    to_home : bool
+        True if the demand is a ToHome demand
+
+    Returns
+    -------
+    np_mx: np.ndarray
+        numpy wide matrix
+    zonal_from_to_stns: pd.dataframe
+        zonal <> stations conversion lookup
+
+    """
+    # expand matrix
+    demand_mx = expand_matrix(demand_mx)
+    # add userclass info
+    demand_mx.loc[:, "userclass"] = userclass
+    # if ToHome demand then transpose matrix
+    if to_home:
+        demand_mx = transpose_matrix(demand_mx)
+    # merge demand matrix to iRSj probabilities
+    mx_df = demand_mx.merge(
+        irsj_props,
+        how="left",
+        on=["from_model_zone_id", "to_model_zone_id", "userclass"],
+    )
+    # find zone to zone movements with demand but no proportion
+    missing_props = mx_df.loc[
+        (mx_df["proportion"].isna()) & (mx_df["Demand"] > 0),
+        ["from_model_zone_id", "to_model_zone_id"],
+    ]
+    # rename column
+    mx_df = mx_df.rename(columns={"proportion": "stn_from_zone"})
+    # calculate movement demand proportion
+    mx_df.loc[:, "Demand"] = mx_df["Demand"] * mx_df["stn_from_zone"]
+
+    # sum stn2stn demand
+    stn2stn_mx = (
+        mx_df.groupby(["from_stn_zone_id", "to_stn_zone_id"])["Demand"]
+        .sum()
+        .reset_index()
+    )
+    # rename column
+    stn2stn_mx = stn2stn_mx.rename(
+        columns={"Demand": "stn2stn_total_demand"}
+    )
+
+    # join the stn2stn demand total to the main matrix
+    mx_df = mx_df.merge(
+        stn2stn_mx,
+        how="left",
+        on=["from_stn_zone_id", "to_stn_zone_id"],
+    )
+    # calculate stn 2 zone proportions
+    mx_df.loc[:, "stn_to_zone"] = (
+        mx_df["Demand"] / mx_df["stn2stn_total_demand"]
+    )
+
+    # create lookup dataframe
+    zonal_from_to_stns = mx_df[
+        [
+            "from_model_zone_id",
+            "from_stn_zone_id",
+            "to_stn_zone_id",
+            "to_model_zone_id",
+            "stn_from_zone",
+            "stn_to_zone",
+        ]
+    ]
+    # create stn2stn matrix dataframe
+    mx_df = mx_df[["from_stn_zone_id", "to_stn_zone_id", "Demand"]]
+    # expand matrix
+    mx_df = expand_matrix(mx_df, zones=stations_count, stations=True)
+    # group by stations
+    mx_df = (
+        mx_df.groupby(["from_stn_zone_id", "to_stn_zone_id"])["Demand"]
+        .sum()
+        .reset_index()
+    )
+    # remove no-record stations
+    mx_df = mx_df.loc[
+        (mx_df["from_stn_zone_id"] != 0)
+        & (mx_df["to_stn_zone_id"] != 0)
+    ].reset_index(drop=True)
+
+    # fill na
+    zonal_from_to_stns = zonal_from_to_stns.fillna(0)
+    mx_df = mx_df.fillna(0)
+
+    # convert to long matrix
+    np_mx = long_mx_2_wide_mx(mx_df)
+
+    return np_mx, zonal_from_to_stns

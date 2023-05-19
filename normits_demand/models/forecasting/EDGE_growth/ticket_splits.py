@@ -129,7 +129,7 @@ def produce_ticketype_splitting_matrices(
     # get list of purposes
     purposes = edge_flows["Purpose"].drop_duplicates().to_list()
     # create matrices dictionary
-    splitting_matrices = {}
+    splitting_matrices = {i: {} for i in purposes}
     # create numpy splitting matrices
     for purpose in purposes:
         for ticketype in ["F", "R", "S"]:
@@ -148,8 +148,8 @@ def produce_ticketype_splitting_matrices(
                 mx_df, zones=len(stations_lookup), stations=True
             )
             # convert to numpy and add to matrices dictionary
-            splitting_matrices[
-                f"{purpose}_{ticketype}"
+            splitting_matrices[purpose][
+                ticketype
             ] = utils.long_mx_2_wide_mx(mx_df)
 
     return splitting_matrices
