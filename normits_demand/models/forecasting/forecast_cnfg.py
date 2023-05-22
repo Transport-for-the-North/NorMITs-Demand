@@ -278,7 +278,7 @@ class EDGEParameters(config_base.BaseConfig):
     @property
     def export_path(self) -> Path:
         """Build export path from `export_path_fmt`."""
-        return Path(
+        path = Path(
             self._export_path_fmt.format(
                 forecast_model=ForecastModel.EDGE.value,
                 scenario=self.forecast_scenario,
@@ -286,6 +286,8 @@ class EDGEParameters(config_base.BaseConfig):
                 **self.dict(),
             )
         )
+        path.mkdir(exist_ok=True, parents=True)
+        return path
 
 
 # TODO(MB) Function to create an example config file

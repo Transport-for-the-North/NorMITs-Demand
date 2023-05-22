@@ -194,20 +194,25 @@ def tp_loop(
             # add to grown matrices dictionary
             factored_matrices[segment] = zonal_grown_demand_mx
 
-    overall["not grown"] = overall_not_grown_demand
-    overall["base"] = overall_base_demand
-    with open(
-        f"{params.export_folder}/{time_period}_factored_matrices.pickle",
-        "wb",
-    ) as file:
-        pickle.dump(factored_matrices, file)
-    with open(
-        f"{params.export_folder}/{time_period}_overall.pickle", "wb"
-    ) as file:
-        pickle.dump(overall, file)
-    growth_summary.to_csv(
-        f"{params.export_folder}/growth_summary_{time_period}.csv"
-    )
+    outputs = {}
+    outputs["overall_not_grown"] = overall_not_grown_demand
+    outputs["overall_base"] = overall_base_demand
+    outputs["factored"] = factored_matrices
+    outputs["summary"] = growth_summary
+
+    return outputs
+    # with open(
+    #     f"{params.export_folder}/{time_period}_factored_matrices.pickle",
+    #     "wb",
+    # ) as file:
+    #     pickle.dump(factored_matrices, file)
+    # with open(
+    #     f"{params.export_folder}/{time_period}_overall.pickle", "wb"
+    # ) as file:
+    #     pickle.dump(overall, file)
+    # growth_summary.to_csv(
+    #     f"{params.export_folder}/growth_summary_{time_period}.csv"
+    # )
 
 
 def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
@@ -304,25 +309,22 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         )
         # tp_looper(time_periods[0])
         args = [(time_period,) for time_period in time_periods]
-        concurrency.multiprocess(tp_looper, args)
-        # calculate proportion of not grown demand
-        overall_not_grown_demand = 0
-        overall_base_demand = 0
-        factored_matrices = {}
-        for tp in time_periods:
-            with open(
-                rf"E:\NorMITs Demand\{tp}_overall.pickle", "rb"
-            ) as file:
-                overall = pickle.load(file)
-                overall_not_grown_demand += overall["not grown"]
-                overall_base_demand += overall["base"]
-            with open(
-                rf"E:\NorMITs Demand\{tp}_factored_matrices.pickle",
-                "rb",
-            ) as file:
-                mx = pickle.load(file)
-                factored_matrices[tp] = mx
+        outputs = concurrency.multiprocess(
+            tp_looper, args, in_order=True
+        )
+        factored_matrices = {
+            i: j
+            for i, j in zip(
+                time_periods, [k["factored"] for k in outputs]
+            )
+        }
+        overall_not_grown_demand = sum(
+            [i["overall_not_grown"] for i in outputs]
+        )
+        overall_base_demand = sum([i["overall_base"] for i in outputs])
 
+        # calculate proportion of not grown demand
+        growth_summary = pd.concat([i["summary"] for i in outputs])
         not_grown_demand_pcent = (
             overall_not_grown_demand / overall_base_demand
         )
