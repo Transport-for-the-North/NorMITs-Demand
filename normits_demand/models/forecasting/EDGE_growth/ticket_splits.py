@@ -24,7 +24,17 @@ import utils
 # # # FUNCTIONS # # #
 def append_dist(row):
     """
-    Convert TAG_NonDist to TAG_Flow
+    Convert TAG_NonDist to TAG_Flow.
+
+    This function is designed to applied to a dataframe.
+    Parameters
+    ----------
+
+    row: The row this is applied to.
+    Returns
+    -------
+
+    An altered row.
     """
     if row["Distance"] < 25:
         return row["TAG_NonDist"].lower() + " <25 miles"

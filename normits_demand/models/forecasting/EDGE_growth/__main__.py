@@ -43,7 +43,7 @@ LOG = logging.getLogger(__name__)
 # # # CLASSES # # #
 
 # # # FUNCTIONS # # #
-def tp_loop(
+def _tp_loop(
     factored_matrices,
     params,
     edge_flows,
@@ -56,9 +56,11 @@ def tp_loop(
     growth_summary,
     time_period,
 ):
-    overall = {}
-    overall_base_demand = 0
+    """
+    Private function only called once for multiprocessing. All args are as named when read in.
+    """
     overall_not_grown_demand = 0
+    overall_base_demand = 0
     LOG.info(
         "-- Processing Time Period %s @ %s",
         time_period,
@@ -201,18 +203,6 @@ def tp_loop(
     outputs["summary"] = growth_summary
 
     return outputs
-    # with open(
-    #     f"{params.export_folder}/{time_period}_factored_matrices.pickle",
-    #     "wb",
-    # ) as file:
-    #     pickle.dump(factored_matrices, file)
-    # with open(
-    #     f"{params.export_folder}/{time_period}_overall.pickle", "wb"
-    # ) as file:
-    #     pickle.dump(overall, file)
-    # growth_summary.to_csv(
-    #     f"{params.export_folder}/growth_summary_{time_period}.csv"
-    # )
 
 
 def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
@@ -279,7 +269,11 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             purposes,
             growth_matrix_dic,
         )
-        # TODO (MI): Record where no factor or a different factor is being used and log
+        for i, j in missing_factors.items():
+            j.to_csv(
+                params.export_folder
+                / f"missing_factors_{i}_{forecast_year}.csv"
+            )
         # create empty dictionary to store matrices
         factored_matrices = {}
         factored_24hr_matrices = {}
@@ -295,7 +289,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         )
         # loop over time periods
         tp_looper = partial(
-            tp_loop,
+            _tp_loop,
             factored_matrices.copy(),
             params,
             edge_flows.copy(),
@@ -309,6 +303,8 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         )
         # tp_looper(time_periods[0])
         args = [(time_period,) for time_period in time_periods]
+        for i in time_periods:
+            tp_looper(i)
         outputs = concurrency.multiprocess(
             tp_looper, args, in_order=True
         )

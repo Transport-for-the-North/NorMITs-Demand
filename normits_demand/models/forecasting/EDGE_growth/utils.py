@@ -195,7 +195,27 @@ def filter_stations(stations_lookup, df):
     return df
 
 
-def merge_to_stations(stations_lookup, df, left_from, left_to):
+def merge_to_stations(stations_lookup: pd.DataFrame, df: pd.DataFrame, left_from: str, left_to: str):
+    """
+    Merge dataframe to stations lookup with the processing that goes with this.
+
+    Parameters
+    ----------
+
+    stations_lookup: pd.DataFrame
+        The stations lookup.
+    df: pd.DataFrame
+        The dataframe being merged to stations.
+    left_from: str
+        The name of the 'from' column df
+    left_to: str
+        The name of the 'to' column in df
+
+    Returns
+    -------
+
+    DF merged to stations_lookup and renamed.
+    """
     factors_df = df.merge(
         stations_lookup,
         how="right",
