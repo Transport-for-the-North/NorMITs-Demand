@@ -13,7 +13,7 @@ File purpose:
 # Built-Ins
 import pathlib
 import sys
-import pickle
+
 
 sys.path.append(r"E:\NorMITs-Demand")
 # Third Party
@@ -31,6 +31,7 @@ import ticket_splits
 import growth_matrices
 import apply_growth
 import utils
+import loading
 from normits_demand.utils import timing
 from normits_demand.matrices import omx_file
 from normits_demand.utils import file_ops
@@ -46,15 +47,13 @@ LOG = logging.getLogger(__name__)
 def _tp_loop(
     factored_matrices,
     params,
-    edge_flows,
     model_stations_tlcs,
-    flow_cats,
-    ticket_splits_df,
     forecast_year,
     demand_segments,
     filled_growth_matrices,
     growth_summary,
     time_period,
+    splitting_matrices
 ):
     """
     Private function only called once for multiprocessing. All args are as named when read in.
@@ -71,21 +70,6 @@ def _tp_loop(
         params.matrices_to_grow_dir
         / f"{time_period}_iRSj_probabilities.h5",
         key="iRSj",
-    )
-    dist_mx = pd.read_csv(
-        params.matrices_to_grow_dir
-        / f"{time_period}_stn2stn_costs.csv",
-        usecols=[0, 1, 4],
-    )
-    # produce ticket type splitting matrices
-    splitting_matrices = (
-        ticket_splits.produce_ticketype_splitting_matrices(
-            edge_flows,
-            model_stations_tlcs,
-            dist_mx,
-            flow_cats,
-            ticket_splits_df,
-        )
     )
     LOG.info(
         f"{'Time_Period':>12}{'Demand_Segment':>15}"
@@ -210,41 +194,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
     LOG.info("#" * 80)
     LOG.info("Started Process @ %s", timing.get_datetime())
     LOG.info("#" * 80)
-
-    # fixed objects
-    time_periods = ["AM", "IP", "PM", "OP"]
-
-    # read global input files
-    demand_segments = file_ops.read_df(params.demand_segments)
-    demand_segments.loc[:, "ToHome"] = demand_segments["ToHome"].astype(
-        bool
-    )
-    model_stations_tlcs = file_ops.read_df(
-        params.norms_to_edge_stns_path
-    )
-    ticket_splits_df = file_ops.read_df(params.ticket_type_splits_path)
-    flow_cats = file_ops.read_df(params.flow_cat_path)
-    edge_flows = file_ops.read_df(
-        params.edge_flows_path, usecols=[0, 2, 5]
-    )
-    # declare journey purposes
-    purposes = demand_segments["Purpose"].drop_duplicates().to_list()
-
-    # demand segment list groups
-    # NoRMS demand segments
-    norms_segments = (
-        demand_segments.loc[demand_segments["ModelSegment"] == 1][
-            ["Segment"]
-        ]
-        .drop_duplicates()
-        .values.tolist()
-    )
-    norms_segments = [
-        segment for sublist in norms_segments for segment in sublist
-    ]
-    # all segments
-    all_segments = demand_segments["Segment"].to_list()
-
+    globals = loading.load_globals(params)
     # loop over forecast years
     for forecast_year in params.forecast_years:
         LOG.info(
@@ -259,14 +209,14 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         )
         # produce growth matrices
         growth_matrix_dic = growth_matrices.prepare_growth_matrices(
-            demand_segments, growth_factors, model_stations_tlcs
+            globals.demand_segments, growth_factors, globals.stations_tlcs
         )
         # fill growth matrices
         (
             filled_growth_matrices,
             missing_factors,
         ) = growth_matrices.fill_missing_factors(
-            purposes,
+            globals.purposes,
             growth_matrix_dic,
         )
         for i, j in missing_factors.items():
@@ -292,26 +242,21 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             _tp_loop,
             factored_matrices.copy(),
             params,
-            edge_flows.copy(),
-            model_stations_tlcs.copy(),
-            flow_cats.copy(),
-            ticket_splits_df.copy(),
+            globals.station_tlcs,
             forecast_year,
-            demand_segments.copy(),
+            globals.demand_segments.copy(),
             filled_growth_matrices.copy(),
             growth_summary,
         )
         # tp_looper(time_periods[0])
-        args = [(time_period,) for time_period in time_periods]
-        for i in time_periods:
-            tp_looper(i)
+        args = [(time_period,) for time_period in globals.time_periods]
         outputs = concurrency.multiprocess(
             tp_looper, args, in_order=True
         )
         factored_matrices = {
             i: j
             for i, j in zip(
-                time_periods, [k["factored"] for k in outputs]
+                globals.time_periods, [k["factored"] for k in outputs]
             )
         }
         overall_not_grown_demand = sum(

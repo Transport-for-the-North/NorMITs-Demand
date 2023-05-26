@@ -203,6 +203,7 @@ class EDGEParameters(config_base.BaseConfig):
     """Parameters for the EDGE forecasting model."""
 
     forecast_years: dict[int, Any]
+    ticket_splits: Optional[Path] = None
 
     # Used to build output path
     iteration: str

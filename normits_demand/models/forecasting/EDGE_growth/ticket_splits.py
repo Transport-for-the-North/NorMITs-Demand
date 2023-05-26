@@ -5,7 +5,8 @@ Module to process ticket type splitting factors.
 Splits by tag flow and purpose exist, which need to be converted to splits by station pair.
 """
 # Built-Ins
-
+from pathlib import Path
+import pickle
 # Third Party
 import pandas as pd
 import numpy as np
@@ -163,3 +164,32 @@ def produce_ticketype_splitting_matrices(
             ] = utils.long_mx_2_wide_mx(mx_df)
 
     return splitting_matrices
+
+def splits_loop(
+    edge_flows: pd.DataFrame,
+    stations_lookup: pd.DataFrame,
+    flows_lookup: pd.DataFrame,
+    ticket_split_proportions: pd.DataFrame,
+    dist_dir: Path
+):
+    """
+    Generates splitting ticket splitting factors for a given set of inputs.
+    Automatically dumps the dict to a pickle file in the same dir as the distance
+    matrices used.
+    """
+    split_dict = {}
+    for tp in ['AM','IP','PM','OP']:
+        dist_mx = pd.read_csv(dist_dir / f"{tp}_stn2stn_costs.csv", usecols=[0, 1, 4])
+        splitting_matrices = (
+            produce_ticketype_splitting_matrices(
+                edge_flows,
+                stations_lookup,
+                dist_mx,
+                flows_lookup,
+                ticket_split_proportions,
+            )
+        )
+        split_dict[tp] = splitting_matrices
+    with open(dist_dir / "splitting_matrices.pkl", 'wb') as file:
+        pickle.dump(split_dict, file)
+    return split_dict
