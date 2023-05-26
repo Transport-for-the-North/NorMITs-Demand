@@ -7,11 +7,11 @@ future_years:
   - 2038
   - 2043
   - 2048
-export_folder: E:\ntem_outputs
+export_folder: E:\ntem_outputs\
 ntem_parameters:
   data_path: I:\Data\NTEM
   version: 8.0
-  scenario: Core
+  scenario: Regional
 matrix_import_path: I:\NorMITs Demand\import\noham\post_me\tms_seg_pa
 hb_purposes_needed:
   - 1

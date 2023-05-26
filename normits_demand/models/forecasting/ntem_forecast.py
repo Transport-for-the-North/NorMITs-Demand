@@ -716,6 +716,7 @@ def grow_all_matrices(
     matrices: NTEMImportMatrices,
     growth: TEMProTripEnds,
     output_folder: Path,
+    scenario: str = "TEM",
 ) -> None:
     """Grow all base year `matrices` to all forecast years in `trip_ends`.
 
@@ -775,7 +776,9 @@ def grow_all_matrices(
                 grow_matrix(
                     base,
                     output_folder
-                    / matrices.output_filename(hb, purp, yr),
+                    / matrices.output_filename(
+                        hb, purp, yr, scenario=scenario
+                    ),
                     f"{purp}_{matrices.mode}",
                     attr,
                     prod,
@@ -791,6 +794,7 @@ def convert_to_od(
     purposes: Dict[str, List[int]],
     pa_to_od_factors: Dict[str, Path],
     export_path: Path,
+    scenario: Optional[str] = None,
 ) -> None:
     """Converts PA matrices from folder to OD.
 
@@ -829,6 +833,7 @@ def convert_to_od(
         years_needed=future_years,
         seg_level="tms",
         seg_params={"p_needed": purposes["hb"], "m_needed": modes},
+        scenario=scenario,
     )
 
     matrix_processing.nhb_tp_split_via_factors(

@@ -23,7 +23,7 @@ from normits_demand.models.forecasting import (
     tem_forecast,
     ntem_forecast,
     tempro_trip_ends,
-    forecast_cnfg
+    forecast_cnfg,
 )
 from normits_demand import logging as nd_log
 from normits_demand.reports import ntem_forecast_checks
@@ -33,7 +33,9 @@ from normits_demand.utils import timing
 
 ##### CONSTANTS #####
 LOG_FILE = "Forecast.log"
-LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_models.run_forecast")
+LOG = nd_log.get_logger(
+    nd_log.get_package_logger_name() + ".run_models.run_forecast"
+)
 
 
 ##### CLASSES #####
@@ -56,7 +58,8 @@ class ForecastingArguments:
     def parse(cls) -> ForecastingArguments:
         """Parse command line arguments."""
         parser = argparse.ArgumentParser(
-            description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+            description=__doc__,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         )
         parser.add_argument(
             "model",
@@ -72,18 +75,23 @@ class ForecastingArguments:
 
         parsed_args = parser.parse_args()
         return ForecastingArguments(
-            forecast_cnfg.ForecastModel(parsed_args.model), parsed_args.config
+            forecast_cnfg.ForecastModel(parsed_args.model),
+            parsed_args.config,
         )
 
     def validate(self) -> None:
         """Raise error if any arguments are invalid."""
         if not self.config_path.is_file():
-            raise FileNotFoundError(f"config file doesn't exist: {self.config_path}")
+            raise FileNotFoundError(
+                f"config file doesn't exist: {self.config_path}"
+            )
 
 
 ##### FUNCTIONS #####
 def main(
-    model: forecast_cnfg.ForecastModel, config_path: pathlib.Path, init_logger: bool = True
+    model: forecast_cnfg.ForecastModel,
+    config_path: pathlib.Path,
+    init_logger: bool = True,
 ):
     """Main function for running forecasting models.
 
@@ -106,13 +114,19 @@ def main(
     start = timing.current_milli_time()
 
     if model == forecast_cnfg.ForecastModel.TRIP_END:
-        params = forecast_cnfg.TEMForecastParameters.load_yaml(config_path)
+        params = forecast_cnfg.TEMForecastParameters.load_yaml(
+            config_path
+        )
     elif model == forecast_cnfg.ForecastModel.NTEM:
-        params = forecast_cnfg.NTEMForecastParameters.load_yaml(config_path)
+        params = forecast_cnfg.NTEMForecastParameters.load_yaml(
+            config_path
+        )
     elif model == forecast_cnfg.ForecastModel.EDGE:
         params = forecast_cnfg.EDGEParameters.load_yaml(config_path)
     else:
-        raise NotImplementedError(f"forecasting not implemented for {model.value}")
+        raise NotImplementedError(
+            f"forecasting not implemented for {model.value}"
+        )
 
     if params.export_path.exists():
         msg = "export folder already exists: %s"
@@ -129,11 +143,16 @@ def main(
     LOG.info(msg, params.export_path)
     LOG.info("Input parameters:\n%s", params.to_yaml())
 
-    output_params_file = params.export_path / "forecasting_parameters.yml"
+    output_params_file = (
+        params.export_path / "forecasting_parameters.yml"
+    )
     params.save_yaml(output_params_file)
     LOG.info("Saved input parameters to %s", output_params_file)
 
-    if model in (forecast_cnfg.ForecastModel.TRIP_END, forecast_cnfg.ForecastModel.NTEM):
+    if model in (
+        forecast_cnfg.ForecastModel.TRIP_END,
+        forecast_cnfg.ForecastModel.NTEM,
+    ):
         tem_forecasting(params, model)
     elif model == forecast_cnfg.ForecastModel.EDGE:
         edge_replicant.run_edge_growth(params)
@@ -169,7 +188,10 @@ def model_mode_subset(
     NotImplementedError
         If any `assignment_model` other than NoHAM or MiHAM is given.
     """
-    if assignment_model in (nd.AssignmentModel.NOHAM, nd.AssignmentModel.MIHAM):
+    if assignment_model in (
+        nd.AssignmentModel.NOHAM,
+        nd.AssignmentModel.MIHAM,
+    ):
         segmentation = {
             "hb_attractions": "hb_p_m_car",
             "hb_productions": "hb_p_m_car",
@@ -186,7 +208,10 @@ def model_mode_subset(
 
 
 def tem_forecasting(
-    params: Union[forecast_cnfg.TEMForecastParameters, forecast_cnfg.NTEMForecastParameters],
+    params: Union[
+        forecast_cnfg.TEMForecastParameters,
+        forecast_cnfg.NTEMForecastParameters,
+    ],
     forecast_model: forecast_cnfg.ForecastModel,
 ) -> None:
     """Run the NTEM or trip end forecasting.
@@ -206,7 +231,7 @@ def tem_forecasting(
                 "expected NTEMForecastParameters for "
                 f"{forecast_model.value} forecasting not {type(params)}"
             )
-
+        scenario = params.ntem_parameters.scenario
         trip_end_name = "TEMPro"
         tripend_data = ntem_forecast.get_tempro_data(
             params.ntem_parameters.data_path,
@@ -225,24 +250,37 @@ def tem_forecasting(
         tripend_data = tem_forecast.read_tripends(
             params.base_year, params.future_years, params.tripend_path
         )
+        scenario = "TEM"
     else:
-        raise ValueError(f"forecasting for trip end or NTEM only not {forecast_model}")
+        raise ValueError(
+            f"forecasting for trip end or NTEM only not {forecast_model}"
+        )
 
     if params.output_trip_end_data:
         tripend_data.save(params.export_path / f"{trip_end_name} Data")
 
-    tripend_data = model_mode_subset(tripend_data, params.assignment_model)
+    tripend_data = model_mode_subset(
+        tripend_data, params.assignment_model
+    )
     tripend_growth = ntem_forecast.tempro_growth(
-        tripend_data, params.assignment_model.get_zoning_system(), params.base_year
+        tripend_data,
+        params.assignment_model.get_zoning_system(),
+        params.base_year,
     )
     if params.output_trip_end_growth:
-        tripend_growth.save(params.export_path / f"{trip_end_name} Growth Factors")
+        tripend_growth.save(
+            params.export_path / f"{trip_end_name} Growth Factors"
+        )
 
     ntem_inputs = ntem_forecast.NTEMImportMatrices(
-        params.matrix_import_path, params.base_year, params.assignment_model
+        params.matrix_import_path,
+        params.base_year,
+        params.assignment_model,
     )
     pa_output_folder = params.export_path / "Matrices" / "PA"
-    ntem_forecast.grow_all_matrices(ntem_inputs, tripend_growth, pa_output_folder)
+    # ntem_forecast.grow_all_matrices(
+    #     ntem_inputs, tripend_growth, pa_output_folder, scenario=scenario
+    # )
 
     ntem_forecast_checks.pa_matrix_comparison(
         ntem_inputs,
@@ -251,6 +289,7 @@ def tem_forecasting(
         params.assignment_model.get_mode(),
         params.comparison_zone_systems,
         params.base_year,
+        scenario=scenario,
     )
     od_folder = pa_output_folder.with_name("OD")
     ntem_forecast.convert_to_od(
@@ -259,9 +298,13 @@ def tem_forecasting(
         params.base_year,
         params.future_years,
         params.assignment_model.get_mode().get_mode_values(),
-        {"hb": params.hb_purposes_needed, "nhb": params.nhb_purposes_needed},
+        {
+            "hb": params.hb_purposes_needed,
+            "nhb": params.nhb_purposes_needed,
+        },
         params.pa_to_od_factors,
         params.export_path,
+        scenario=scenario,
     )
 
     # Compile to output formats
