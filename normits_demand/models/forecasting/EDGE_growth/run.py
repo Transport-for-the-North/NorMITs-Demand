@@ -191,7 +191,10 @@ def _tp_loop(
 def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
     """Run Growth Process."""
     LOG.info("#" * 80)
-    LOG.info("Started Process @ %s", timing.get_datetime())
+    LOG.info(
+        "Started Process @ %s",
+        timing.get_datetime("%d-%m-%Y  %H:%M:%S"),
+    )
     LOG.info("#" * 80)
     LOG.info("Loading globals variables for growth process.")
     globals = loading.load_globals(params)

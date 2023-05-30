@@ -231,6 +231,19 @@ class NTEMForecastParameters(ForecastParameters):
 
 
 class TicketSplitParams(caf.toolkit.BaseConfig):
+    """
+    Everything needed to generate ticket splitting factors.
+
+    Parameters
+    ----------
+
+    edge_flows_path: Path
+        Path to edge flows file
+    flow_cat_path: Path
+        Path to flow cat file
+    splits_path: Path
+        Path to ticket type splits file
+    """
     edge_flows_path: Path
     flow_cat_path: Path
     splits_path: Path
