@@ -6,7 +6,7 @@ import pydantic
 import caf.toolkit
 
 import normits_demand as nd
-from normits_demand.utils import  ntem_extractor
+from normits_demand.utils import ntem_extractor
 from normits_demand.core import enumerations as nd_enum
 
 
@@ -240,7 +240,6 @@ class EDGEParameters(caf.toolkit.BaseConfig):
     """Parameters for the EDGE forecasting model."""
 
     forecast_years: dict[int, Any]
-    tickets_processed: bool = False
 
     # Used to build output path
     iteration: str

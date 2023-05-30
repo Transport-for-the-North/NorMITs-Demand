@@ -39,6 +39,7 @@ from normits_demand.models.forecasting import forecast_cnfg
 # pylint: enable=import-error,wrong-import-position
 
 # # # CONSTANTS # # #
+logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger(__name__)
 # # # CLASSES # # #
 
@@ -249,21 +250,16 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             filled_growth_matrices.copy(),
             growth_summary,
         )
-        # tp_looper(time_periods[0])
         args = [
             (time_period, globals.ticket_type_splits[time_period])
             for time_period in globals.time_periods
         ]
-        # kwargs = globals.ticket_type_splits
-        # tp_looper("AM", globals.ticket_type_splits['AM'])
         outputs = concurrency.multiprocess(
             tp_looper, args, in_order=True
         )
+        factored = [k["factored"] for k in outputs]
         factored_matrices = {
-            i: j
-            for i, j in zip(
-                globals.time_periods, [k["factored"] for k in outputs]
-            )
+            i: j for i, j in zip(globals.time_periods, factored)
         }
         overall_not_grown_demand = sum(
             [i["overall_not_grown"] for i in outputs]
@@ -308,7 +304,6 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         )
 
         # export files
-        # TODO (MI): Export to .OMX and then convert .OMX to .MAT instead of the .CSVs
         for segment in globals.norms_segments:
             # write out demand matrix
             file_ops.write_df(
