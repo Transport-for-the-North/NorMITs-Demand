@@ -334,10 +334,3 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             params.export_path / f"{forecast_year}_Growth_Summary.csv",
             index=False,
         )
-
-
-if __name__ == "__main__":
-    params = forecast_cnfg.EDGEParameters.load_yaml(
-        r"E:\NorMITs-Demand\config\forecast\edge\edge_stn_forecast.yml"
-    )
-    run_edge_growth(params)
