@@ -167,7 +167,7 @@ def produce_ticketype_splitting_matrices(
     return splitting_matrices
 
 
-def prisplits_loop(
+def splits_loop(
     edge_flows: pd.DataFrame,
     stations_lookup: pd.DataFrame,
     flows_lookup: pd.DataFrame,
