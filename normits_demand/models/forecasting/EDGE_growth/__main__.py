@@ -27,7 +27,6 @@ from functools import partial
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
 # Local imports here
-import ticket_splits
 import growth_matrices
 import apply_growth
 import utils
@@ -46,14 +45,14 @@ LOG = logging.getLogger(__name__)
 # # # FUNCTIONS # # #
 def _tp_loop(
     factored_matrices,
-    params,
+    matrices_to_grow_dir,
     model_stations_tlcs,
     forecast_year,
     demand_segments,
     filled_growth_matrices,
     growth_summary,
     time_period,
-    splitting_matrices
+    splitting_matrices,
 ):
     """
     Private function only called once for multiprocessing. All args are as named when read in.
@@ -67,8 +66,7 @@ def _tp_loop(
     )
     # read time period specific files
     irsj_props = pd.read_hdf(
-        params.matrices_to_grow_dir
-        / f"{time_period}_iRSj_probabilities.h5",
+        matrices_to_grow_dir / f"{time_period}_iRSj_probabilities.h5",
         key="iRSj",
     )
     LOG.info(
@@ -78,7 +76,7 @@ def _tp_loop(
 
     with omx_file.OMXFile(
         pathlib.Path(
-            params.matrices_to_grow_dir,
+            matrices_to_grow_dir,
             f"PT_{time_period}.omx",
         )
     ) as omx_mat:
@@ -194,6 +192,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
     LOG.info("#" * 80)
     LOG.info("Started Process @ %s", timing.get_datetime())
     LOG.info("#" * 80)
+    LOG.info("Loading globals variables for growth process.")
     globals = loading.load_globals(params)
     # loop over forecast years
     for forecast_year in params.forecast_years:
@@ -209,7 +208,9 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         )
         # produce growth matrices
         growth_matrix_dic = growth_matrices.prepare_growth_matrices(
-            globals.demand_segments, growth_factors, globals.stations_tlcs
+            globals.demand_segments,
+            growth_factors,
+            globals.station_tlcs,
         )
         # fill growth matrices
         (
@@ -241,7 +242,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         tp_looper = partial(
             _tp_loop,
             factored_matrices.copy(),
-            params,
+            params.matrices_to_grow_dir,
             globals.station_tlcs,
             forecast_year,
             globals.demand_segments.copy(),
@@ -249,7 +250,12 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             growth_summary,
         )
         # tp_looper(time_periods[0])
-        args = [(time_period,) for time_period in globals.time_periods]
+        args = [
+            (time_period, globals.ticket_type_splits[time_period])
+            for time_period in globals.time_periods
+        ]
+        # kwargs = globals.ticket_type_splits
+        # tp_looper("AM", globals.ticket_type_splits['AM'])
         outputs = concurrency.multiprocess(
             tp_looper, args, in_order=True
         )
@@ -281,7 +287,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 f" Percentage of the demand not being grown {round(not_grown_demand_pcent * 100,3)}%."
             )
         # prepare 24Hr level demand matrices
-        for row in demand_segments.itertuples():
+        for row in globals.demand_segments.itertuples():
             # declare current segment's details
             segment = row.Segment
             # get 24Hr demand matrix
@@ -296,12 +302,14 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
 
         # Combine matrices into NoRMS segments
         norms_matrices = apply_growth.fromto_2_from_by_averaging(
-            factored_24hr_matrices, norms_segments, all_segments
+            factored_24hr_matrices,
+            globals.norms_segments,
+            globals.all_segments,
         )
 
         # export files
         # TODO (MI): Export to .OMX and then convert .OMX to .MAT instead of the .CSVs
-        for segment in norms_segments:
+        for segment in globals.norms_segments:
             # write out demand matrix
             file_ops.write_df(
                 utils.wide_mx_2_long_mx(
@@ -317,7 +325,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             )
         # convert to Cube .MAT
         utils.convert_csv_2_mat(
-            norms_segments,
+            globals.norms_segments,
             params.cube_exe,
             forecast_year,
             params.export_path,

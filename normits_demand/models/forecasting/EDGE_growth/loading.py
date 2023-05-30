@@ -11,11 +11,11 @@ File purpose:
 
 """
 # Built-Ins
-from dataclasses import dataclass
-
-import pandas as pd
-
+import dataclasses
+import pickle
+from pathlib import Path
 # Third Party
+import pandas as pd
 
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
@@ -30,7 +30,8 @@ import ticket_splits
 
 # # # CLASSES # # #
 
-@dataclass
+
+@dataclasses.dataclass
 class GLobalVars:
     demand_segments: pd.DataFrame
     purposes: list
@@ -39,6 +40,9 @@ class GLobalVars:
     ticket_type_splits: pd.DataFrame
     station_tlcs: pd.DataFrame
     time_periods: tuple = ("AM", "IP", "PM", "OP")
+
+    def keys(self):
+        return [field.name for field in dataclasses.fields(self)]
 
 
 # # # FUNCTIONS # # #
@@ -66,19 +70,30 @@ def load_globals(params: forecast_cnfg.EDGEParameters) -> GLobalVars:
     model_stations_tlcs = file_ops.read_df(
         params.norms_to_edge_stns_path
     )
-    if params.ticket_splits:
-        ticket_type_splits = file_ops.read_df(params.ticket_splits)
+    if isinstance(params.ticket_type_splits, Path):
+        with open(params.ticket_type_splits, "rb") as file:
+            ticket_type_splits = pickle.load(file)
     else:
-        edge_flows = file_ops.read_df(params.edge_flows_path, usecols=[0, 2, 5])
-        flows_lookup = file_ops.read_df(params.flow_cat_path)
-        ticket_splits_df = file_ops.read_df(params.ticket_type_splits_path)
-        ticket_type_splits = ticket_splits.splits_loop(edge_flows, model_stations_tlcs,
-                                                       flows_lookup, ticket_splits_df,
-                                                       params.matrices_to_grow_dir)
-    vars = GLobalVars(demand_segments,
-                      purposes,
-                      all_segments,
-                      ticket_type_splits,
-                      model_stations_tlcs
-                      )
+        edge_flows = file_ops.read_df(
+            params.ticket_type_splits.edge_flows_path, usecols=[0, 2, 5]
+        )
+        flows_lookup = file_ops.read_df(params.ticket_type_splits.flow_cat_path)
+        ticket_splits_df = file_ops.read_df(
+            params.ticket_type_splits.splits_path
+        )
+        ticket_type_splits = ticket_splits.splits_loop(
+            edge_flows,
+            model_stations_tlcs,
+            flows_lookup,
+            ticket_splits_df,
+            params.matrices_to_grow_dir,
+        )
+    vars = GLobalVars(
+        demand_segments,
+        purposes,
+        norms_segments,
+        all_segments,
+        ticket_type_splits,
+        model_stations_tlcs,
+    )
     return vars
