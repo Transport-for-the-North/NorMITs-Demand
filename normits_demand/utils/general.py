@@ -996,7 +996,7 @@ def get_dist_name(
         name_parts += [f"m{mode}"]
 
     if not is_none_like(scenario):
-        name_parts += [f"scn{scenario}"]
+        name_parts += [f"{scenario}"]
 
     if not is_none_like(segment) and not is_none_like(purpose):
         seg_name = (
@@ -1033,6 +1033,7 @@ def calib_params_to_dist_name(
     csv: bool = False,
     compressed: bool = False,
     suffix: str = None,
+    scenario: str = None,
 ) -> str:
     """
     Wrapper for get_distribution_name() using calib params
@@ -1055,6 +1056,7 @@ def calib_params_to_dist_name(
         csv=csv,
         compressed=compressed,
         suffix=suffix,
+        scenario=scenario,
     )
 
 
@@ -2304,7 +2306,7 @@ def get_compiled_matrix_name(
         name_parts += ["m" + mode]
 
     if not is_none_like(scenario):
-        name_parts += [f"scn{scenario}"]
+        name_parts += [f"{scenario}"]
 
     if not is_none_like(ca):
         if ca == 1:

@@ -225,6 +225,7 @@ def tem_forecasting(
     --------
     normits_demand.models.ntem_forecast
     """
+
     if forecast_model == forecast_cnfg.ForecastModel.NTEM:
         if not isinstance(params, forecast_cnfg.NTEMForecastParameters):
             raise TypeError(
@@ -278,9 +279,9 @@ def tem_forecasting(
         params.assignment_model,
     )
     pa_output_folder = params.export_path / "Matrices" / "PA"
-    # ntem_forecast.grow_all_matrices(
-    #     ntem_inputs, tripend_growth, pa_output_folder, scenario=scenario
-    # )
+    ntem_forecast.grow_all_matrices(
+        ntem_inputs, tripend_growth, pa_output_folder, scenario=scenario
+    )
 
     ntem_forecast_checks.pa_matrix_comparison(
         ntem_inputs,
@@ -312,11 +313,13 @@ def tem_forecasting(
         pa_output_folder,
         params.future_years,
         params.assignment_model.get_mode().get_mode_values(),
+        scenario=scenario,
     )
     compiled_od_path = ntem_forecast.compile_highway(
         od_folder,
         params.future_years,
         params.car_occupancies_path,
+        scenario=scenario,
     )
 
     ntem_forecast_checks.od_matrix_comparison(
@@ -327,6 +330,7 @@ def tem_forecasting(
         params.user_classes,
         params.time_periods,
         params.future_years,
+        scenario=scenario,
     )
 
 

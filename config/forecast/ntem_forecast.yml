@@ -4,9 +4,6 @@ assignment_model: NoHAM
 base_year: 2018
 future_years:
   - 2028
-  - 2038
-  - 2043
-  - 2048
 export_folder: E:\ntem_outputs\
 ntem_parameters:
   data_path: I:\Data\NTEM
@@ -29,9 +26,10 @@ nhb_purposes_needed:
   - 15
   - 16
   - 18
+
 comparison_zone_systems:
-  trip end: lad_2020
-  matrix 1: lad_2020
+  trip end: ca_sector_2020
+  matrix 1: ca_sector_2020
 time_periods:
   - 1
   - 2

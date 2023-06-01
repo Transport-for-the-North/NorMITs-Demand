@@ -71,7 +71,7 @@ def _filename_contents(filename: str) -> Dict[str, Any]:
         r"_yr(?P<year>\d{4})"
         r"_p(?P<purpose>\d{,2})"
         r"_m(?P<mode>\d)"
-        r"_(?P<scenario>\d)"
+        r"_(?P<scenario>core|high|low|regional|technology|behaviour)"
         "$",
         re.IGNORECASE,
     )
@@ -868,6 +868,7 @@ def od_matrix_comparison(
     user_classes: list[str],
     time_periods: list[int],
     future_years: list[int],
+    scenario: str = None,
 ):
     """Write spreadsheet summarising OD matrix growth.
 
@@ -889,7 +890,7 @@ def od_matrix_comparison(
     OD_MATRIX_NAMES = {
         "base": "od_m3_{purp}_tp{tp}_postME.csv",
         "base2": "od_m3_{purp}_tp{tp}.csv",
-        "forecast": "od_{purp}_yr{yr}_m3_tp{tp}.csv",
+        "forecast": "od_{purp}_yr{yr}_m3_{scen}_tp{tp}.csv",
     }
     for name, folder in (
         ("base", base_folder),
@@ -929,11 +930,14 @@ def od_matrix_comparison(
                             purp=purpose, tp=tp
                         )
                     )
-                forecast_name = lambda p, t, y: OD_MATRIX_NAMES[
-                    "forecast"
-                ].format(purp=p, tp=t, yr=y)
+                forecast_name = (
+                    lambda p, t, y, scenario: OD_MATRIX_NAMES[
+                        "forecast"
+                    ].format(purp=p, tp=t, yr=y, scen=scenario)
+                )
                 forecast_paths = {
-                    y: forecast_folder / forecast_name(purpose, tp, y)
+                    y: forecast_folder
+                    / forecast_name(purpose, tp, y, scenario)
                     for y in future_years
                 }
                 _compare_od_matrices(

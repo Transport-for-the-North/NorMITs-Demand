@@ -846,11 +846,15 @@ def convert_to_od(
         m_needed=modes,
         export_path=export_path,
         compress_out=True,
+        scenario=scenario,
     )
 
 
 def compile_highway_for_rail(
-    pa_folder: Path, years: list[int], mode: list[int]
+    pa_folder: Path,
+    years: list[int],
+    mode: list[int],
+    scenario: str = None,
 ) -> Path:
     """Compile the PA matrices into the 24hr VDM PA matrices format.
 
@@ -881,6 +885,7 @@ def compile_highway_for_rail(
         years_needed=years,
         m_needed=mode,
         split_hb_nhb=True,
+        scenario=scenario,
     )
     for path in paths:
         matrix_processing.compile_matrices(
@@ -893,7 +898,10 @@ def compile_highway_for_rail(
 
 
 def compile_highway(
-    import_od_path: Path, years: List[int], car_occupancies_path: Path
+    import_od_path: Path,
+    years: List[int],
+    car_occupancies_path: Path,
+    scenario: str = None,
 ) -> Path:
     """Compile OD matrices into the formats required for NoHAM.
 
@@ -924,6 +932,7 @@ def compile_highway(
         years_needed=years,
         m_needed=[3],
         tp_needed=[1, 2, 3, 4],
+        scenario=scenario,
     )
     for path in compile_params_paths:
         matrix_processing.compile_matrices(
