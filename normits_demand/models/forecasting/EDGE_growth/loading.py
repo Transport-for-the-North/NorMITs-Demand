@@ -74,20 +74,24 @@ def load_globals(params: forecast_cnfg.EDGEParameters) -> GLobalVars:
         with open(params.ticket_type_splits, "rb") as file:
             ticket_type_splits = pickle.load(file)
     else:
-        edge_flows = file_ops.read_df(
-            params.ticket_type_splits.edge_flows_path, usecols=[0, 2, 5]
-        )
-        flows_lookup = file_ops.read_df(params.ticket_type_splits.flow_cat_path)
-        ticket_splits_df = file_ops.read_df(
-            params.ticket_type_splits.splits_path
-        )
-        ticket_type_splits = ticket_splits.splits_loop(
-            edge_flows,
-            model_stations_tlcs,
-            flows_lookup,
-            ticket_splits_df,
-            params.matrices_to_grow_dir,
-        )
+        tick_param_path = params.matrices_to_grow_dir / "ticket_split_params.yml"
+        if tick_param_path.is_file():
+            ex_params = forecast_cnfg.TicketSplitParams.load_yaml(tick_param_path)
+            if ex_params == params.ticket_type_splits:
+                with open(params.matrices_to_grow_dir / "splitting_matrices.pkl", "rb") as file:
+                    ticket_type_splits = pickle.load(file)
+            else:
+                ticket_type_splits = ticket_splits.splits_loop(
+                    params.ticket_type_splits,
+                    model_stations_tlcs,
+                    params.matrices_to_grow_dir,
+                )
+        else:
+            ticket_type_splits = ticket_splits.splits_loop(
+                params.ticket_type_splits,
+                model_stations_tlcs,
+                params.matrices_to_grow_dir,
+            )
     vars = GLobalVars(
         demand_segments,
         purposes,
