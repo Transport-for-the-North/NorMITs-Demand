@@ -250,7 +250,22 @@ class TicketSplitParams(caf.toolkit.BaseConfig):
 
 
 class EDGEParameters(caf.toolkit.BaseConfig):
-    """Parameters for the EDGE forecasting model."""
+    """Parameters for the EDGE forecasting model.
+    forecast_years: Self explanatory
+
+    iteration: used in naming dir
+    forecast_version: used in naming dir
+    forecast_scenario: used in naming dir
+    export_folder: where export dir is built
+    assignment_model: default to NoRMs
+    matrices_to_grow_dir: folder containing matrices to be grown
+    demand_segments: path to csv containing demand segments
+    ticket_type_splits: If this has been generated already provide a path to it,
+    if not provide parameters specified in TicketSplitParameters.
+    norms_to_edge_stns_path: path to csv containing lookup
+
+
+    """
 
     forecast_years: dict[int, Any]
 
