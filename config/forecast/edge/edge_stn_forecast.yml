@@ -9,8 +9,9 @@ matrices_to_grow_dir: I:\Transfer\edge_replicant_xfer\Outputs
 
 # Custom inputs files
 demand_segments: I:\NorMITs Demand\import\edge_replicant\apply_growth\demand_segments.csv
-ticket_type_splits: I:\Transfer\edge_replicant_xfer\Outputs\splitting_matrices.pkl
-norms_to_edge_stns_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\TLCs_EDGE.csv
+ticket_type_splits: 
+                    flow_cat_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\FlowCats.csv
+                    
 cube_exe: C:\Program Files\Citilabs\CubeVoyager\VOYAGER.EXE
 
 # EDGE outputs
@@ -20,4 +21,3 @@ edge_growth_dir: I:\NorMITs Demand\import\EDGE_growth\Edge distance\Nov 21 Centr
 # forecast year: EDGE growth factors file
 forecast_years:
   2040: Out_Nov 21 Central - Growth_2040_rate.csv.bz2
-  2043: Out_Nov 21 Central - Growth_2043_rate.csv.bz2
