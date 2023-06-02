@@ -244,6 +244,7 @@ class TicketSplitParams(caf.toolkit.BaseConfig):
     splits_path: Path
         Path to ticket type splits file
     """
+
     edge_flows_path: Path
     flow_cat_path: Path
     splits_path: Path
@@ -281,7 +282,7 @@ class EDGEParameters(caf.toolkit.BaseConfig):
 
     # Input files
     demand_segments: Path
-    ticket_type_splits: Union[Path, TicketSplitParams]
+    ticket_type_splits: TicketSplitParams
     norms_to_edge_stns_path: Path
     cube_exe: Path
 

@@ -13,7 +13,7 @@ File purpose:
 # Built-Ins
 import pathlib
 import sys
-
+import pickle
 
 sys.path.append(r"E:\NorMITs-Demand")
 # Third Party
@@ -242,6 +242,12 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 f"{forecast_year}_Demand": [],
             }
         )
+        with open(
+            r"E:\NorMITs Demand\Forecasting\edge\1.0\iter1.0\Test\refactor_growth.pkl",
+            "wb",
+        ) as file:
+            pickle.dump(filled_growth_matrices, file)
+
         # loop over time periods
         tp_looper = partial(
             _tp_loop,
