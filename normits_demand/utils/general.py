@@ -185,10 +185,7 @@ def validate_seg_level(seg_level: str) -> str:
     seg_level = seg_level.strip().lower()
 
     if seg_level not in efs_consts.SEG_LEVELS:
-        raise ValueError(
-            "%s is not a valid name for a level of segmentation"
-            % seg_level
-        )
+        raise ValueError("%s is not a valid name for a level of segmentation" % seg_level)
     return seg_level
 
 
@@ -216,9 +213,7 @@ def validate_zoning_system(zoning_system: str) -> str:
     zoning_system = zoning_system.strip().lower()
 
     if zoning_system not in efs_consts.ZONING_SYSTEMS:
-        raise ValueError(
-            "%s is not a valid name for a zoning system" % zoning_system
-        )
+        raise ValueError("%s is not a valid name for a zoning system" % zoning_system)
     return zoning_system
 
 
@@ -246,9 +241,7 @@ def validate_scenario_name(scenario_name: str) -> str:
     scenario_name = scenario_name.strip().upper()
 
     if scenario_name not in consts.SCENARIOS:
-        raise ValueError(
-            "%s is not a valid name for a scenario." % scenario_name
-        )
+        raise ValueError("%s is not a valid name for a scenario." % scenario_name)
     return scenario_name
 
 
@@ -276,9 +269,7 @@ def validate_model_name(model_name: str) -> str:
     model_name = model_name.strip().lower()
 
     if model_name not in efs_consts.MODEL_NAMES:
-        raise ValueError(
-            "%s is not a valid name for a model" % model_name
-        )
+        raise ValueError("%s is not a valid name for a model" % model_name)
     return model_name
 
 
@@ -311,10 +302,7 @@ def validate_model_name_and_mode(
 
     for mode in m_needed:
         if mode not in efs_consts.MODEL_MODES[model_name]:
-            raise ValueError(
-                "%s is not a valid mode for model %s"
-                % (str(mode), model_name)
-            )
+            raise ValueError("%s is not a valid mode for model %s" % (str(mode), model_name))
 
 
 def validate_user_class(user_class: str) -> str:
@@ -341,15 +329,11 @@ def validate_user_class(user_class: str) -> str:
     user_class = user_class.strip().lower()
 
     if user_class not in efs_consts.USER_CLASSES:
-        raise ValueError(
-            "%s is not a valid name for user class" % user_class
-        )
+        raise ValueError("%s is not a valid name for user class" % user_class)
     return user_class
 
 
-def validate_vdm_seg_params(
-    seg_params: Dict[str, Any]
-) -> Dict[str, Any]:
+def validate_vdm_seg_params(seg_params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Validates and cleans seg_params ready for a loop_generator
 
@@ -497,9 +481,7 @@ def build_efs_io_paths(
     efs_model_home = os.path.join(import_home, model_name)
     model_schema_home = os.path.join(efs_model_home, "model schema")
     model_param_home = os.path.join(efs_model_home, "params")
-    model_tour_prop_home = os.path.join(
-        efs_model_home, "post_me_tour_proportions"
-    )
+    model_tour_prop_home = os.path.join(efs_model_home, "post_me_tour_proportions")
 
     imports = {
         "home": import_home,
@@ -509,37 +491,21 @@ def build_efs_io_paths(
         "lookups": os.path.join(demand_home, "lookup"),
         "costs": os.path.join(efs_model_home, "costs"),
         "scenarios": os.path.join(import_home, "scenarios"),
-        "wfh_adj": os.path.join(
-            import_home, "scenarios", "WfH Adjustments", "wfh_adj.csv"
-        ),
-        "a_weights": os.path.join(
-            import_home, "attractions", "hb_attraction_weights.csv"
-        ),
+        "wfh_adj": os.path.join(import_home, "scenarios", "WfH Adjustments", "wfh_adj.csv"),
+        "a_weights": os.path.join(import_home, "attractions", "hb_attraction_weights.csv"),
         "soc_weights": soc_weights_path,
         "ntem_control": os.path.join(import_home, "ntem_constraints"),
         "model_schema": model_schema_home,
         "model_home": os.path.join(import_home, model_name),
-        "internal_zones": os.path.join(
-            model_schema_home, consts.INTERNAL_AREA % model_name
-        ),
-        "external_zones": os.path.join(
-            model_schema_home, consts.EXTERNAL_AREA % model_name
-        ),
+        "internal_zones": os.path.join(model_schema_home, consts.INTERNAL_AREA % model_name),
+        "external_zones": os.path.join(model_schema_home, consts.EXTERNAL_AREA % model_name),
         "param_home": model_param_home,
-        "post_me_matrices": os.path.join(
-            import_home, model_name, "post_me"
-        ),
+        "post_me_matrices": os.path.join(import_home, model_name, "post_me"),
         "params": model_param_home,
-        "post_me_factors": os.path.join(
-            model_param_home, "post_me_tms_decompile_factors.pkl"
-        ),
+        "post_me_factors": os.path.join(model_param_home, "post_me_tms_decompile_factors.pkl"),
         "post_me_tours": model_tour_prop_home,
-        "post_me_fh_th_factors": os.path.join(
-            model_tour_prop_home, "fh_th_factors"
-        ),
-        "decomp_post_me": os.path.join(
-            import_home, model_name, "decompiled_post_me"
-        ),
+        "post_me_fh_th_factors": os.path.join(model_tour_prop_home, "fh_th_factors"),
+        "decomp_post_me": os.path.join(import_home, model_name, "decompiled_post_me"),
     }
 
     # Add Land use import if we have an iteration
@@ -570,17 +536,11 @@ def build_efs_io_paths(
             "outputs",
         )
 
-        land_use_fy = os.path.join(
-            fy_land_use_home, "scenarios", scenario_name
-        )
+        land_use_fy = os.path.join(fy_land_use_home, "scenarios", scenario_name)
         land_use_fy = os.path.join(land_use_fy, "old_EFS_format")
 
-        imports["pop_by"] = os.path.join(
-            by_land_use_home, consts.BASE_YEAR_POP_FNAME
-        )
-        imports["emp_by"] = os.path.join(
-            by_land_use_home, consts.BASE_YEAR_EMP_FNAME
-        )
+        imports["pop_by"] = os.path.join(by_land_use_home, consts.BASE_YEAR_POP_FNAME)
+        imports["emp_by"] = os.path.join(by_land_use_home, consts.BASE_YEAR_EMP_FNAME)
         imports["land_use_fy_dir"] = land_use_fy
 
     # ## EXPORT PATHS ## #
@@ -617,9 +577,7 @@ def build_efs_io_paths(
         "sectors": os.path.join(export_home, "Sectors"),
         "audits": os.path.join(export_home, "Audits"),
         "reports": os.path.join(export_home, "Reports"),
-        "dist_reports": os.path.join(
-            export_home, "Reports", "Matrices"
-        ),
+        "dist_reports": os.path.join(export_home, "Reports", "Matrices"),
         # Pre-ME
         "mat_home": matrices_home,
         "pa": os.path.join(matrices_home, pa),
@@ -628,24 +586,12 @@ def build_efs_io_paths(
         "vdm_pa_24": os.path.join(matrices_home, vdm_pa_24),
         "od": os.path.join(matrices_home, od),
         "od_24": os.path.join(matrices_home, od_24),
-        "compiled_pa": os.path.join(
-            matrices_home, " ".join([compiled, pa])
-        ),
-        "compiled_od": os.path.join(
-            matrices_home, " ".join([compiled, od])
-        ),
-        "compiled_od_pcu": os.path.join(
-            matrices_home, " ".join([compiled, od, pcu])
-        ),
-        "aggregated_pa_24": os.path.join(
-            matrices_home, " ".join([aggregated, pa_24])
-        ),
-        "aggregated_od": os.path.join(
-            matrices_home, " ".join([aggregated, od])
-        ),
-        "aggregated_pa": os.path.join(
-            matrices_home, " ".join([aggregated, pa])
-        ),
+        "compiled_pa": os.path.join(matrices_home, " ".join([compiled, pa])),
+        "compiled_od": os.path.join(matrices_home, " ".join([compiled, od])),
+        "compiled_od_pcu": os.path.join(matrices_home, " ".join([compiled, od, pcu])),
+        "aggregated_pa_24": os.path.join(matrices_home, " ".join([aggregated, pa_24])),
+        "aggregated_od": os.path.join(matrices_home, " ".join([aggregated, od])),
+        "aggregated_pa": os.path.join(matrices_home, " ".join([aggregated, pa])),
         "pa_24_bespoke": os.path.join(matrices_home, pa_24_bespoke),
         "pa_24_elast": os.path.join(matrices_home, pa_24_elasticity),
     }
@@ -654,9 +600,7 @@ def build_efs_io_paths(
         create_folder(path, chDir=False, verbose=True)
 
     # Post-ME
-    compiled_od_path = os.path.join(
-        post_me_home, " ".join([compiled, od])
-    )
+    compiled_od_path = os.path.join(post_me_home, " ".join([compiled, od]))
     post_me_exports = {
         "home": post_me_home,
         "cache": os.path.join(post_me_home, "cache"),
@@ -666,9 +610,7 @@ def build_efs_io_paths(
         "od": os.path.join(post_me_home, od),
         "od_24": os.path.join(post_me_home, od_24),
         "compiled_od": compiled_od_path,
-        "model_output": os.path.join(
-            compiled_od_path, "".join(["from_", model_name])
-        ),
+        "model_output": os.path.join(compiled_od_path, "".join(["from_", model_name])),
     }
 
     for _, path in post_me_exports.items():
@@ -737,10 +679,7 @@ def convert_msoa_naming(
 
     # Validate
     if msoa_col_name not in df:
-        raise KeyError(
-            "Column '%s' not in given dataframe to convert."
-            % msoa_col_name
-        )
+        raise KeyError("Column '%s' not in given dataframe to convert." % msoa_col_name)
 
     # Rename everything to make sure there are no clashes
     df = df.rename(columns={msoa_col_name: "df_msoa"})
@@ -758,8 +697,7 @@ def convert_msoa_naming(
         keep_col = "msoa_int"
     else:
         raise ValueError(
-            "Invalid value received. Do not know how to convert "
-            "to '%s'" % str(to)
+            "Invalid value received. Do not know how to convert " "to '%s'" % str(to)
         )
 
     # Convert MSOA strings to id numbers
@@ -795,10 +733,7 @@ def copy_and_rename(src: str, dst: str) -> None:
         raise IOError("Source file does not exist.\n %s" % src)
 
     if not os.path.isfile(src):
-        raise IOError(
-            "The given src file is not a file. Cannot handle "
-            "directories."
-        )
+        raise IOError("The given src file is not a file. Cannot handle " "directories.")
 
     # If no filename given, don't need to rename - just use src filename
     if "." not in os.path.basename(dst):
@@ -845,9 +780,7 @@ def add_fname_suffix(fname: str, suffix: str):
     return new_fname
 
 
-def safe_read_csv(
-    file_path: str, print_time: bool = False, **kwargs
-) -> pd.DataFrame:
+def safe_read_csv(file_path: str, print_time: bool = False, **kwargs) -> pd.DataFrame:
     """
     Reads in the file and performs some simple file checks
 
@@ -999,9 +932,7 @@ def get_dist_name(
         name_parts += [f"{scenario}"]
 
     if not is_none_like(segment) and not is_none_like(purpose):
-        seg_name = (
-            "soc{0}" if int(purpose) in efs_consts.SOC_P else "ns{0}"
-        )
+        seg_name = "soc{0}" if int(purpose) in efs_consts.SOC_P else "ns{0}"
         name_parts += [seg_name.format(segment)]
 
     if not is_none_like(car_availability):
@@ -1040,9 +971,7 @@ def calib_params_to_dist_name(
 
     DEPRECATED! Use segment_params_to_dist_name instead
     """
-    segment_str = (
-        "soc" if calib_params["p"] in efs_consts.SOC_P else "ns"
-    )
+    segment_str = "soc" if calib_params["p"] in efs_consts.SOC_P else "ns"
 
     return get_dist_name(
         trip_origin=trip_origin,
@@ -1071,9 +1000,7 @@ def segment_params_to_dist_name(
     """
     Wrapper for get_distribution_name() using calib params
     """
-    segment_str = (
-        "soc" if calib_params["p"] in efs_consts.SOC_P else "ns"
-    )
+    segment_str = "soc" if calib_params["p"] in efs_consts.SOC_P else "ns"
 
     return get_dist_name(
         trip_origin=trip_origin,
@@ -1308,10 +1235,7 @@ def post_me_fname_to_calib_params(
         elif re.search("_other", fname) is not None:
             calib_params["user_class"] = "other"
         else:
-            raise ValueError(
-                "Cannot find the user class in filename: %s"
-                % str(fname)
-            )
+            raise ValueError("Cannot find the user class in filename: %s" % str(fname))
 
     return calib_params
 
@@ -1382,10 +1306,7 @@ def fname_to_calib_params(
         elif re.search("^nhb_", fname) is not None:
             calib_params["trip_origin"] = "nhb"
         else:
-            raise ValueError(
-                "Cannot find the trip origin in filename: %s"
-                % str(fname)
-            )
+            raise ValueError("Cannot find the trip origin in filename: %s" % str(fname))
 
     if get_matrix_format:
         if re.search("synthetic_od_from_", fname) is not None:
@@ -1403,10 +1324,7 @@ def fname_to_calib_params(
         elif re.search("pa_", fname) is not None:
             calib_params["matrix_format"] = "pa"
         else:
-            raise ValueError(
-                "Cannot find the matrix format in filename: %s"
-                % str(fname)
-            )
+            raise ValueError("Cannot find the matrix format in filename: %s" % str(fname))
 
     if get_user_class:
         if re.search("commute_", fname) is not None:
@@ -1416,10 +1334,7 @@ def fname_to_calib_params(
         elif re.search("other_", fname) is not None:
             calib_params["user_class"] = "other"
         else:
-            raise ValueError(
-                "Cannot find the user class in filename: %s"
-                % str(fname)
-            )
+            raise ValueError("Cannot find the user class in filename: %s" % str(fname))
 
     return calib_params
 
@@ -1457,9 +1372,7 @@ def get_segmentation_mask(
             if ignore_missing_cols:
                 continue
             else:
-                raise KeyError(
-                    "'%s' does not exist in DataFrame." % str(col)
-                )
+                raise KeyError("'%s' does not exist in DataFrame." % str(col))
 
         mask &= df[col] == val
 
@@ -1527,9 +1440,7 @@ def expand_distribution(
             dist[soc_col] = "none"
             dist[ns_col] = segment
         else:
-            raise ValueError(
-                "%s is not a valid HB or NHB purpose" % str(purpose)
-            )
+            raise ValueError("%s is not a valid HB or NHB purpose" % str(purpose))
 
     return dist
 
@@ -1675,8 +1586,7 @@ def ensure_segmentation(
     for col in check_cols:
         if col not in list(df):
             raise KeyError(
-                "No column exists in the given dataframe for %s segmentation."
-                % col
+                "No column exists in the given dataframe for %s segmentation." % col
             )
 
     return df
@@ -1688,12 +1598,7 @@ def vdm_segment_loop_generator(
     m_list: Iterable[int],
     ca_list: Iterable[int],
     tp_list: Iterable[int] = None,
-) -> (
-    Union[
-        Iterator[Tuple[str, str, int, int, int]],
-        Iterator[Tuple[str, str, int, int]],
-    ]
-):
+) -> (Union[Iterator[Tuple[str, str, int, int, int]], Iterator[Tuple[str, str, int, int]],]):
     """
     Simple generator to avoid the need for so many nested loops
     """
@@ -1729,12 +1634,7 @@ def segmentation_loop_generator(
     ns_list: Iterable[int],
     ca_list: Iterable[int],
     tp_list: Iterable[int] = None,
-) -> (
-    Union[
-        Iterator[Tuple[int, int, int, int, int]],
-        Iterator[Tuple[int, int, int, int]],
-    ]
-):
+) -> (Union[Iterator[Tuple[int, int, int, int, int]], Iterator[Tuple[int, int, int, int]],]):
     """
     Simple generator to avoid the need for so many nested loops
     """
@@ -1745,8 +1645,7 @@ def segmentation_loop_generator(
             required_segments = ns_list
         else:
             raise ValueError(
-                "'%s' does not seem to be a valid soc or ns "
-                "purpose." % str(purpose)
+                "'%s' does not seem to be a valid soc or ns " "purpose." % str(purpose)
             )
         for mode in m_list:
             for segment in required_segments:
@@ -1792,9 +1691,7 @@ def cp_segmentation_loop_generator(
     )
 
     for p, m, seg, ca, tp in loop_generator:
-        yield generate_calib_params(
-            purpose=p, mode=m, segment=seg, ca=ca, tp=tp
-        )
+        yield generate_calib_params(purpose=p, mode=m, segment=seg, ca=ca, tp=tp)
 
 
 def segment_loop_generator(
@@ -1862,9 +1759,7 @@ def build_seg_params(
     unq_segs = dict()
     for segment in segments:
         if segment not in df and raise_error:
-            raise KeyError(
-                "Segment '%s' does not exist in df" % segment
-            )
+            raise KeyError("Segment '%s' does not exist in df" % segment)
 
         # Ignore none-like splits
         unique = df[segment].unique().tolist()
@@ -1954,9 +1849,7 @@ def seg_level_loop_generator(
 
         # Convert to dict
         for to, uc, m, ca, tp in loop_generator:
-            yield create_vdm_seg_values(
-                trip_origin=to, user_class=uc, mode=m, ca=ca, tp=tp
-            )
+            yield create_vdm_seg_values(trip_origin=to, user_class=uc, mode=m, ca=ca, tp=tp)
 
     if seg_level == "tfn":
         loop_gen = cp_segmentation_loop_generator(
@@ -2055,9 +1948,7 @@ def sort_vector_cols(
         zone_col = zone_col_candidates[0]
 
     # Build a list of the final output order
-    col_order = segmentation_order(
-        list_safe_remove(columns, [zone_col])
-    )
+    col_order = segmentation_order(list_safe_remove(columns, [zone_col]))
     col_order = [zone_col] + col_order
 
     # Reindex and return
@@ -2131,12 +2022,7 @@ def long_to_wide_out(
 
     # Get the unique column names
     if unq_zones is None:
-        unq_zones = (
-            df[v_heading]
-            .drop_duplicates()
-            .reset_index(drop=True)
-            .copy()
-        )
+        unq_zones = df[v_heading].drop_duplicates().reset_index(drop=True).copy()
         unq_zones = list(range(1, max(unq_zones) + 1))
 
     # Make sure all unq_zones exists in v_heading and h_heading
@@ -2146,9 +2032,7 @@ def long_to_wide_out(
     )
 
     # Convert to wide format and round
-    df = df.pivot(
-        index=v_heading, columns=h_heading, values=values
-    ).round(decimals=round_dp)
+    df = df.pivot(index=v_heading, columns=h_heading, values=values).round(decimals=round_dp)
 
     # Finally, write to disk
     df.to_csv(out_path)
@@ -2163,18 +2047,14 @@ def wide_to_long_out(
 ) -> None:
     # TODO: Write wide_to_long_out() docs
     # This way we can avoid the name of the first col
-    df = df.melt(
-        id_vars=df.columns[:1], var_name=var_name, value_name=value_name
-    )
+    df = df.melt(id_vars=df.columns[:1], var_name=var_name, value_name=value_name)
     id_vars = id_vars[0] if isinstance(id_vars, list) else id_vars
     df.columns.values[0] = id_vars
 
     df.to_csv(out_path, index=False)
 
 
-def get_compile_params_name(
-    matrix_format: str, year: str, suffix: str = None
-) -> str:
+def get_compile_params_name(matrix_format: str, year: str, suffix: str = None) -> str:
     """
     Generates the compile params filename
     """
@@ -2188,9 +2068,7 @@ def get_compile_params_name(
     )
 
 
-def get_split_factors_fname(
-    matrix_format: str, year: str, suffix: str = None
-) -> str:
+def get_split_factors_fname(matrix_format: str, year: str, suffix: str = None) -> str:
     """
     Generates the splitting factors filename
     """
@@ -2210,9 +2088,7 @@ def get_split_factors_fname(
     )
 
 
-def build_full_paths(
-    base_path: str, fnames: Iterable[str]
-) -> List[str]:
+def build_full_paths(base_path: str, fnames: Iterable[str]) -> List[str]:
     """
     Prepends the base_path name to all of the given fnames
     """
@@ -2249,9 +2125,7 @@ def list_files(
         paths = [x for x in file_paths if os.path.isfile(x)]
     else:
         fnames = os.listdir(path)
-        paths = [
-            x for x in fnames if os.path.isfile(os.path.join(path, x))
-        ]
+        paths = [x for x in fnames if os.path.isfile(os.path.join(path, x))]
 
     if ftypes is None:
         return paths
@@ -2520,10 +2394,7 @@ def get_mean_tp_splits(
 
     # If more than one row, we have a problem!
     if len(p_tp_splits) > 1:
-        raise ValueError(
-            "Found more than one row in the mean time period "
-            "splits file."
-        )
+        raise ValueError("Found more than one row in the mean time period " "splits file.")
 
     if aggregate_to_weekday:
         tp_needed = ["tp1", "tp2", "tp3", "tp4"]
@@ -2597,9 +2468,7 @@ def get_zone_translation(
     base_col_name = "%s_zone_id"
 
     # Load the file
-    path = os.path.join(
-        import_dir, base_filename % (from_zone, to_zone)
-    )
+    path = os.path.join(import_dir, base_filename % (from_zone, to_zone))
     translation = pd.read_csv(path)
 
     # Make sure we can find the columns
@@ -2609,8 +2478,7 @@ def get_zone_translation(
     if from_col not in translation.columns:
         raise ValueError(
             "Found the file at '%s', but the columns do not "
-            "match. Cannot find from_zone column '%s'"
-            % (path, from_col)
+            "match. Cannot find from_zone column '%s'" % (path, from_col)
         )
 
     if to_col not in translation.columns:
@@ -2620,9 +2488,7 @@ def get_zone_translation(
         )
 
     # Make sure the columns are in the correct format
-    translation = translation.reindex(
-        [from_col, to_col], axis="columns"
-    )
+    translation = translation.reindex([from_col, to_col], axis="columns")
     try:
         translation[from_col] = translation[from_col].astype(int)
     except ValueError:
@@ -2747,9 +2613,7 @@ def file_write_check(path: Union[str, Path], wait: bool = True) -> Path:
                     waiting = True
                 time.sleep(1)
             else:
-                new_path = path.parent / (
-                    path.stem + f"_{count}" + path.suffix
-                )
+                new_path = path.parent / (path.stem + f"_{count}" + path.suffix)
                 count += 1
                 if count > 100:
                     raise ValueError("Too many files in use!")
@@ -2846,10 +2710,7 @@ def fit_filter(
         # Check the column exists
         if col not in df.columns:
             if raise_error:
-                raise KeyError(
-                    "'%s' Column not found in given dataframe"
-                    % str(col)
-                )
+                raise KeyError("'%s' Column not found in given dataframe" % str(col))
             else:
                 continue
 
@@ -2863,9 +2724,7 @@ def fit_filter(
     return fitted_filter
 
 
-def remove_none_like_filter(
-    df_filter: Dict[str, Any]
-) -> Dict[str, Any]:
+def remove_none_like_filter(df_filter: Dict[str, Any]) -> Dict[str, Any]:
     """
     Removes all None-like items from df_filter
 
@@ -3133,9 +2992,7 @@ def balance_a_to_p(
         if productions[col].sum() == 0:
             attractions[col] = 0
         else:
-            attractions[col] *= (
-                productions[col].sum() / attractions[col].sum()
-            )
+            attractions[col] *= productions[col].sum() / attractions[col].sum()
 
         # Throw an error if we somehow don't match
         np.testing.assert_approx_equal(
@@ -3150,9 +3007,7 @@ def balance_a_to_p(
     return attractions
 
 
-def compile_efficient_df(
-    eff_df: List[Dict[str, Any]], col_names: List[Any]
-) -> pd.DataFrame:
+def compile_efficient_df(eff_df: List[Dict[str, Any]], col_names: List[Any]) -> pd.DataFrame:
     """
     Compiles an 'efficient df' and makes it a full dataframe.
 
@@ -3326,9 +3181,7 @@ def convert_to_weights(
     for val in unq_vals:
         mask = df[weight_by_col] == val
         for year in year_cols:
-            df.loc[mask, year] = (
-                df.loc[mask, year] / df.loc[mask, year].sum()
-            )
+            df.loc[mask, year] = df.loc[mask, year] / df.loc[mask, year].sum()
     return df
 
 
@@ -3381,9 +3234,7 @@ def purpose_to_user_class(purpose: Union[int, str]) -> str:
             user_class = uc
 
     if user_class is None:
-        raise ValueError(
-            "No user class exists for purpose '%s' " % purpose
-        )
+        raise ValueError("No user class exists for purpose '%s' " % purpose)
 
     return user_class
 
@@ -3405,9 +3256,7 @@ def merge_df_list(df_list, **kwargs):
     merged_df:
         A single df of all items in df_list merged together
     """
-    return functools.reduce(
-        lambda l, r: pd.merge(l, r, **kwargs), df_list
-    )
+    return functools.reduce(lambda l, r: pd.merge(l, r, **kwargs), df_list)
 
 
 def split_base_future_years(
@@ -3434,15 +3283,10 @@ def split_base_future_years(
     """
     # Validate inputs
     if not isinstance(years, list):
-        raise TypeError(
-            "Expecting a list of years but got %s instead."
-            % str(type(years))
-        )
+        raise TypeError("Expecting a list of years but got %s instead." % str(type(years)))
 
     if not all([isinstance(x, int) for x in years]):
-        raise TypeError(
-            "Expecting a list of integers, but not all items are integers."
-        )
+        raise TypeError("Expecting a list of integers, but not all items are integers.")
     years = years.copy()
 
     # Find the smallest value
@@ -3477,9 +3321,7 @@ def split_base_future_years_str(
         A list of all other years than base_year in years.
         This will be returned in order, from lowest to highest.
     """
-    base_year, future_years = split_base_future_years(
-        [int(x) for x in years]
-    )
+    base_year, future_years = split_base_future_years([int(x) for x in years])
     return str(base_year), [str(x) for x in future_years]
 
 
@@ -3502,9 +3344,7 @@ def get_norms_vdm_segment_aggregation_dict(
     """
     if norms_vdm_seg_name in list(consts.NORMS_VDM_SEG_INTERNAL.keys()):
         return consts.NORMS_VDM_SEG_INTERNAL[norms_vdm_seg_name]
-    elif norms_vdm_seg_name in list(
-        consts.NORMS_VDM_SEG_EXTERNAL.keys()
-    ):
+    elif norms_vdm_seg_name in list(consts.NORMS_VDM_SEG_EXTERNAL.keys()):
         return consts.NORMS_VDM_SEG_EXTERNAL[norms_vdm_seg_name]
 
     raise ValueError(
@@ -3551,9 +3391,7 @@ def split_hb_nhb_purposes(
         elif p in consts.ALL_NHB_P:
             nhb_p.append(p)
         else:
-            raise nd.NormitsDemandError(
-                "%s is not a valid HB or NHB purpose" % str(p)
-            )
+            raise nd.NormitsDemandError("%s is not a valid HB or NHB purpose" % str(p))
     return hb_p, nhb_p
 
 
@@ -3584,16 +3422,12 @@ def sum_df_dict(
         that key in dict_list.
     """
     # Infer sum keys
-    sum_keys = (
-        list(dict_list[0].keys()) if sum_keys is None else sum_keys
-    )
+    sum_keys = list(dict_list[0].keys()) if sum_keys is None else sum_keys
 
     # Check all keys exist
     for sub_dict in dict_list:
         if not all([k in sub_dict for k in sum_keys]):
-            raise KeyError(
-                "Cannot find all the sum_keys in all the dictionaries."
-            )
+            raise KeyError("Cannot find all the sum_keys in all the dictionaries.")
 
     # Sum across keys
     ret_dict = dict()
@@ -3636,18 +3470,12 @@ def concat_df_dict(
         that key in dict_list.
     """
     # Infer sum keys
-    concat_keys = (
-        list(dict_list[0].keys())
-        if concat_keys is None
-        else concat_keys
-    )
+    concat_keys = list(dict_list[0].keys()) if concat_keys is None else concat_keys
 
     # Check all keys exist
     for sub_dict in dict_list:
         if not all([k in sub_dict for k in concat_keys]):
-            raise KeyError(
-                "Cannot find all the sum_keys in all the dictionaries."
-            )
+            raise KeyError("Cannot find all the sum_keys in all the dictionaries.")
 
     # Sub across keys
     ret_dict = dict()
@@ -3776,9 +3604,7 @@ def compare_sets(x1: set, x2: set) -> Tuple[bool, set, set]:
     return equal, x1_not_in_x2, x2_not_in_x1
 
 
-def all_set_or_not(
-    items: Iterable[Any], default: Iterable[Any] = None
-) -> bool:
+def all_set_or_not(items: Iterable[Any], default: Iterable[Any] = None) -> bool:
     """Check if all iterable items are set or none of them are set.
 
     Return True if all `items` are set to `default` values. Also returns

@@ -112,45 +112,27 @@ def trip_end_pa_to_od(
         for time in tp_nos:
             from_home = mode_sub.copy()
             from_home = from_home[from_home[tp_col] == time]
-            from_home = from_home.rename(
-                columns={trip_col: "o_" + trip_col}
-            )
+            from_home = from_home.rename(columns={trip_col: "o_" + trip_col})
             to_home = from_home.copy()
-            to_home = to_home.merge(
-                phi_factors, how="left", on=["p", tp_col]
-            )
-            to_home["d_" + trip_col] = (
-                to_home["o_trips"] * to_home["direction_factor"]
-            )
-            to_home = to_home.drop(
-                ["tp", "direction_factor", "o_trips"], axis=1
-            )
+            to_home = to_home.merge(phi_factors, how="left", on=["p", tp_col])
+            to_home["d_" + trip_col] = to_home["o_trips"] * to_home["direction_factor"]
+            to_home = to_home.drop(["tp", "direction_factor", "o_trips"], axis=1)
             to_home = to_home.rename(columns={"time_to_home": "tp"})
             to_home = to_home.groupby(group_cols).sum().reset_index()
             to_home = to_home.sort_values(toh_cols)
 
-            time_sub = from_home.merge(
-                to_home, how="left", on=group_cols
-            )
+            time_sub = from_home.merge(to_home, how="left", on=group_cols)
             time_subs.append(time_sub)
 
         mode_subs.append(pd.concat(time_subs))
 
     od_productions = pd.concat(mode_subs)
-    od_productions = (
-        od_productions.groupby(group_cols).sum().reset_index()
-    )
-    od_productions = od_productions.sort_values(group_cols).reset_index(
-        drop=True
-    )
+    od_productions = od_productions.groupby(group_cols).sum().reset_index()
+    od_productions = od_productions.sort_values(group_cols).reset_index(drop=True)
 
     # Round
-    od_productions["o_" + trip_col] = od_productions[
-        "o_" + trip_col
-    ].round(round_dp)
-    od_productions["d_" + trip_col] = od_productions[
-        "d_" + trip_col
-    ].round(round_dp)
+    od_productions["o_" + trip_col] = od_productions["o_" + trip_col].round(round_dp)
+    od_productions["d_" + trip_col] = od_productions["d_" + trip_col].round(round_dp)
 
     totals = {
         "o_total": od_productions["o_" + trip_col].sum(),
@@ -184,14 +166,12 @@ def simplify_phi_factors(time_period_splits: pd.DataFrame):
         return time_period_splits
 
     # Build a mask where purposes match
-    unq_purpose = time_period_splits[
-        "purpose_from_home"
-    ].drop_duplicates()
+    unq_purpose = time_period_splits["purpose_from_home"].drop_duplicates()
     keep_rows = np.array([False] * len(time_period_splits))
     for p in unq_purpose:
-        purpose_mask = (
-            time_period_splits["purpose_from_home"] == p
-        ) & (time_period_splits["purpose_to_home"] == p)
+        purpose_mask = (time_period_splits["purpose_from_home"] == p) & (
+            time_period_splits["purpose_to_home"] == p
+        )
         keep_rows = keep_rows | purpose_mask
 
     time_period_splits = time_period_splits.loc[keep_rows]
@@ -237,8 +217,7 @@ def _build_tp_pa_internal(
         in_zone_col = "p_zone"
     else:
         raise ValueError(
-            "%s is neither a home based nor non-home based purpose."
-            % str(purpose)
+            "%s is neither a home based nor non-home based purpose." % str(purpose)
         )
 
     # Rename model zone col to be more accurate
@@ -298,20 +277,14 @@ def _build_tp_pa_internal(
     tp_splits = tp_splits.rename(columns={str(year): "tp_split_factor"})
 
     # Drop either soc or ns, whichever is none is productions
-    if (
-        pa_24hr["soc"].dtype == object
-        and pa_24hr["soc"].unique()[0] == "none"
-    ):
+    if pa_24hr["soc"].dtype == object and pa_24hr["soc"].unique()[0] == "none":
         pa_24hr = pa_24hr.drop(columns=["soc"])
         tp_splits = tp_splits.drop(columns=["soc"])
 
         pa_24hr["ns"] = pa_24hr["ns"].astype(int)
         tp_splits["ns"] = tp_splits["ns"].astype(int)
 
-    if (
-        pa_24hr["ns"].dtype == object
-        and pa_24hr["ns"].unique()[0] == "none"
-    ):
+    if pa_24hr["ns"].dtype == object and pa_24hr["ns"].unique()[0] == "none":
         pa_24hr = pa_24hr.drop(columns=["ns"])
         tp_splits = tp_splits.drop(columns=["ns"])
 
@@ -331,14 +304,10 @@ def _build_tp_pa_internal(
     for time in unq_time:
         # Left join to make sure we don't drop any demand
         time_factors = tp_splits[tp_splits["tp"] == time]
-        tp_split_pa = pd.merge(
-            pa_24hr, time_factors, on=merge_cols, how="left"
-        )
+        tp_split_pa = pd.merge(pa_24hr, time_factors, on=merge_cols, how="left")
 
         # Fill in any NaNs from the left join
-        tp_split_pa["tp_split_factor"] = tp_split_pa[
-            "tp_split_factor"
-        ].fillna(0)
+        tp_split_pa["tp_split_factor"] = tp_split_pa["tp_split_factor"].fillna(0)
         tp_split_pa["tp"] = tp_split_pa["tp"].fillna(time).astype(int)
 
         # Calculate the number of trips for this time_period
@@ -350,9 +319,7 @@ def _build_tp_pa_internal(
         index_cols = group_cols.copy() + ["trips"]
 
         tp_split_pa = tp_split_pa.reindex(columns=index_cols)
-        tp_split_pa = (
-            tp_split_pa.groupby(group_cols).sum().reset_index()
-        )
+        tp_split_pa = tp_split_pa.groupby(group_cols).sum().reset_index()
 
         # Build write path
         tp_pa_name = du.get_dist_name(
@@ -453,9 +420,7 @@ def efs_build_tp_pa(
     """
     # Validate inputs
     if matrix_format not in consts.VALID_MATRIX_FORMATS:
-        raise ValueError(
-            "'%s' is not a valid matrix format." % str(matrix_format)
-        )
+        raise ValueError("'%s' is not a valid matrix format." % str(matrix_format))
 
     # Init
     soc_needed = [None] if soc_needed is None else soc_needed
@@ -548,22 +513,16 @@ def _build_od_internal(
         lookup_folder=phi_lookup_folder,
     )
     phi_factors = simplify_phi_factors(phi_factors)
-    phi_factors = phi_factors[
-        phi_factors["purpose_from_home"] == purpose
-    ]
+    phi_factors = phi_factors[phi_factors["purpose_from_home"] == purpose]
 
     # Get the relevant filenames from the dir
     dir_subset = dir_contents.copy()
     for name, param in calib_params.items():
         # Work around for 'p2' clashing with 'tp2'
         if name == "p":
-            dir_subset = [
-                x for x in dir_subset if "_" + name + str(param) in x
-            ]
+            dir_subset = [x for x in dir_subset if "_" + name + str(param) in x]
         else:
-            dir_subset = [
-                x for x in dir_subset if (name + str(param)) in x
-            ]
+            dir_subset = [x for x in dir_subset if (name + str(param)) in x]
 
     # Build dict of tp names to filenames
     tp_names = {}
@@ -592,17 +551,13 @@ def _build_od_internal(
         toh_dists = {}
         for tp_toh in tps:
             # Get phi
-            du.print_w_toggle(
-                "\tBuilding to_h " + str(tp_toh), verbose=echo
-            )
+            du.print_w_toggle("\tBuilding to_h " + str(tp_toh), verbose=echo)
             toh_int = int(tp_toh.replace("tp", ""))
             phi_toh = phi_frh[phi_frh["time_to_home"] == toh_int]
             phi_toh = phi_toh["direction_factor"]
 
             # Cast phi toh
-            phi_mat = np.broadcast_to(
-                phi_toh, (len(frh_base), len(frh_base))
-            )
+            phi_mat = np.broadcast_to(phi_toh, (len(frh_base), len(frh_base)))
             tp_toh_mat = frh_base * phi_mat
             toh_dists.update({tp_toh: tp_toh_mat})
         frh_ph.update({tp_frh: toh_dists})
@@ -837,8 +792,7 @@ def maybe_get_aggregated_tour_proportions(
         raise ValueError(
             "Could not find a non-zero tour proportions for (O, D) pair "
             "(%s, %s). This likely means there was a problem when "
-            "generating these tour proportions."
-            % (str(orig), str(dest))
+            "generating these tour proportions." % (str(orig), str(dest))
         )
 
     if bad_key:
@@ -1124,9 +1078,7 @@ def _tms_od_from_fh_th_factors_internal(
     )
     path = os.path.join(pa_import, input_dist_name)
     pa_24 = nd.read_df(path, index_col=0, find_similar=True)
-    to_numeric = lambda a: pd.to_numeric(
-        a, errors="ignore", downcast="integer"
-    )
+    to_numeric = lambda a: pd.to_numeric(a, errors="ignore", downcast="integer")
     pa_24.columns = to_numeric(pa_24.columns)
     pa_24.index = to_numeric(pa_24.index)
 
@@ -1142,16 +1094,10 @@ def _tms_od_from_fh_th_factors_internal(
         car_availability=str(ca),
         suffix=".pkl",
     )
-    fh_factor_dict = pd.read_pickle(
-        os.path.join(fh_th_factors_dir, fh_factor_fname)
-    )
+    fh_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, fh_factor_fname))
 
-    th_factor_fname = fh_factor_fname.replace(
-        "fh_factors", "th_factors"
-    )
-    th_factor_dict = pd.read_pickle(
-        os.path.join(fh_th_factors_dir, th_factor_fname)
-    )
+    th_factor_fname = fh_factor_fname.replace("fh_factors", "th_factors")
+    th_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, th_factor_fname))
 
     fh_mats, th_mats = to_od_via_fh_th_factors(
         pa_24=pa_24,
@@ -1349,16 +1295,10 @@ def _vdm_od_from_fh_th_factors_internal(
         ca=ca,
         suffix=".pkl",
     )
-    fh_factor_dict = pd.read_pickle(
-        os.path.join(fh_th_factors_dir, fh_factor_fname)
-    )
+    fh_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, fh_factor_fname))
 
-    th_factor_fname = fh_factor_fname.replace(
-        "fh_factors", "th_factors"
-    )
-    th_factor_dict = pd.read_pickle(
-        os.path.join(fh_th_factors_dir, th_factor_fname)
-    )
+    th_factor_fname = fh_factor_fname.replace("fh_factors", "th_factors")
+    th_factor_dict = pd.read_pickle(os.path.join(fh_th_factors_dir, th_factor_fname))
 
     fh_mats, th_mats = to_od_via_fh_th_factors(
         pa_24=pa_24,
@@ -1447,9 +1387,7 @@ def _vdm_od_from_fh_th_factors(
         kwargs_list = list()
         for to, uc, m, ca in loop_generator:
             kwargs = unchanging_kwargs.copy()
-            kwargs.update(
-                {"trip_origin": to, "uc": uc, "m": m, "ca": ca}
-            )
+            kwargs.update({"trip_origin": to, "uc": uc, "m": m, "ca": ca})
             kwargs_list.append(kwargs)
 
         multiprocessing.multiprocess(
@@ -1495,9 +1433,7 @@ def _build_od_from_fh_th_factors_internal(
                 segment_params=segment_params,
             )
             fname = template.format(segment_params=segment_str)
-            thread = file_ops.write_df_threaded(
-                mat, od_export_dir / fname
-            )
+            thread = file_ops.write_df_threaded(mat, od_export_dir / fname)
             writing_threads.append(thread)
 
     # Wait for all the threads to finish
@@ -1866,8 +1802,7 @@ def build_od_from_fh_th_factors_old(
     else:
         raise NotImplementedError(
             "'%s' is a valid segmentation level, however, we do not have a "
-            "mid-level function to deal with it at the moment."
-            % seg_level
+            "mid-level function to deal with it at the moment." % seg_level
         )
 
     to_od_fn(

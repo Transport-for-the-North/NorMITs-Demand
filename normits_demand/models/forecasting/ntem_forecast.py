@@ -55,9 +55,7 @@ class NTEMImportMatrices:
 
     SEGMENTATION = {"hb": "hb_p_m", "nhb": "nhb_p_m"}
 
-    def __init__(
-        self, matrix_folder: Path, year: int, model: nd.AssignmentModel
-    ) -> None:
+    def __init__(self, matrix_folder: Path, year: int, model: nd.AssignmentModel) -> None:
         self.year = int(year)
         self.model = model
         if self.model not in (
@@ -74,8 +72,7 @@ class NTEMImportMatrices:
         self.mode = self.model.get_mode().get_mode_num()
 
         self.segmentation = {
-            k: nd_core.get_segmentation_level(s)
-            for k, s in self.SEGMENTATION.items()
+            k: nd_core.get_segmentation_level(s) for k, s in self.SEGMENTATION.items()
         }
         self._hb_paths = None
         self._nhb_paths = None
@@ -89,9 +86,7 @@ class NTEMImportMatrices:
     def __repr__(self) -> str:
         return f"{self.__module__}.{self!s}"
 
-    def _check_path(
-        self, hb: str, segment_params: Dict[str, Any]
-    ) -> Path:
+    def _check_path(self, hb: str, segment_params: Dict[str, Any]) -> Path:
         """Generate the segment filename and check it exists.
 
         Parameters
@@ -265,9 +260,7 @@ def trip_end_growth(
         in `tempro_vectors`.
     """
     if base_year not in tempro_vectors:
-        raise NTEMForecastError(
-            f"base year ({base_year}) data not given"
-        )
+        raise NTEMForecastError(f"base year ({base_year}) data not given")
     growth_zone = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
 
     # Split data into internal and external DVectors
@@ -275,17 +268,11 @@ def trip_end_growth(
     base = tempro_vectors[base_year]
     base_data = {
         "internal": base.translate_zoning(growth_zone),
-        "external": base.translate_zoning(
-            model_zoning, weighting=zone_weighting
-        ),
+        "external": base.translate_zoning(model_zoning, weighting=zone_weighting),
     }
     masks = {
-        "internal": np.isin(
-            model_zoning.unique_zones, model_zoning.internal_zones
-        ),
-        "external": np.isin(
-            model_zoning.unique_zones, model_zoning.external_zones
-        ),
+        "internal": np.isin(model_zoning.unique_zones, model_zoning.internal_zones),
+        "external": np.isin(model_zoning.unique_zones, model_zoning.external_zones),
     }
 
     growth = {}
@@ -312,9 +299,7 @@ def trip_end_growth(
                         model_zoning, weighting="average"
                     )
                 # Set all zones not in the area to 0
-                forecast[area] = forecast[area].segment_apply(
-                    set_zero, masks[area]
-                )
+                forecast[area] = forecast[area].segment_apply(set_zero, masks[area])
             # Add the internal and external areas back together
             growth[yr] = forecast["internal"] + forecast["external"]
     return growth
@@ -355,18 +340,12 @@ def tempro_growth(
             f"tempro_data should be TEMProTripEnds type not {type(tempro_data)}"
         )
     zone_translation_weights = {
-        **dict.fromkeys(
-            ("hb_attractions", "nhb_attractions"), "employment"
-        ),
-        **dict.fromkeys(
-            ("hb_productions", "nhb_productions"), "population"
-        ),
+        **dict.fromkeys(("hb_attractions", "nhb_attractions"), "employment"),
+        **dict.fromkeys(("hb_productions", "nhb_productions"), "population"),
     }
     grown = {}
     for segment in dataclasses.fields(TEMProTripEnds):
-        LOG.info(
-            "Calculating TEMPro trip end growth for %s", segment.name
-        )
+        LOG.info("Calculating TEMPro trip end growth for %s", segment.name)
         grown[segment.name] = trip_end_growth(
             getattr(tempro_data, segment.name),
             model_zone_system,
@@ -455,10 +434,7 @@ def _check_matrix(
     nans = np.sum(matrix.isna().values)
     infs = np.sum(np.isinf(matrix.values))
     if nans > 0 or infs > 0:
-        err = (
-            f"{name} matrix contains {nans:,} "
-            f"NaN and {infs:,} infinite values"
-        )
+        err = f"{name} matrix contains {nans:,} " f"NaN and {infs:,} infinite values"
         if raise_nan_errors:
             raise NTEMForecastError(err)
         LOG.error(err)
@@ -510,9 +486,7 @@ def grow_matrix(
         ("col_targets", attractions),
     )
     for nm, dvec in dvectors:
-        mat_te = matrix.loc[internals, internals].sum(
-            axis=1 if nm == "row_targets" else 0
-        )
+        mat_te = matrix.loc[internals, internals].sum(axis=1 if nm == "row_targets" else 0)
         mat_te.name = "base_trips"
         mat_te.index.name = "model_zone_id"
         growth[nm] = pd.Series(
@@ -569,8 +543,7 @@ def grow_matrix(
         },
         internals,
         output_path.with_name(
-            file_ops.remove_suffixes(output_path).stem
-            + "-growth_comparison.xlsx"
+            file_ops.remove_suffixes(output_path).stem + "-growth_comparison.xlsx"
         ),
     )
     return combined_future
@@ -615,60 +588,37 @@ def _pa_growth_comparison(
     # Check dictionary keys and DataFrame/Series indices
     missing = [k for k in ("base", "forecast") if k not in matrices]
     if missing:
-        raise NTEMForecastError(
-            f"matrices dictionary is missing key(s): {missing}"
-        )
-    missing = [
-        k
-        for k in ("attractions", "productions")
-        if k not in growth_data
-    ]
+        raise NTEMForecastError(f"matrices dictionary is missing key(s): {missing}")
+    missing = [k for k in ("attractions", "productions") if k not in growth_data]
     if missing:
-        raise NTEMForecastError(
-            f"growth_data dictionary is missing key(s): {missing}"
-        )
+        raise NTEMForecastError(f"growth_data dictionary is missing key(s): {missing}")
     for nm, mat in matrices.items():
         if (mat.index != mat.columns).any():
-            raise NTEMForecastError(
-                f"{nm} matrix index and columns are not identical"
-            )
+            raise NTEMForecastError(f"{nm} matrix index and columns are not identical")
     if (matrices["base"].index != matrices["forecast"].index).any():
-        raise NTEMForecastError(
-            "base and forecast matrices don't have indentical indices"
-        )
+        raise NTEMForecastError("base and forecast matrices don't have indentical indices")
     for nm, g in growth_data.items():
         if (g.index != matrices["base"].index).any():
-            raise NTEMForecastError(
-                f"{nm} growth does not have the same index as the matrix"
-            )
+            raise NTEMForecastError(f"{nm} growth does not have the same index as the matrix")
 
     # Calculate aggregated growths
     growth_comparisons = {
         "Matrix Total Growth": (
-            np.sum(matrices["forecast"].values)
-            / np.sum(matrices["base"].values)
+            np.sum(matrices["forecast"].values) / np.sum(matrices["base"].values)
         ),
-        "Matrix Mean Growth": np.nanmean(
-            (matrices["forecast"] / matrices["base"]).values
-        ),
+        "Matrix Mean Growth": np.nanmean((matrices["forecast"] / matrices["base"]).values),
     }
     for nm, g in growth_data.items():
-        growth_comparisons[
-            f"TEMPro Mean Growth - {nm.title()}"
-        ] = np.mean(g.values)
+        growth_comparisons[f"TEMPro Mean Growth - {nm.title()}"] = np.mean(g.values)
 
     # Reindex with internals/externals
-    new_index = np.where(
-        matrices["base"].index.isin(internals), "I", "E"
-    )
+    new_index = np.where(matrices["base"].index.isin(internals), "I", "E")
     matrix_te = {}
     for nm, mat in matrices.items():
         mat = mat.copy()
         mat.index = new_index
         mat.columns = new_index
-        matrices[nm] = (
-            mat.groupby(level=0).sum().groupby(level=0, axis=1).sum()
-        )
+        matrices[nm] = mat.groupby(level=0).sum().groupby(level=0, axis=1).sum()
         matrix_te[nm] = pd.DataFrame(
             {
                 "Attractions": matrices[nm].sum(axis=1),
@@ -682,28 +632,18 @@ def _pa_growth_comparison(
         g.index = new_index
         growth_data[nm] = g.groupby(level=0).mean()
 
-    growth_comparisons["Matrix Trip End Growth"] = (
-        matrix_te["forecast"] / matrix_te["base"]
-    )
-    growth_comparisons["Matrix IE Growth"] = (
-        matrices["forecast"] / matrices["base"]
-    )
-    growth_comparisons["TEMPro Trip End Growth"] = pd.DataFrame(
-        growth_data
-    )
+    growth_comparisons["Matrix Trip End Growth"] = matrix_te["forecast"] / matrix_te["base"]
+    growth_comparisons["Matrix IE Growth"] = matrices["forecast"] / matrices["base"]
+    growth_comparisons["TEMPro Trip End Growth"] = pd.DataFrame(growth_data)
 
     out = output_path.with_suffix(".xlsx")
     with pd.ExcelWriter(out, engine="openpyxl") as excel:
         pandas_types = (pd.DataFrame, pd.Series)
         single_values = {
-            k: v
-            for k, v in growth_comparisons.items()
-            if not isinstance(v, pandas_types)
+            k: v for k, v in growth_comparisons.items() if not isinstance(v, pandas_types)
         }
         single_values = pd.Series(single_values)
-        single_values.to_excel(
-            excel, sheet_name="Summary", header=False
-        )
+        single_values.to_excel(excel, sheet_name="Summary", header=False)
         for nm, data in growth_comparisons.items():
             if not isinstance(data, pandas_types):
                 continue
@@ -759,12 +699,8 @@ def grow_all_matrices(
     for hb, (paths, attractions, productions) in iterator.items():
         for purp, path in paths.items():
             LOG.info("Reading base year matrix: %s", path)
-            base = file_ops.read_df(
-                path, find_similar=True, index_col=0
-            )
-            base.columns = pd.to_numeric(
-                base.columns, downcast="integer"
-            )
+            base = file_ops.read_df(path, find_similar=True, index_col=0)
+            base.columns = pd.to_numeric(base.columns, downcast="integer")
             for yr, attr in attractions.items():
                 LOG.info("Growing %s to %s", path.stem, yr)
                 try:
@@ -775,10 +711,7 @@ def grow_all_matrices(
                     ) from err
                 grow_matrix(
                     base,
-                    output_folder
-                    / matrices.output_filename(
-                        hb, purp, yr, scenario=scenario
-                    ),
+                    output_folder / matrices.output_filename(hb, purp, yr, scenario=scenario),
                     f"{purp}_{matrices.mode}",
                     attr,
                     prod,
@@ -953,9 +886,7 @@ def compile_highway(
         out_format="wide",
         hourly_average=True,
     )
-    LOG.info(
-        "Written Compiled OD PCU matrices: %s", compiled_od_pcu_path
-    )
+    LOG.info("Written Compiled OD PCU matrices: %s", compiled_od_pcu_path)
     return compiled_od_path
 
 
