@@ -16,7 +16,8 @@ import numpy as np
 # pylint: disable=import-error,wrong-import-position
 # Local imports here
 import utils
-
+from normits_demand.models.forecasting import forecast_cnfg
+from normits_demand.utils import file_ops
 # pylint: enable=import-error,wrong-import-position
 
 # # # CONSTANTS # # #
@@ -168,10 +169,8 @@ def produce_ticketype_splitting_matrices(
 
 
 def splits_loop(
-    edge_flows: pd.DataFrame,
+    ticket_split_params: forecast_cnfg.TicketSplitParams,
     stations_lookup: pd.DataFrame,
-    flows_lookup: pd.DataFrame,
-    ticket_split_proportions: pd.DataFrame,
     dist_dir: Path,
 ):
     """
@@ -180,6 +179,13 @@ def splits_loop(
     matrices used.
     """
     split_dict = {}
+    edge_flows = file_ops.read_df(
+        ticket_split_params.edge_flows_path, usecols=[0, 2, 5]
+    )
+    flows_lookup = file_ops.read_df(ticket_split_params.flow_cat_path)
+    ticket_splits_df = file_ops.read_df(
+        ticket_split_params.splits_path
+    )
     for tp in ["AM", "IP", "PM", "OP"]:
         dist_mx = pd.read_csv(
             dist_dir / f"{tp}_stn2stn_costs.csv", usecols=[0, 1, 4]
@@ -189,9 +195,10 @@ def splits_loop(
             stations_lookup,
             dist_mx,
             flows_lookup,
-            ticket_split_proportions,
+            ticket_splits_df,
         )
         split_dict[tp] = splitting_matrices
     with open(dist_dir / "splitting_matrices.pkl", "wb") as file:
         pickle.dump(split_dict, file)
+    ticket_split_params.save_yaml(dist_dir / "ticket_split_params.yml")
     return split_dict

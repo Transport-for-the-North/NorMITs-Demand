@@ -1,5 +1,4 @@
 iteration: 1.0
-tickets_processed: True
 forecast_scenario: core
 export_folder: E:\NorMITs Demand
 assignment_model: NoRMS
@@ -9,8 +8,12 @@ matrices_to_grow_dir: I:\Transfer\edge_replicant_xfer\Outputs
 
 # Custom inputs files
 demand_segments: I:\NorMITs Demand\import\edge_replicant\apply_growth\demand_segments.csv
-ticket_type_splits: I:\Transfer\edge_replicant_xfer\Outputs\splitting_matrices.pkl
 norms_to_edge_stns_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\TLCs_EDGE.csv
+ticket_type_splits: 
+  edge_flows_path: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Base and Mappings\FC_fullfat1819_NEW_DDG.csv
+  splits_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\TicketTypeSplits.csv
+  flow_cat_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\FlowCats.csv
+
 cube_exe: C:\Program Files\Citilabs\CubeVoyager\VOYAGER.EXE
 
 # EDGE outputs
@@ -20,4 +23,3 @@ edge_growth_dir: I:\NorMITs Demand\import\EDGE_growth\Edge distance\Nov 21 Centr
 # forecast year: EDGE growth factors file
 forecast_years:
   2040: Out_Nov 21 Central - Growth_2040_rate.csv.bz2
-  2043: Out_Nov 21 Central - Growth_2043_rate.csv.bz2
