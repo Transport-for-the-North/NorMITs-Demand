@@ -14,6 +14,7 @@ File purpose:
 import dataclasses
 import pickle
 from pathlib import Path
+
 # Third Party
 import pandas as pd
 
@@ -32,7 +33,7 @@ import ticket_splits
 
 
 @dataclasses.dataclass
-class GLobalVars:
+class GlobalVars:
     demand_segments: pd.DataFrame
     purposes: list
     norms_segments: list
@@ -46,7 +47,7 @@ class GLobalVars:
 
 
 # # # FUNCTIONS # # #
-def load_globals(params: forecast_cnfg.EDGEParameters) -> GLobalVars:
+def load_globals(params: forecast_cnfg.EDGEParameters) -> GlobalVars:
     """
     Load in global variables for the process (i.e. variables which don't vary by year/time_period/segment).
     """
@@ -77,7 +78,9 @@ def load_globals(params: forecast_cnfg.EDGEParameters) -> GLobalVars:
         edge_flows = file_ops.read_df(
             params.ticket_type_splits.edge_flows_path, usecols=[0, 2, 5]
         )
-        flows_lookup = file_ops.read_df(params.ticket_type_splits.flow_cat_path)
+        flows_lookup = file_ops.read_df(
+            params.ticket_type_splits.flow_cat_path
+        )
         ticket_splits_df = file_ops.read_df(
             params.ticket_type_splits.splits_path
         )
@@ -88,7 +91,7 @@ def load_globals(params: forecast_cnfg.EDGEParameters) -> GLobalVars:
             ticket_splits_df,
             params.matrices_to_grow_dir,
         )
-    vars = GLobalVars(
+    vars = GlobalVars(
         demand_segments,
         purposes,
         norms_segments,
