@@ -331,12 +331,8 @@ class SegmentationLevel:
             raise SegmentationError(
                 "Some segment names seem to have gone missing during "
                 "multiplication.\n"
-                "Expected %s segments.\n"
-                "Found %s segments."
-                % (
-                    len(return_seg.segment_names),
-                    len(set(multiply_dict.keys())),
-                )
+                f"Expected {len(return_seg.segment_names)} segments.\n"
+                f"Found {len(set(multiply_dict.keys()))} segments."
             )
 
         return multiply_dict, return_seg
@@ -1138,10 +1134,7 @@ class SegmentationLevel:
                 self.name,
             )
             return dict(
-                zip(
-                    self.segment_names,
-                    [[n] for n in self.segment_names],
-                )
+                zip(self.segment_names,[[n] for n in self.segment_names])
             )
 
         join_cols, translate_cols = self._get_aggregation_definition(other)
@@ -2014,6 +2007,11 @@ class SegmentationLevel:
 
         csv:
             Whether the return should be a csv filetype or not.
+
+        
+        scenario:
+            The NTEM scenario for this run. Don't include if this is used for
+            non-NTEM forecasting.
 
         compressed:
             Whether the return should be a compressed filetype or not.

@@ -175,7 +175,7 @@ class NTEMImportMatrices:
         trip_origin: str,
         purpose: int,
         year: int,
-        scenario: str = "Core",
+        scenario: str,
         compressed: bool = True,
         **kwargs,
     ) -> str:
@@ -189,6 +189,9 @@ class NTEMImportMatrices:
             Purpose number.
         year : int
             The year for the output matrix
+        scenario:
+            The NTEM scenario for this run. Don't include if this is used for
+            non-NTEM forecasting.
         compressed: bool, default True
             Whether the return should be a compressed filetype or not.
         kwargs: keyword arguments, optional
@@ -656,7 +659,7 @@ def grow_all_matrices(
     matrices: NTEMImportMatrices,
     growth: TEMProTripEnds,
     output_folder: Path,
-    scenario: str = "TEM",
+    scenario: str,
 ) -> None:
     """Grow all base year `matrices` to all forecast years in `trip_ends`.
 
@@ -846,6 +849,9 @@ def compile_highway(
         List of years to compile.
     car_occupancies_path : Path
         Path to CSV containing car occupancies.
+    scenario:
+        The NTEM scenario for this run. Don't include if this is used for
+        non-NTEM forecasting.
 
     Returns
     -------

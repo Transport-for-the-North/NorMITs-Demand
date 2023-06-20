@@ -1572,7 +1572,7 @@ def build_norms_compile_params(
         for (user_class, purposes), tp in iterator:
             for (
                 sub_uc,
-                seg_dict,
+                seg_dict
             ) in efs_consts.NORMS_SUB_USER_CLASS_SEG.items():
                 # Init
                 compile_mats = all_od_matrices.copy()
@@ -1716,6 +1716,10 @@ def build_compile_params(
         The name to give to the output file. If left as None,
         du.get_compile_params_name(matrix_format, year) is used to generate
         the output name.
+
+    scenario:
+        The NTEM scenario for this run. Don't include if this is used for
+        non-NTEM forecasting.
 
     Returns
     -------

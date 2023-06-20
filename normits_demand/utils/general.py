@@ -1598,7 +1598,7 @@ def vdm_segment_loop_generator(
     m_list: Iterable[int],
     ca_list: Iterable[int],
     tp_list: Iterable[int] = None,
-) -> (Union[Iterator[Tuple[str, str, int, int, int]], Iterator[Tuple[str, str, int, int]],]):
+) -> (Union[Iterator[Tuple[str, str, int, int, int]], Iterator[Tuple[str, str, int, int]]]):
     """
     Simple generator to avoid the need for so many nested loops
     """

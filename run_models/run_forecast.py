@@ -137,10 +137,7 @@ def main(
     params.save_yaml(output_params_file)
     LOG.info("Saved input parameters to %s", output_params_file)
 
-    if model in (
-        forecast_cnfg.ForecastModel.TRIP_END,
-        forecast_cnfg.ForecastModel.NTEM,
-    ):
+    if model in (forecast_cnfg.ForecastModel.TRIP_END, forecast_cnfg.ForecastModel.NTEM):
         tem_forecasting(params, model)
     elif model == forecast_cnfg.ForecastModel.EDGE:
         edge_replicant.run_edge_growth(params)
@@ -196,11 +193,8 @@ def model_mode_subset(
 
 
 def tem_forecasting(
-    params: Union[
-        forecast_cnfg.TEMForecastParameters,
-        forecast_cnfg.NTEMForecastParameters,
-    ],
-    forecast_model: forecast_cnfg.ForecastModel,
+    params: Union[forecast_cnfg.TEMForecastParameters,forecast_cnfg.NTEMForecastParameters],
+    forecast_model: forecast_cnfg.ForecastModel
 ) -> None:
     """Run the NTEM or trip end forecasting.
 
@@ -239,7 +233,7 @@ def tem_forecasting(
         tripend_data = tem_forecast.read_tripends(
             params.base_year, params.future_years, params.tripend_path
         )
-        scenario = "TEM"
+        scenario = None
     else:
         raise ValueError(f"forecasting for trip end or NTEM only not {forecast_model}")
 
