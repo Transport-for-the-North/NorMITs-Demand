@@ -14,15 +14,15 @@ File purpose:
 import pathlib
 import sys
 import pickle
+from functools import partial
+import logging
 
 sys.path.append(r"E:\NorMITs-Demand")
 # Third Party
-import logging
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from caf.toolkit import concurrency
-from functools import partial
+import caf.toolkit as ctk
 
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
@@ -45,19 +45,27 @@ LOG = logging.getLogger(__name__)
 
 # # # FUNCTIONS # # #
 def _tp_loop(
-    factored_matrices,
     matrices_to_grow_dir,
-    model_stations_tlcs,
+    model_stations_tlcs_len,
     forecast_year,
     demand_segments,
     filled_growth_matrices,
-    growth_summary,
     time_period,
     splitting_matrices,
 ):
     """
+
     Private function only called once for multiprocessing. All args are as named when read in.
     """
+    factored_matrices = {}
+    growth_summary = pd.DataFrame(
+            {
+                "Time_Period": [],
+                "Demand_Segment": [],
+                "Base_Demand": [],
+                f"{forecast_year}_Demand": [],
+            }
+        )
     overall_not_grown_demand = 0
     overall_base_demand = 0
     LOG.info(
@@ -66,10 +74,6 @@ def _tp_loop(
         timing.get_datetime(),
     )
     # read time period specific files
-    irsj_props = pd.read_hdf(
-        matrices_to_grow_dir / f"{time_period}_iRSj_probabilities.h5",
-        key="iRSj",
-    )
     LOG.info(
         f"{'Time_Period':>12}{'Demand_Segment':>15}"
         f"{'Base_Demand':>12}{f'{forecast_year}_Demand':>12}"
@@ -95,25 +99,28 @@ def _tp_loop(
             userclass = row.Userclass
             purpose = row.Purpose
             # read demand matrix
-            zonal_base_demand_mx = utils.wide_mx_2_long_mx(
-                omx_mat.get_matrix_level(segment),
-                rows="from_model_zone_id",
-                cols="to_model_zone_id",
-            )
+            zonal_base_demand_mx = ctk.pandas_utils.wide_to_long_infill(omx_mat.get_matrix_level(segment),
+                                                                        "from_model_zone_id",
+                                                                        "to_model_zone_id",
+                                                                        "Demand")
             # check if matrix has no demand then continue
             if zonal_base_demand_mx["Demand"].sum() == 0:
                 # keep matrix as it is, i.e. = 0
-                factored_matrices[segment] = utils.long_mx_2_wide_mx(
-                    zonal_base_demand_mx
+                cols = zonal_base_demand_mx.columns
+                factored_matrices[segment] = ctk.pandas_utils.long_to_wide_infill(
+                    zonal_base_demand_mx,
+                    cols[0],
+                    cols[1],
+                    cols[2]
                 )
                 LOG.info(
                     f"{time_period:>12}{segment:>15}" f"{0:>12}{0:>12}"
                 )
                 continue
             # reduce probabilities to current userclass
-            irsj_probs_segment = irsj_props.loc[
-                irsj_props["userclass"] == userclass
-            ].reset_index(drop=True)
+            if ~(matrices_to_grow_dir / f"{userclass}_{time_period}_iRSj_probabilities.h5").isfile():
+                utils.split_irsj(matrices_to_grow_dir, 'userclass', time_period)
+            irsj_probs_segment = pd.read_csv(f"{userclass}_{time_period}_iRSj_probabilities.h5")
             # convert matrix to numpy stn2stn and produce a conversion lookup
             (
                 np_stn2stn_base_demand_mx,
@@ -121,14 +128,14 @@ def _tp_loop(
             ) = utils.zonal_from_to_stations_demand(
                 zonal_base_demand_mx,
                 irsj_probs_segment,
-                len(model_stations_tlcs),
+                model_stations_tlcs_len,
                 userclass,
                 to_home,
             )
             # store matrix total demand
             tot_input_demand = round(np_stn2stn_base_demand_mx.sum())
             # add to overall base demand
-            overall_base_demand = overall_base_demand + tot_input_demand
+            overall_base_demand += tot_input_demand
             # apply growth
             np_stn2stn_grown_demand_mx = (
                 apply_growth.apply_demand_growth(
@@ -197,7 +204,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
     )
     LOG.info("#" * 80)
     LOG.info("Loading globals variables for growth process.")
-    globals = loading.load_globals(params)
+    global_params = loading.load_globals(params)
     # loop over forecast years
     for forecast_year in params.forecast_years:
         LOG.info(
@@ -230,49 +237,29 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 / f"missing_factors_{i}_{forecast_year}.csv"
             )
         # create empty dictionary to store matrices
-        factored_matrices = {}
         factored_24hr_matrices = {}
         # declare global demand total variables
         # empty dataframe for growth summary
-        growth_summary = pd.DataFrame(
-            {
-                "Time_Period": [],
-                "Demand_Segment": [],
-                "Base_Demand": [],
-                f"{forecast_year}_Demand": [],
-            }
-        )
-        with open(
-            r"E:\NorMITs Demand\Forecasting\edge\1.0\iter1.0\Test\refactor_growth.pkl",
-            "wb",
-        ) as file:
-            pickle.dump(filled_growth_matrices, file)
 
         # loop over time periods
         tp_looper = partial(
             _tp_loop,
-            factored_matrices.copy(),
             params.matrices_to_grow_dir,
-            globals.station_tlcs,
+            len(globals.station_tlcs),
             forecast_year,
-            globals.demand_segments.copy(),
-            filled_growth_matrices.copy(),
-            growth_summary,
+            globals.demand_segments,
+            filled_growth_matrices,
         )
         args = [
             (time_period, globals.ticket_type_splits[time_period])
             for time_period in globals.time_periods
         ]
-        outputs = concurrency.multiprocess(
+        outputs = ctk.concurrency.multiprocess(
             tp_looper, args, in_order=True
         )
         factored = [k["factored"] for k in outputs]
-        factored_matrices = {
-            i: j for i, j in zip(globals.time_periods, factored)
-        }
-        overall_not_grown_demand = sum(
-            [i["overall_not_grown"] for i in outputs]
-        )
+        factored_matrices = dict(zip(globals.time_periods, factored))
+        overall_not_grown_demand = sum([i["overall_not_grown"] for i in outputs])
         overall_base_demand = sum([i["overall_base"] for i in outputs])
 
         # calculate proportion of not grown demand
@@ -282,11 +269,8 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         )
         # if proportion is greater than 1%, terminate the program
         if not_grown_demand_pcent > 0.01:
-            LOG.critical(
-                f" Percentage of the demand not being grown {round(not_grown_demand_pcent * 100,3)}% is > 1%.\n"
-                "User must review growth factors used."
-            )
-            sys.exit()
+            raise ValueError(f" Percentage of the demand not being grown {round(not_grown_demand_pcent * 100,3)}% is > 1%.\n"
+                "User must review growth factors used.")
         else:
             LOG.warning(
                 f" Percentage of the demand not being grown {round(not_grown_demand_pcent * 100,3)}%."

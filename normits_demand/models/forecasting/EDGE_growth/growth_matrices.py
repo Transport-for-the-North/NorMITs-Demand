@@ -9,7 +9,7 @@ Formats matrices, including converting to numpy arrays, and infills missing grow
 # Third Party
 import pandas as pd
 import numpy as np
-
+import caf.toolkit as ctk
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
 # Local imports here
@@ -83,12 +83,10 @@ def prepare_growth_matrices(
                 & (factors_df["TicketType"] == ticket_type)
             ]
             # expand matrix
-            mx_df = utils.expand_matrix(
-                mx_df, zones=len(stations_lookup), stations=True
-            )
+            index = len(stations_lookup)
             growth_matrices[purpose][
                 ticket_type
-            ] = utils.long_mx_2_wide_mx(mx_df)
+            ] = ctk.pandas_utils.long_to_wide_infill(mx_df, mx_df.columns[0], mx_df.columns[1], mx_df.columns[2], index, index, infill=0).values
 
     return growth_matrices
 
@@ -123,7 +121,7 @@ def fill_missing_factors(
         dict of missing factors. Gives indices of missing factors.
     """
     # order S: R, F
-    filled_growth_matrices = {i: {} for i in purposes}
+    filled_growth_matrices = dict.fromkeys(purposes, {})
     missing_factors = {}
     for purpose in purposes:
         # get current matrices

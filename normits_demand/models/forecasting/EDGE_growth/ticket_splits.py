@@ -11,6 +11,7 @@ import pickle
 # Third Party
 import pandas as pd
 import numpy as np
+import caf.toolkit as ctk
 
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
@@ -140,9 +141,9 @@ def produce_ticketype_splitting_matrices(
         ticket_split_proportions, how="left", on=["TAG_Flow"]
     )
     # get list of purposes
-    purposes = edge_flows["Purpose"].drop_duplicates().to_list()
+    purposes = edge_flows["Purpose"].unique()
     # create matrices dictionary
-    splitting_matrices = {i: {} for i in purposes}
+    splitting_matrices = dict.fromkeys(purposes, dict())
     # create numpy splitting matrices
     for purpose in purposes:
         for ticketype in ["F", "R", "S"]:
@@ -157,13 +158,11 @@ def produce_ticketype_splitting_matrices(
             # rename
             mx_df = mx_df.rename(columns={ticketype: "Demand"})
             # expand matrix
-            mx_df = utils.expand_matrix(
-                mx_df, zones=len(stations_lookup), stations=True
-            )
+            index = len(stations_lookup)
             # convert to numpy and add to matrices dictionary
             splitting_matrices[purpose][
                 ticketype
-            ] = utils.long_mx_2_wide_mx(mx_df)
+            ] = ctk.pandas_utils.long_to_wide_infill(mx_df, mx_df.columns[0], mx_df.columns[1], mx_df.columns[2], index, index, 0).values
 
     return splitting_matrices
 
@@ -172,6 +171,7 @@ def splits_loop(
     ticket_split_params: forecast_cnfg.TicketSplitParams,
     stations_lookup: pd.DataFrame,
     dist_dir: Path,
+    tps: list = ["AM", "IP", "PM", "OP"]
 ):
     """
     Generates splitting ticket splitting factors for a given set of inputs.
@@ -186,7 +186,7 @@ def splits_loop(
     ticket_splits_df = file_ops.read_df(
         ticket_split_params.splits_path
     )
-    for tp in ["AM", "IP", "PM", "OP"]:
+    for tp in tps:
         dist_mx = pd.read_csv(
             dist_dir / f"{tp}_stn2stn_costs.csv", usecols=[0, 1, 4]
         )

@@ -20,7 +20,7 @@ import pandas as pd
 
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
-from normits_demand.models.forecasting import forecast_cnfg
+from normits_demand.models.forecasting import forecast_cnfg                                                              
 from normits_demand.utils import file_ops
 import ticket_splits
 
@@ -93,12 +93,5 @@ def load_globals(params: forecast_cnfg.EDGEParameters) -> GlobalVars:
                 model_stations_tlcs,
                 params.matrices_to_grow_dir,
             )
-    vars = GLobalVars(
-        demand_segments,
-        purposes,
-        norms_segments,
-        all_segments,
-        ticket_type_splits,
-        model_stations_tlcs,
-    )
-    return vars
+
+    return GlobalVars(demand_segments, purposes, norms_segments, all_segments, ticket_type_splits, model_stations_tlcs)

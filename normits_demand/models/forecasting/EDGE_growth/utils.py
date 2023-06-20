@@ -24,93 +24,6 @@ from normits_demand.utils import file_ops
 # # # CLASSES # # #
 
 # # # FUNCTIONS # # #
-def long_mx_2_wide_mx(
-    mx_df: pd.DataFrame,
-    row: str = "no_entry",
-    col: str = "no_entry",
-    value: str = "no_entry",
-) -> np.ndarray:
-    """Convert pandas long matrix to numpy wide matrix.
-
-    Function assumes default entry of a pandas dataframe of three columns:
-        [origin/from/production, destination,to/attraction, demand]
-    Can be specified if the matrix is of a different length or order.
-
-    Parameters
-    ----------
-    mx_df : pd.DataFrame
-        pandas long matrix dataframe to convert
-    row : str, optional
-        rows vector in the matrix dataframe
-    col : str, optional
-        columns vector in the matrix dataframe
-    value : str, optional
-        demand vector in the matrix dataframe
-
-    Returns
-    -------
-    np.ndarray
-        numpy wide matrix
-    """
-    # if user specified entries
-    if row == "no_entry":
-        row = mx_df.columns[0]
-    if col == "no_entry":
-        col = mx_df.columns[1]
-    if value == "no_entry":
-        value = mx_df.columns[2]
-
-    # reshape to wide numpy matrix
-    wide_mx = mx_df.pivot_table(
-        index=row, columns=col, values=value
-    ).values
-
-    return wide_mx
-
-
-def wide_mx_2_long_mx(
-    mx_np: np.ndarray,
-    rows: str = "from_stn_zone_id",
-    cols: str = "to_stn_zone_id",
-    values: str = "Demand",
-) -> pd.DataFrame:
-    """Convert numpy wide matrix to pandas long matrix.
-
-    Function assumes conversion is happening to a stn2stn matrix hence the headers
-    for the output dataframe are named to station level by default. Optional entries
-    can be given through rows, cols and values
-
-    Parameters
-    ----------
-    mx_np : np.ndarray
-        numpy wide matrix dataframe to convert
-    row : str, optional
-        rows vector in the matrix dataframe
-    col : str, optional
-        columns vector in the matrix dataframe
-    value : str, optional
-        demand vector in the matrix dataframe
-
-    Returns
-    -------
-    mx_df : pd.DataFrame
-        pandas long matrix
-    """
-    # get omx array to pandas dataframe and reset productions
-    mx_df = (
-        pd.DataFrame(mx_np)
-        .reset_index()
-        .rename(columns={"index": rows})
-    )
-    # melt DF to get attractions vector
-    mx_df = mx_df.melt(id_vars=[rows], var_name=cols, value_name=values)
-    # adjust zone number
-    mx_df[rows] = mx_df[rows] + 1
-    mx_df[cols] = mx_df[cols] + 1
-
-    return mx_df
-
-
 def transpose_matrix(
     mx_df: pd.DataFrame, stations: bool = False
 ) -> pd.DataFrame:
@@ -196,7 +109,7 @@ def filter_stations(stations_lookup, df):
     return df
 
 
-def merge_to_stations(stations_lookup: pd.DataFrame, df: pd.DataFrame, left_from: str, left_to: str):
+def merge_to_stations(stations_lookup: pd.DataFrame, df: pd.DataFrame, left_from: str, left_to: str, right: str = 'STATIONCODE'):
     """
     Merge dataframe to stations lookup with the processing that goes with this.
 
@@ -219,9 +132,9 @@ def merge_to_stations(stations_lookup: pd.DataFrame, df: pd.DataFrame, left_from
     """
     factors_df = df.merge(
         stations_lookup,
-        how="right",
+        how="inner",
         left_on=[left_from],
-        right_on=["STATIONCODE"],
+        right_on=[right],
     )
     # rename
     factors_df = factors_df.rename(
@@ -230,9 +143,9 @@ def merge_to_stations(stations_lookup: pd.DataFrame, df: pd.DataFrame, left_from
     # merge on destination/attraction
     factors_df = factors_df.merge(
         stations_lookup,
-        how="right",
+        how="inner",
         left_on=[left_to],
-        right_on=["STATIONCODE"],
+        right_on=[right],
     )
     factors_df.dropna(axis=0, inplace=True)
     # rename
@@ -395,4 +308,16 @@ def zonal_from_to_stations_demand(
 
     return np_mx, zonal_from_to_stns
 
-
+def split_irsj(irsj_dir: pathlib.Path, split_col: str, tp: str):
+    """
+    Splits an irsj prop files into separate files by userclass. Cycles through tps.
+    Args:
+        irsj_dir (pathlib.Path): Dir the prop files are saved in
+        split_col (str): The column to split by (designed to be userclass)
+        tps (list[str]): List of tps to read in for.
+    """
+    df = pd.read_hdf(irsj_dir / f"{tp}_iRSj_probabilites.h5")
+    group = df.groupby(split_col)
+    dfs = [group.get_group(i) for i in group.groups]
+    for df in dfs:
+        df.to_csv(irsj_dir / f"{df.loc[:, split_col].unique()[0]}_{tp}_iRSj_probabilites.csv")

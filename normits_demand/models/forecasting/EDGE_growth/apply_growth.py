@@ -41,7 +41,7 @@ def apply_demand_growth(
     # create a total stn2stn demand array to regroup the grown ticket demand into
     stn2stn_forecast_mx = np.empty(shape=[matrix_zones, matrix_zones])
     # split matrix to ticket types and apply growth
-    for ticketype in ["F", "R", "S"]:
+    for ticketype in splitting_matrices.items():
         ticketype_np_matrix = (
             stn2stn_base_mx * splitting_matrices[ticketype]
         )
@@ -59,7 +59,7 @@ def apply_demand_growth(
         # apply growth
         ticketype_np_matrix = ticketype_np_matrix * growth_mx
         # sum grown demand
-        stn2stn_forecast_mx = stn2stn_forecast_mx + ticketype_np_matrix
+        stn2stn_forecast_mx += ticketype_np_matrix
 
     # transpose ToHome demand
     if to_home:
