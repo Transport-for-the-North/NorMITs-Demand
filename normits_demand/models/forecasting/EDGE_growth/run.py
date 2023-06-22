@@ -16,6 +16,7 @@ import sys
 import pickle
 from functools import partial
 import logging
+import os
 
 sys.path.append(r"E:\NorMITs-Demand")
 # Third Party
@@ -23,6 +24,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import caf.toolkit as ctk
+from caf.toolkit.concurrency import multiprocess
 
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
@@ -99,10 +101,7 @@ def _tp_loop(
             userclass = row.Userclass
             purpose = row.Purpose
             # read demand matrix
-            zonal_base_demand_mx = ctk.pandas_utils.wide_to_long_infill(omx_mat.get_matrix_level(segment),
-                                                                        "from_model_zone_id",
-                                                                        "to_model_zone_id",
-                                                                        "Demand")
+            zonal_base_demand_mx = utils.wide_to_long_np(omx_mat.get_matrix_level(segment))
             # check if matrix has no demand then continue
             if zonal_base_demand_mx["Demand"].sum() == 0:
                 # keep matrix as it is, i.e. = 0
@@ -112,15 +111,14 @@ def _tp_loop(
                     cols[0],
                     cols[1],
                     cols[2]
-                )
+                ).values
                 LOG.info(
                     f"{time_period:>12}{segment:>15}" f"{0:>12}{0:>12}"
                 )
                 continue
             # reduce probabilities to current userclass
-            if ~(matrices_to_grow_dir / f"{userclass}_{time_period}_iRSj_probabilities.h5").isfile():
-                utils.split_irsj(matrices_to_grow_dir, 'userclass', time_period)
-            irsj_probs_segment = pd.read_csv(f"{userclass}_{time_period}_iRSj_probabilities.h5")
+            hdf_file = matrices_to_grow_dir / f"{time_period}_iRSj_probabilities_split.h5"
+            irsj_probs_segment = pd.read_hdf(hdf_file, key=f'userclass_{userclass}')
             # convert matrix to numpy stn2stn and produce a conversion lookup
             (
                 np_stn2stn_base_demand_mx,
@@ -157,10 +155,10 @@ def _tp_loop(
             )
             # store matrix total demand
             tot_output_demand = round(np_stn2stn_grown_demand_mx.sum())
-            LOG.info(
-                f"{time_period:>12}{segment:>15}"
-                f"{tot_input_demand:>12}{tot_output_demand:>12}"
-            )
+            # LOG.info(
+            #     f"{time_period:>12}{segment:>15}"
+            #     f"{tot_input_demand:>12}{tot_output_demand:>12}"
+            # )
             # append to growth summary df
             # empty dataframe for growth summary
             segment_growth_summary = pd.DataFrame(
@@ -203,7 +201,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         timing.get_datetime("%d-%m-%Y  %H:%M:%S"),
     )
     LOG.info("#" * 80)
-    LOG.info("Loading globals variables for growth process.")
+    LOG.info("Loading global variables for growth process.")
     global_params = loading.load_globals(params)
     # loop over forecast years
     for forecast_year in params.forecast_years:
@@ -219,16 +217,16 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         )
         # produce growth matrices
         growth_matrix_dic = growth_matrices.prepare_growth_matrices(
-            globals.demand_segments,
+            global_params.demand_segments,
             growth_factors,
-            globals.station_tlcs,
+            global_params.station_tlcs,
         )
         # fill growth matrices
         (
             filled_growth_matrices,
             missing_factors,
         ) = growth_matrices.fill_missing_factors(
-            globals.purposes,
+            global_params.purposes,
             growth_matrix_dic,
         )
         for i, j in missing_factors.items():
@@ -242,23 +240,29 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         # empty dataframe for growth summary
 
         # loop over time periods
+        for tp in global_params.time_periods:
+            hdf_file = params.matrices_to_grow_dir / f"{tp}_iRSj_probabilities_split.h5"
+            if not os.path.isfile(hdf_file):
+                utils.split_irsj(params.matrices_to_grow_dir, 'userclass', tp)
         tp_looper = partial(
             _tp_loop,
             params.matrices_to_grow_dir,
-            len(globals.station_tlcs),
+            len(global_params.station_tlcs),
             forecast_year,
-            globals.demand_segments,
+            global_params.demand_segments,
             filled_growth_matrices,
         )
         args = [
-            (time_period, globals.ticket_type_splits[time_period])
-            for time_period in globals.time_periods
+            (time_period, global_params.ticket_type_splits[time_period])
+            for time_period in global_params.time_periods
         ]
-        outputs = ctk.concurrency.multiprocess(
+        # for tp in global_params.time_periods:
+        #     tp_looper(tp, global_params.ticket_type_splits[tp])
+        outputs = multiprocess(
             tp_looper, args, in_order=True
         )
         factored = [k["factored"] for k in outputs]
-        factored_matrices = dict(zip(globals.time_periods, factored))
+        factored_matrices = dict(zip(global_params.time_periods, factored))
         overall_not_grown_demand = sum([i["overall_not_grown"] for i in outputs])
         overall_base_demand = sum([i["overall_base"] for i in outputs])
 
@@ -276,7 +280,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
                 f" Percentage of the demand not being grown {round(not_grown_demand_pcent * 100,3)}%."
             )
         # prepare 24Hr level demand matrices
-        for row in globals.demand_segments.itertuples():
+        for row in global_params.demand_segments.itertuples():
             # declare current segment's details
             segment = row.Segment
             # get 24Hr demand matrix
@@ -292,18 +296,16 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         # Combine matrices into NoRMS segments
         norms_matrices = apply_growth.fromto_2_from_by_averaging(
             factored_24hr_matrices,
-            globals.norms_segments,
-            globals.all_segments,
+            global_params.norms_segments,
+            global_params.all_segments,
         )
 
         # export files
-        for segment in globals.norms_segments:
+        for segment in global_params.norms_segments:
             # write out demand matrix
             file_ops.write_df(
-                utils.wide_mx_2_long_mx(
-                    norms_matrices[segment],
-                    rows="from_model_zone_id",
-                    cols="to_model_zone_id",
+                utils.wide_to_long_np(
+                    norms_matrices[segment]
                 ).sort_values(
                     by=["from_model_zone_id", "to_model_zone_id"]
                 ),
@@ -313,7 +315,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             )
         # convert to Cube .MAT
         utils.convert_csv_2_mat(
-            globals.norms_segments,
+            global_params.norms_segments,
             params.cube_exe,
             forecast_year,
             params.export_path,

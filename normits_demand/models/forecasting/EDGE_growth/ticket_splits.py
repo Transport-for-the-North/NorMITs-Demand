@@ -44,8 +44,54 @@ def append_dist(row):
         return row["TAG_NonDist"].lower() + " <25 miles"
     elif row["Distance"] < 100:
         return row["TAG_NonDist"].lower() + " 25 to 100 miles"
-    else:
+    elif row['TAG_NonDist'].lower().endswith('london'):
         return row["TAG_NonDist"].lower() + " 100 + miles"
+    else:
+        return row['TAG_NonDist'].lower() + " 100 + miles - adjusted"
+    
+def add_distance_band_tag_flow(mx_df: pd.DataFrame) -> pd.DataFrame:
+    """Add TAGs distance band based on distance.
+
+    Parameters
+    ----------
+    mx_df : pd.DataFrame
+        prepared matrix with flows
+
+    Returns
+    -------
+    mx_df : pd.DataFrame
+        dataframe with added new TAG flow
+    """
+    # set new flow to match the non-distance flow to begin with
+    mx_df.loc[:, "TAG_Flow"] = mx_df["TAG_NonDist"]
+    # Outside South East
+    mx_df.loc[
+        (mx_df["TAG_NonDist"] == "Outside South East".lower()) & (mx_df["Distance"] < 25),
+        "TAG_Flow",
+    ] = "Outside South East <25 miles".lower()
+    mx_df.loc[
+        (mx_df["TAG_NonDist"] == "Outside South East".lower())
+        & (mx_df["Distance"] >= 25)
+        & (mx_df["Distance"] < 100),
+        "TAG_Flow",
+    ] = "Outside South East 25 to 100 miles".lower()
+    mx_df.loc[
+        (mx_df["TAG_NonDist"] == "Outside South East".lower()) & (mx_df["Distance"] >= 100),
+        "TAG_Flow",
+    ] = "Outside South East 100 + miles - adjusted".lower()
+    # Outside South East to/from London
+    mx_df.loc[
+        (mx_df["TAG_NonDist"] == "Outside South East to/from London".lower())
+        & (mx_df["Distance"] < 100),
+        "TAG_Flow",
+    ] = "Outside South East to/from London < 100 miles".lower()
+    mx_df.loc[
+        (mx_df["TAG_NonDist"] == "Outside South East to/from London".lower())
+        & (mx_df["Distance"] >= 100),
+        "TAG_Flow",
+    ] = "Outside South East to/from London 100 + miles".lower()
+
+    return mx_df
 
 
 def produce_ticketype_splitting_matrices(
@@ -119,12 +165,7 @@ def produce_ticketype_splitting_matrices(
     # fill na
     edge_flows = edge_flows.fillna(0)
     # allocate distance bands
-    edge_flows["TAG_Flow"] = edge_flows[
-        edge_flows["TAG_NonDist"].str.startswith("outside south east")
-    ].apply(append_dist, axis=1)
-    edge_flows["TAG_Flow"] = edge_flows["TAG_Flow"].fillna(
-        edge_flows["TAG_NonDist"]
-    )
+    edge_flows = add_distance_band_tag_flow(edge_flows)
     # edge_flows.rename(columns={"TAG_NonDist": "TAG_Flow"})
     # keep needed columns
     edge_flows = edge_flows[
@@ -141,11 +182,12 @@ def produce_ticketype_splitting_matrices(
         ticket_split_proportions, how="left", on=["TAG_Flow"]
     )
     # get list of purposes
-    purposes = edge_flows["Purpose"].unique()
+    purposes = edge_flows["Purpose"].dropna().unique()
     # create matrices dictionary
-    splitting_matrices = dict.fromkeys(purposes, dict())
+    splitting_matrices = {}
     # create numpy splitting matrices
     for purpose in purposes:
+        inner_dic = {}
         for ticketype in ["F", "R", "S"]:
             # get current purpose
             mx_df = edge_flows.loc[
@@ -158,12 +200,10 @@ def produce_ticketype_splitting_matrices(
             # rename
             mx_df = mx_df.rename(columns={ticketype: "Demand"})
             # expand matrix
-            index = len(stations_lookup)
+            index = range(1, len(stations_lookup) + 1)
             # convert to numpy and add to matrices dictionary
-            splitting_matrices[purpose][
-                ticketype
-            ] = ctk.pandas_utils.long_to_wide_infill(mx_df, mx_df.columns[0], mx_df.columns[1], mx_df.columns[2], index, index, 0).values
-
+            inner_dic[ticketype] = ctk.pandas_utils.long_to_wide_infill(mx_df, mx_df.columns[0], mx_df.columns[1], mx_df.columns[2], index, index, 0).values
+        splitting_matrices[purpose] = inner_dic    
     return splitting_matrices
 
 

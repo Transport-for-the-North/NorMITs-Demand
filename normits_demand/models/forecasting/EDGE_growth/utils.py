@@ -10,7 +10,7 @@ from typing import Tuple
 # Third Party
 import numpy as np
 import pandas as pd
-
+import caf.toolkit as ctk
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
 # Local imports here
@@ -304,7 +304,14 @@ def zonal_from_to_stations_demand(
     mx_df = mx_df.fillna(0)
 
     # convert to long matrix
-    np_mx = long_mx_2_wide_mx(mx_df)
+    cols = mx_df.columns
+    np_mx = ctk.pandas_utils.long_to_wide_infill(
+                    mx_df,
+                    cols[0],
+                    cols[1],
+                    cols[2],
+                    infill=0
+                ).values
 
     return np_mx, zonal_from_to_stns
 
@@ -316,8 +323,31 @@ def split_irsj(irsj_dir: pathlib.Path, split_col: str, tp: str):
         split_col (str): The column to split by (designed to be userclass)
         tps (list[str]): List of tps to read in for.
     """
-    df = pd.read_hdf(irsj_dir / f"{tp}_iRSj_probabilites.h5")
+    hdf_path = irsj_dir / f"{tp}_iRSj_probabilities.h5"
+    df = pd.read_hdf(hdf_path)
     group = df.groupby(split_col)
     dfs = [group.get_group(i) for i in group.groups]
-    for df in dfs:
-        df.to_csv(irsj_dir / f"{df.loc[:, split_col].unique()[0]}_{tp}_iRSj_probabilites.csv")
+    write_path = irsj_dir / f"{tp}_iRSj_probabilities_split.h5"
+    with pd.HDFStore(write_path, mode='w') as store:
+        for df in dfs:
+            # Save each split DataFrame as a separate key in the HDF5 store
+            key = f'{split_col}_{df[split_col].unique()[0]}'
+            store[key] = df
+
+def wide_to_long_np(mx: np.array, cols: list[str] = ["from_model_zone_id","to_model_zone_id","Demand"]):
+    """
+    Wrapper around toolkit wide_to_long function to work on numpy array. Will add functionality to the base function
+    soon.
+    Parameters
+    ----------
+        mx (np.array): The matrix to be converted
+        cols (list[str], optional): The columns for the long matrix. Defaults to ["from_model_zone_id","to_model_zone_id","Demand"].
+
+    Returns
+    -------
+        pd.DataFrame: The requested long matrix
+    """
+    shp = mx.shape
+    ind = range(1, shp[0] + 1)
+    df = pd.DataFrame(mx, ind, ind)
+    return ctk.pandas_utils.wide_to_long_infill(df, cols[0], cols[1], cols[2])

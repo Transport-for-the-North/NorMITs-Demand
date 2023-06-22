@@ -1,6 +1,7 @@
 import numpy as np
 import utils
 import pandas as pd
+import caf.toolkit as ctk
 
 
 def apply_demand_growth(
@@ -41,9 +42,9 @@ def apply_demand_growth(
     # create a total stn2stn demand array to regroup the grown ticket demand into
     stn2stn_forecast_mx = np.empty(shape=[matrix_zones, matrix_zones])
     # split matrix to ticket types and apply growth
-    for ticketype in splitting_matrices.items():
+    for ticketype, mx in splitting_matrices.items():
         ticketype_np_matrix = (
-            stn2stn_base_mx * splitting_matrices[ticketype]
+            stn2stn_base_mx * mx
         )
         # transpose ToHome demand
         if to_home:
@@ -93,7 +94,8 @@ def convert_stns_to_zonal_demand(
         zonal matrix dataframe
     """
     # convert wide stns matrix to long stns matrix
-    stns_mx = utils.wide_mx_2_long_mx(np_stns_mx)
+
+    stns_mx = utils.wide_to_long_np(np_stns_mx, cols=["from_stn_zone_id", "to_stn_zone_id", "Demand"])
     # join stns matrix to conversion lookup
     if to_home:
         zonal_mx = zones_2_stns_lookup.merge(
@@ -112,8 +114,6 @@ def convert_stns_to_zonal_demand(
     zonal_mx["ZonalDemand"] = (
         zonal_mx["Demand"] * zonal_mx["stn_to_zone"]
     )
-    # fill na
-    zonal_mx = zonal_mx.fillna(0)
     # group to zonal level
     zonal_mx = (
         zonal_mx.groupby(["from_model_zone_id", "to_model_zone_id"])[
@@ -126,8 +126,9 @@ def convert_stns_to_zonal_demand(
     zonal_mx = zonal_mx.rename(
         columns={"ZonalDemand": f"{time_period}_Demand"}
     )
+    cols = zonal_mx.columns
     # convert back to wide numpy matrix
-    zonal_mx = utils.long_mx_2_wide_mx(zonal_mx)
+    zonal_mx = ctk.pandas_utils.long_to_wide_infill(zonal_mx, cols[0], cols[1], cols[2], infill=0).values
 
     return zonal_mx
 
