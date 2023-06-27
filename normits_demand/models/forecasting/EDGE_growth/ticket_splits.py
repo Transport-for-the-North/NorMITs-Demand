@@ -16,7 +16,7 @@ import caf.toolkit as ctk
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
 # Local imports here
-import utils
+from normits_demand.models.forecasting.edge_growth import utils
 from normits_demand.models.forecasting import forecast_cnfg
 from normits_demand.utils import file_ops
 # pylint: enable=import-error,wrong-import-position
@@ -217,6 +217,13 @@ def splits_loop(
     Generates splitting ticket splitting factors for a given set of inputs.
     Automatically dumps the dict to a pickle file in the same dir as the distance
     matrices used.
+
+    Parameters
+    ----------
+    ticket_split_params: params only needed for this process. See documentation for class.
+    stations_lookup: Read from csv and passed in.
+    dist_dir: Dir the relevant files are saved in.
+    tps: Time periods. Defaults.
     """
     split_dict = {}
     edge_flows = file_ops.read_df(

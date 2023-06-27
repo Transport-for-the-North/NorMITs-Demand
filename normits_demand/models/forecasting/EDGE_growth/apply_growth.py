@@ -58,7 +58,7 @@ def apply_demand_growth(
                 + filled_growth_matrices[ticketype].transpose()
             ) / 2
         # apply growth
-        ticketype_np_matrix = ticketype_np_matrix * growth_mx
+        ticketype_np_matrix *=  growth_mx
         # sum grown demand
         stn2stn_forecast_mx += ticketype_np_matrix
 
@@ -67,70 +67,6 @@ def apply_demand_growth(
         stn2stn_forecast_mx = stn2stn_forecast_mx.transpose()
 
     return stn2stn_forecast_mx
-
-
-def convert_stns_to_zonal_demand(
-    np_stns_mx: np.ndarray,
-    zones_2_stns_lookup: pd.DataFrame,
-    time_period: str,
-    to_home: bool = False,
-) -> np.ndarray:
-    """Convert numpy stn2stn matrix to pandas zonal level matrix.
-
-    Parameters
-    ----------
-    np_stns_mx : np.ndarray
-        station 2 station level matrix
-    zones_2_stns_lookup : pd.DataFrame
-        zonal to/from stations conversion proportions dataframe
-    time_period : str
-        time period being processed
-    to_home : bool
-        whether it's ToHome demand segment
-
-    Returns
-    -------
-    zonal_mx : np.array
-        zonal matrix dataframe
-    """
-    # convert wide stns matrix to long stns matrix
-
-    stns_mx = utils.wide_to_long_np(np_stns_mx, cols=["from_stn_zone_id", "to_stn_zone_id", "Demand"])
-    # join stns matrix to conversion lookup
-    if to_home:
-        zonal_mx = zones_2_stns_lookup.merge(
-            stns_mx,
-            how="left",
-            left_on=["from_stn_zone_id", "to_stn_zone_id"],
-            right_on=["from_stn_zone_id", "to_stn_zone_id"],
-        )
-    else:
-        zonal_mx = zones_2_stns_lookup.merge(
-            stns_mx,
-            how="left",
-            on=["from_stn_zone_id", "to_stn_zone_id"],
-        )
-    # calculate zonal demand
-    zonal_mx["ZonalDemand"] = (
-        zonal_mx["Demand"] * zonal_mx["stn_to_zone"]
-    )
-    # group to zonal level
-    zonal_mx = (
-        zonal_mx.groupby(["from_model_zone_id", "to_model_zone_id"])[
-            "ZonalDemand"
-        ]
-        .sum()
-        .reset_index()
-    )
-    # rename
-    zonal_mx = zonal_mx.rename(
-        columns={"ZonalDemand": f"{time_period}_Demand"}
-    )
-    cols = zonal_mx.columns
-    # convert back to wide numpy matrix
-    zonal_mx = ctk.pandas_utils.long_to_wide_infill(zonal_mx, cols[0], cols[1], cols[2], infill=0).values
-
-    return zonal_mx
 
 
 def fromto_2_from_by_averaging(

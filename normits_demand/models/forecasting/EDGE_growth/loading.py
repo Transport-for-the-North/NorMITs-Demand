@@ -14,6 +14,7 @@ File purpose:
 import dataclasses
 import pickle
 from pathlib import Path
+from typing import Union
 
 # Third Party
 import pandas as pd
@@ -22,7 +23,7 @@ import pandas as pd
 # pylint: disable=import-error,wrong-import-position
 from normits_demand.models.forecasting import forecast_cnfg                                                              
 from normits_demand.utils import file_ops
-import ticket_splits
+from normits_demand.models.forecasting.edge_growth import ticket_splits
 
 
 # pylint: enable=import-error,wrong-import-position
@@ -41,6 +42,18 @@ class GlobalVars:
     ticket_type_splits: pd.DataFrame
     station_tlcs: pd.DataFrame
     time_periods: tuple = ("AM", "IP", "PM", "OP")
+    """
+    Designed as an output from load_globals (below).
+    Parameters
+    ----------
+    demand_segments: A dataframe of demand segments simply read in.
+    purposes: List of purposes, derived from the 'Purposes' column of demand_segments.
+    norms_segments: Norms segments list from demand_segments.
+    all_segments: All segments from demand_segments.
+    ticket_type_splits: Ticket type splits, either read in or produced by the ticket_splits module.
+    station_tlcs: Dataframe loaded from csv.
+    time_periods: Tuple of strings. Defaults.
+    """
 
     def keys(self):
         return [field.name for field in dataclasses.fields(self)]
@@ -65,33 +78,37 @@ def load_globals(params: forecast_cnfg.EDGEParameters) -> GlobalVars:
     ]
     # all segments
     all_segments = demand_segments["Segment"].to_list()
-    demand_segments.loc[:, "ToHome"] = demand_segments["ToHome"].astype(
+    demand_segments["ToHome"] = demand_segments["ToHome"].astype(
         bool
     )
     model_stations_tlcs = file_ops.read_df(
         params.norms_to_edge_stns_path
     )
-    if isinstance(params.ticket_type_splits, Path):
-        with open(params.ticket_type_splits, "rb") as file:
-            ticket_type_splits = pickle.load(file)
-    else:
-        tick_param_path = params.matrices_to_grow_dir / "ticket_split_params.yml"
-        if tick_param_path.is_file():
-            ex_params = forecast_cnfg.TicketSplitParams.load_yaml(tick_param_path)
-            if ex_params == params.ticket_type_splits:
-                with open(params.matrices_to_grow_dir / "splitting_matrices.pkl", "rb") as file:
-                    ticket_type_splits = pickle.load(file)
-            else:
-                ticket_type_splits = ticket_splits.splits_loop(
-                    params.ticket_type_splits,
-                    model_stations_tlcs,
-                    params.matrices_to_grow_dir,
-                )
-        else:
-            ticket_type_splits = ticket_splits.splits_loop(
-                params.ticket_type_splits,
-                model_stations_tlcs,
-                params.matrices_to_grow_dir,
-            )
+    ticket_type_splits = ticket_splits_logic(params.ticket_type_splits, params.matrices_to_grow_dir, model_stations_tlcs)
+    
 
     return GlobalVars(demand_segments, purposes, norms_segments, all_segments, ticket_type_splits, model_stations_tlcs)
+
+def ticket_splits_logic(ticket_type_splits: Union[forecast_cnfg.TicketSplitParams, Path], matrices_to_grow_dir: Path, model_stations_tlcs: pd.DataFrame):
+    """
+    Logic for handling various ways of producing ticket type splits (ultimately either loading from a pickle file or generating)
+    Parameters
+    ----------
+    ticket_type_splits (Union[forecast_cnfg.TicketSplitParams, Path]): Directly from params.
+    matrices_to_grow_dir (Path): From params. This will be updated soon to a dedicated cache
+    model_stations_tlcs (pd.DataFrame): Loaded in load_globals
+
+    Returns:
+        _type_: _description_
+    """
+    if isinstance(ticket_type_splits, Path):
+        with open(ticket_type_splits, "rb") as file:
+            return pickle.load(file)
+    tick_param_path = matrices_to_grow_dir / "ticket_split_params.yml"
+    if tick_param_path.is_file():
+        ex_params = forecast_cnfg.TicketSplitParams.load_yaml(tick_param_path)
+        if ex_params == ticket_type_splits:
+            with open(matrices_to_grow_dir / "splitting_matrices.pkl", "rb") as file:
+                return pickle.load(file)
+        return ticket_splits.splits_loop(ticket_type_splits, model_stations_tlcs, matrices_to_grow_dir)
+    return ticket_splits.splits_loop(ticket_type_splits, model_stations_tlcs, matrices_to_grow_dir)

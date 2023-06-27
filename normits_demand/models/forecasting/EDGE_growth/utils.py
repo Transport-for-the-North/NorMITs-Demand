@@ -124,7 +124,7 @@ def merge_to_stations(stations_lookup: pd.DataFrame, df: pd.DataFrame, left_from
         The name of the 'from' column df
     left_to: str
         The name of the 'to' column in df
-
+    
     Returns
     -------
 
@@ -202,7 +202,6 @@ def zonal_from_to_stations_demand(
     irsj_props: pd.DataFrame,
     stations_count: int,
     userclass: int,
-    to_home: bool = False,
 ) -> Tuple[np.ndarray, pd.DataFrame]:
     """Create a stn2stn matrix and produce a two way conversion lookup (zonal <> stations).
 
@@ -216,8 +215,6 @@ def zonal_from_to_stations_demand(
         number of stations
     userclass : int
         segments userclass
-    to_home : bool
-        True if the demand is a ToHome demand
 
     Returns
     -------
@@ -231,9 +228,6 @@ def zonal_from_to_stations_demand(
     demand_mx = expand_matrix(demand_mx)
     # add userclass info
     demand_mx.loc[:, "userclass"] = userclass
-    # if ToHome demand then transpose matrix
-    if to_home:
-        demand_mx = transpose_matrix(demand_mx)
     # merge demand matrix to iRSj probabilities
     mx_df = demand_mx.merge(
         irsj_props,
@@ -314,6 +308,69 @@ def zonal_from_to_stations_demand(
                 ).values
 
     return np_mx, zonal_from_to_stns
+
+def convert_stns_to_zonal_demand(
+    np_stns_mx: np.ndarray,
+    zones_2_stns_lookup: pd.DataFrame,
+    time_period: str,
+    to_home: bool = False,
+) -> np.ndarray:
+    """Convert numpy stn2stn matrix to pandas zonal level matrix.
+
+    Parameters
+    ----------
+    np_stns_mx : np.ndarray
+        station 2 station level matrix
+    zones_2_stns_lookup : pd.DataFrame
+        zonal to/from stations conversion proportions dataframe
+    time_period : str
+        time period being processed
+    to_home : bool
+        whether it's ToHome demand segment
+
+    Returns
+    -------
+    zonal_mx : np.array
+        zonal matrix dataframe
+    """
+    # convert wide stns matrix to long stns matrix
+
+    stns_mx = utils.wide_to_long_np(np_stns_mx, cols=["from_stn_zone_id", "to_stn_zone_id", "Demand"])
+    # join stns matrix to conversion lookup
+    if to_home:
+        zonal_mx = zones_2_stns_lookup.merge(
+            stns_mx,
+            how="left",
+            left_on=["from_stn_zone_id", "to_stn_zone_id"],
+            right_on=["from_stn_zone_id", "to_stn_zone_id"],
+        )
+    else:
+        zonal_mx = zones_2_stns_lookup.merge(
+            stns_mx,
+            how="left",
+            on=["from_stn_zone_id", "to_stn_zone_id"],
+        )
+    # calculate zonal demand
+    zonal_mx["ZonalDemand"] = (
+        zonal_mx["Demand"] * zonal_mx["stn_to_zone"]
+    )
+    # group to zonal level
+    zonal_mx = (
+        zonal_mx.groupby(["from_model_zone_id", "to_model_zone_id"])[
+            "ZonalDemand"
+        ]
+        .sum()
+        .reset_index()
+    )
+    # rename
+    zonal_mx = zonal_mx.rename(
+        columns={"ZonalDemand": f"{time_period}_Demand"}
+    )
+    cols = zonal_mx.columns
+    # convert back to wide numpy matrix
+    zonal_mx = ctk.pandas_utils.long_to_wide_infill(zonal_mx, cols[0], cols[1], cols[2], infill=0).values
+
+    return zonal_mx
 
 def split_irsj(irsj_dir: pathlib.Path, split_col: str, tp: str):
     """

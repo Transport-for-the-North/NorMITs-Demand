@@ -18,7 +18,6 @@ from functools import partial
 import logging
 import os
 
-sys.path.append(r"E:\NorMITs-Demand")
 # Third Party
 import pandas as pd
 import numpy as np
@@ -29,10 +28,10 @@ from caf.toolkit.concurrency import multiprocess
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
 # Local imports here
-import growth_matrices
-import apply_growth
-import utils
-import loading
+from normits_demand.models.forecasting.edge_growth import growth_matrices
+from normits_demand.models.forecasting.edge_growth import apply_growth
+from normits_demand.models.forecasting.edge_growth import utils
+from normits_demand.models.forecasting.edge_growth import loading
 from normits_demand.utils import timing
 from normits_demand.matrices import omx_file
 from normits_demand.utils import file_ops
@@ -120,15 +119,15 @@ def _tp_loop(
             hdf_file = matrices_to_grow_dir / f"{time_period}_iRSj_probabilities_split.h5"
             irsj_probs_segment = pd.read_hdf(hdf_file, key=f'userclass_{userclass}')
             # convert matrix to numpy stn2stn and produce a conversion lookup
+            if to_home:
+                zonal_base_demand_mx = utils.transpose_matrix(zonal_base_demand_mx)
             (
                 np_stn2stn_base_demand_mx,
                 zonal_from_to_stns,
             ) = utils.zonal_from_to_stations_demand(
                 zonal_base_demand_mx,
                 irsj_probs_segment,
-                model_stations_tlcs_len,
-                userclass,
-                to_home,
+                model_stations_tlcs_len
             )
             # store matrix total demand
             tot_input_demand = round(np_stn2stn_base_demand_mx.sum())
@@ -174,7 +173,7 @@ def _tp_loop(
             )
             # convert back to zonal level demand
             zonal_grown_demand_mx = (
-                apply_growth.convert_stns_to_zonal_demand(
+                utils.convert_stns_to_zonal_demand(
                     np_stn2stn_grown_demand_mx,
                     zonal_from_to_stns,
                     time_period,
@@ -275,10 +274,9 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
         if not_grown_demand_pcent > 0.01:
             raise ValueError(f" Percentage of the demand not being grown {round(not_grown_demand_pcent * 100,3)}% is > 1%.\n"
                 "User must review growth factors used.")
-        else:
-            LOG.warning(
-                f" Percentage of the demand not being grown {round(not_grown_demand_pcent * 100,3)}%."
-            )
+        LOG.warning(
+            f"Percentage of the demand not being grown {round(not_grown_demand_pcent * 100,3)}%."
+        )
         # prepare 24Hr level demand matrices
         for row in global_params.demand_segments.itertuples():
             # declare current segment's details

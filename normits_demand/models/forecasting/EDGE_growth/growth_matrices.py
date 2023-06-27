@@ -13,7 +13,7 @@ import caf.toolkit as ctk
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
 # Local imports here
-import utils
+from normits_demand.models.forecasting.edge_growth import utils
 
 # pylint: enable=import-error,wrong-import-position
 
@@ -112,7 +112,7 @@ def fill_missing_factors(
         list of journey purposes
     growth_matrices : dict
         numpy growth matrices for all journey purposes and ticket types
-
+        
     Returns
     -------
     filled_growth_matrices : dict

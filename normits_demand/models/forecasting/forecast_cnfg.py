@@ -243,11 +243,15 @@ class TicketSplitParams(caf.toolkit.BaseConfig):
         Path to flow cat file
     splits_path: Path
         Path to ticket type splits file
+    info: str
+        Hard coded info about the corresponding pickle file. Can be changed by the user if wanted.
     """
 
     edge_flows_path: Path
     flow_cat_path: Path
     splits_path: Path
+    info: str = """splitting_matrices.pkl contains a nested dictionary with structure time_period -> purpose -> ticket_type -> array."
+                "An example of accessing an array would be 'splitting_matrices['AM']['Business']['F']'"""
 
 
 class EDGEParameters(caf.toolkit.BaseConfig):
@@ -282,7 +286,7 @@ class EDGEParameters(caf.toolkit.BaseConfig):
 
     # Input files
     demand_segments: Path
-    ticket_type_splits: TicketSplitParams
+    ticket_type_splits: Union[TicketSplitParams, Path]
     norms_to_edge_stns_path: Path
     cube_exe: Path
 
