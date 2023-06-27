@@ -283,6 +283,8 @@ class EDGEParameters(caf.toolkit.BaseConfig):
 
     # Input folders
     matrices_to_grow_dir: Path
+    ticket_splits_dir: Path
+    irsj_props_dir: Path
 
     # Input files
     demand_segments: Path

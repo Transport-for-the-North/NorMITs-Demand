@@ -47,6 +47,7 @@ LOG = logging.getLogger(__name__)
 # # # FUNCTIONS # # #
 def _tp_loop(
     matrices_to_grow_dir: pathlib.Path,
+    probs_dir: pathlib.Path,
     model_stations_tlcs_len: int,
     forecast_year: int,
     demand_segments: pd.DataFrame,
@@ -60,6 +61,7 @@ def _tp_loop(
     Parameters
     ----------
     matrices_to_grow_dir: Directory containing matrices for factors to be applied to.
+    probs_dir: directory containing irsj prorbabilites.
     model_stations_tlcs_len: Passed to zonal_from_to_stations_demand
     forecast_year: Year of the forecast
     demand_segments: See documentation of GlobalVars
@@ -125,7 +127,7 @@ def _tp_loop(
                 )
                 continue
             # reduce probabilities to current userclass
-            hdf_file = matrices_to_grow_dir / f"{time_period}_iRSj_probabilities_split.h5"
+            hdf_file = probs_dir / f"{time_period}_iRSj_probabilities_split.h5"
             irsj_probs_segment = pd.read_hdf(hdf_file, key=f'userclass_{userclass}')
             # convert matrix to numpy stn2stn and produce a conversion lookup
             if to_home:
@@ -243,12 +245,13 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
 
         # loop over time periods
         for tp in global_params.time_periods:
-            hdf_file = params.matrices_to_grow_dir / f"{tp}_iRSj_probabilities_split.h5"
+            hdf_file = params.irsj_props_dir / f"{tp}_iRSj_probabilities_split.h5"
             if not os.path.isfile(hdf_file):
-                utils.split_irsj(params.matrices_to_grow_dir, 'userclass', tp)
+                utils.split_irsj(params.irsj_props_dir, 'userclass', tp)
         tp_looper = partial(
             _tp_loop,
             params.matrices_to_grow_dir,
+            params.irsj_props_dir,
             len(global_params.station_tlcs),
             forecast_year,
             global_params.demand_segments,
