@@ -31,7 +31,22 @@ from normits_demand.models.forecasting.edge_growth import ticket_splits
 # # # CONSTANTS # # #
 
 # # # CLASSES # # #
-
+@dataclasses.dataclass
+class TPLoopOutput:
+    overall_not_grown: int
+    overall_base: int
+    factored: dict
+    summary: pd.DataFrame
+    """
+    Return from _tp_loop function in 'run'
+    
+    Parameters
+    ----------
+    overall_not_grown: Sum of matrix movements not grown by the process.
+    overall_base: Sum of base demand.
+    factored: Dictionary of grown matrices. Keys are demand segments.
+    summary: A summary dataframe with rows for each segment.
+    """
 
 @dataclasses.dataclass
 class GlobalVars:
@@ -44,6 +59,7 @@ class GlobalVars:
     time_periods: tuple = ("AM", "IP", "PM", "OP")
     """
     Designed as an output from load_globals (below).
+    
     Parameters
     ----------
     demand_segments: A dataframe of demand segments simply read in.

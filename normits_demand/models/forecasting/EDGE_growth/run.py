@@ -46,17 +46,26 @@ LOG = logging.getLogger(__name__)
 
 # # # FUNCTIONS # # #
 def _tp_loop(
-    matrices_to_grow_dir,
-    model_stations_tlcs_len,
-    forecast_year,
-    demand_segments,
+    matrices_to_grow_dir: pathlib.Path,
+    model_stations_tlcs_len: int,
+    forecast_year: int,
+    demand_segments: pd.DataFrame,
     filled_growth_matrices,
     time_period,
     splitting_matrices,
 ):
     """
-
     Private function only called once for multiprocessing. All args are as named when read in.
+
+    Parameters
+    ----------
+    matrices_to_grow_dir: Directory containing matrices for factors to be applied to.
+    model_stations_tlcs_len: Passed to zonal_from_to_stations_demand
+    forecast_year: Year of the forecast
+    demand_segments: See documentation of GlobalVars
+    filled_growth_matrices: Return from 'fill_missing_factors'
+    time_period: The time period for this loop
+    splitting_matrices: Ticket type splits, from GlobalVars
     """
     factored_matrices = {}
     growth_summary = pd.DataFrame(
@@ -183,13 +192,7 @@ def _tp_loop(
             # add to grown matrices dictionary
             factored_matrices[segment] = zonal_grown_demand_mx
 
-    outputs = {}
-    outputs["overall_not_grown"] = overall_not_grown_demand
-    outputs["overall_base"] = overall_base_demand
-    outputs["factored"] = factored_matrices
-    outputs["summary"] = growth_summary
-
-    return outputs
+    return loading.TPLoopOutput(overall_not_grown_demand, overall_base_demand, factored_matrices, growth_summary)
 
 
 def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
