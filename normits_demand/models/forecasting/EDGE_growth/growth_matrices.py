@@ -122,7 +122,6 @@ def fill_missing_factors(
     """
     # order S: R, F
     filled_growth_matrices = dict.fromkeys(purposes, {})
-    missing_factors = {}
     for purpose in purposes:
         # get current matrices
         f_mx = growth_matrices[purpose]["F"]
@@ -146,16 +145,5 @@ def fill_missing_factors(
         filled_growth_matrices[purpose]["F"] = filled_f_mx
         filled_growth_matrices[purpose]["R"] = filled_r_mx
         filled_growth_matrices[purpose]["S"] = filled_s_mx
-        f_df = pd.DataFrame(
-            np.argwhere(f_mx == 0), columns=["O_f", "D_f"]
-        )
-        r_df = pd.DataFrame(
-            np.argwhere(r_mx == 0), columns=["O_r", "D_r"]
-        )
-        s_df = pd.DataFrame(
-            np.argwhere(s_mx == 0), columns=["O_s", "D_s"]
-        )
-        missing = pd.concat([f_df, r_df, s_df], axis=1)
-        missing_factors[purpose] = missing
 
-    return filled_growth_matrices, missing_factors
+    return filled_growth_matrices

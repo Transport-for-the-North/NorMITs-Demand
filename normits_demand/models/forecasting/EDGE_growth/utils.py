@@ -202,6 +202,7 @@ def zonal_from_to_stations_demand(
     irsj_props: pd.DataFrame,
     stations_count: int,
     userclass: int,
+    time_period
 ) -> Tuple[np.ndarray, pd.DataFrame]:
     """Create a stn2stn matrix and produce a two way conversion lookup (zonal <> stations).
 
@@ -237,7 +238,7 @@ def zonal_from_to_stations_demand(
     # find zone to zone movements with demand but no proportion
     missing_props = mx_df.loc[
         (mx_df["proportion"].isna()) & (mx_df["Demand"] > 0),
-        ["from_model_zone_id", "to_model_zone_id"],
+        ["from_model_zone_id", "to_model_zone_id", "Demand"],
     ]
     # rename column
     mx_df = mx_df.rename(columns={"proportion": "stn_from_zone"})
@@ -306,8 +307,11 @@ def zonal_from_to_stations_demand(
                     cols[2],
                     infill=0
                 ).values
-
-    return np_mx, zonal_from_to_stns
+    missing_props_demand = missing_props.Demand.sum() / mx_df.Demand.sum()
+    if missing_props_demand > 0.01:
+        raise ValueError(f"{missing_props_demand * 100}% of demand does not have irsj prop values for UC{userclass}, tp{time_period}. Stopping process.")
+    else:
+        return np_mx, zonal_from_to_stns
 
 def convert_stns_to_zonal_demand(
     np_stns_mx: np.ndarray,
@@ -335,7 +339,7 @@ def convert_stns_to_zonal_demand(
     """
     # convert wide stns matrix to long stns matrix
 
-    stns_mx = utils.wide_to_long_np(np_stns_mx, cols=["from_stn_zone_id", "to_stn_zone_id", "Demand"])
+    stns_mx = wide_to_long_np(np_stns_mx, cols=["from_stn_zone_id", "to_stn_zone_id", "Demand"])
     # join stns matrix to conversion lookup
     if to_home:
         zonal_mx = zones_2_stns_lookup.merge(

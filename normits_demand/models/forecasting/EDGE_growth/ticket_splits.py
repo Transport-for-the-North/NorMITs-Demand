@@ -210,7 +210,6 @@ def produce_ticketype_splitting_matrices(
 def splits_loop(
     ticket_split_params: forecast_cnfg.TicketSplitParams,
     stations_lookup: pd.DataFrame,
-    dist_dir: Path,
     tps: list = ["AM", "IP", "PM", "OP"]
 ):
     """
@@ -222,7 +221,6 @@ def splits_loop(
     ----------
     ticket_split_params: params only needed for this process. See documentation for class.
     stations_lookup: Read from csv and passed in.
-    dist_dir: Dir the relevant files are saved in.
     tps: Time periods. Defaults.
     """
     split_dict = {}
@@ -231,11 +229,11 @@ def splits_loop(
     )
     flows_lookup = file_ops.read_df(ticket_split_params.flow_cat_path)
     ticket_splits_df = file_ops.read_df(
-        ticket_split_params.splits_path
+        ticket_split_params.splits_path / "TicketTypeSplits.csv"
     )
     for tp in tps:
         dist_mx = pd.read_csv(
-            dist_dir / f"{tp}_stn2stn_costs.csv", usecols=[0, 1, 4]
+            ticket_split_params.splits_path / f"{tp}_stn2stn_costs.csv", usecols=[0, 1, 4]
         )
         splitting_matrices = produce_ticketype_splitting_matrices(
             edge_flows,
@@ -245,7 +243,9 @@ def splits_loop(
             ticket_splits_df,
         )
         split_dict[tp] = splitting_matrices
-    with open(dist_dir / "splitting_matrices.pkl", "wb") as file:
+    with open(ticket_split_params.splits_path / "splitting_matrices.pkl", "wb") as file:
         pickle.dump(split_dict, file)
-    ticket_split_params.save_yaml(dist_dir / "ticket_split_params.yml")
+    ticket_split_params.info = """splitting_matrices.pkl contains a nested dictionary with structure time_period -> purpose -> ticket_type -> array.
+                                An example of accessing an array would be 'splitting_matrices['AM']['Business']['F']'"""
+    ticket_split_params.save_yaml(ticket_split_params.splits_path / "ticket_split_params.yml")
     return split_dict

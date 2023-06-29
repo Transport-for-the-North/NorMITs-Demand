@@ -1,5 +1,5 @@
 import numpy as np
-import utils
+from normits_demand.models.forecasting.edge_growth import utils
 import pandas as pd
 import caf.toolkit as ctk
 
@@ -99,7 +99,7 @@ def fromto_2_from_by_averaging(
     for segment in norms_segments:
         # check if the segment has a ToHome component or if it's a non-home based
         if (segment + "_T" in all_segments) and (
-            segment[:3].lower() != "NHB".lower()
+            segment[:3].lower() != "nhb"
         ):
             # average the FromHome and the transposition of the toHome
             matrices[segment] = (

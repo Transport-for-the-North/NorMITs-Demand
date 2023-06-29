@@ -100,12 +100,12 @@ def load_globals(params: forecast_cnfg.EDGEParameters) -> GlobalVars:
     model_stations_tlcs = file_ops.read_df(
         params.norms_to_edge_stns_path
     )
-    ticket_type_splits = ticket_splits_logic(params.ticket_type_splits, params.ticket_splits_dir, model_stations_tlcs)
+    ticket_type_splits = ticket_splits_logic(params.ticket_type_splits, model_stations_tlcs)
     
 
     return GlobalVars(demand_segments, purposes, norms_segments, all_segments, ticket_type_splits, model_stations_tlcs)
 
-def ticket_splits_logic(ticket_type_splits: Union[forecast_cnfg.TicketSplitParams, Path], splits_dir: Path, model_stations_tlcs: pd.DataFrame):
+def ticket_splits_logic(ticket_type_splits: Union[forecast_cnfg.TicketSplitParams, Path], model_stations_tlcs: pd.DataFrame):
     """
     Logic for handling various ways of producing ticket type splits (ultimately either loading from a pickle file or generating)
     Parameters
@@ -120,11 +120,10 @@ def ticket_splits_logic(ticket_type_splits: Union[forecast_cnfg.TicketSplitParam
     if isinstance(ticket_type_splits, Path):
         with open(ticket_type_splits, "rb") as file:
             return pickle.load(file)
-    tick_param_path = splits_dir / "ticket_split_params.yml"
+    tick_param_path = ticket_type_splits.splits_path / "ticket_split_params.yml"
     if tick_param_path.is_file():
         ex_params = forecast_cnfg.TicketSplitParams.load_yaml(tick_param_path)
         if ex_params == ticket_type_splits:
-            with open(splits_dir / "splitting_matrices.pkl", "rb") as file:
+            with open(ticket_type_splits.splits_path / "splitting_matrices.pkl", "rb") as file:
                 return pickle.load(file)
-        return ticket_splits.splits_loop(ticket_type_splits, model_stations_tlcs, splits_dir)
-    return ticket_splits.splits_loop(ticket_type_splits, model_stations_tlcs, splits_dir)
+    return ticket_splits.splits_loop(ticket_type_splits, model_stations_tlcs)

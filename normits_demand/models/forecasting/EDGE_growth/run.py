@@ -138,7 +138,9 @@ def _tp_loop(
             ) = utils.zonal_from_to_stations_demand(
                 zonal_base_demand_mx,
                 irsj_probs_segment,
-                model_stations_tlcs_len
+                model_stations_tlcs_len,
+                userclass,
+                time_period
             )
             # store matrix total demand
             tot_input_demand = round(np_stn2stn_base_demand_mx.sum())
@@ -226,18 +228,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             global_params.station_tlcs,
         )
         # fill growth matrices
-        (
-            filled_growth_matrices,
-            missing_factors,
-        ) = growth_matrices.fill_missing_factors(
-            global_params.purposes,
-            growth_matrix_dic,
-        )
-        for i, j in missing_factors.items():
-            j.to_csv(
-                params.export_folder
-                / f"missing_factors_{i}_{forecast_year}.csv"
-            )
+        filled_growth_matrices= growth_matrices.fill_missing_factors(global_params.purposes,growth_matrix_dic)
         # create empty dictionary to store matrices
         factored_24hr_matrices = {}
         # declare global demand total variables
@@ -261,8 +252,8 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             (time_period, global_params.ticket_type_splits[time_period])
             for time_period in global_params.time_periods
         ]
-        # for tp in global_params.time_periods:
-        #     tp_looper(tp, global_params.ticket_type_splits[tp])
+        for tp in global_params.time_periods:
+            tp_looper(tp, global_params.ticket_type_splits[tp])
         outputs = multiprocess(
             tp_looper, args, in_order=True
         )

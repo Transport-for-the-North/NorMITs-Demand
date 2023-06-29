@@ -1,5 +1,6 @@
 """Config files and options for `run_forecast`."""
 import enum
+import os
 from pathlib import Path
 from typing import Any, Optional, Union
 import pydantic
@@ -242,7 +243,8 @@ class TicketSplitParams(caf.toolkit.BaseConfig):
     flow_cat_path: Path
         Path to flow cat file
     splits_path: Path
-        Path to ticket type splits file
+        Dir containing TicketTypeSplits.csv as well as stn2stn_costs csvs (for each time period). This doubles as the cache
+        for processed ticket type splits, which are saved as a pickle file accompanied by a yml of this class.
     info: str
         Hard coded info about the corresponding pickle file. Can be changed by the user if wanted.
     """
@@ -250,8 +252,18 @@ class TicketSplitParams(caf.toolkit.BaseConfig):
     edge_flows_path: Path
     flow_cat_path: Path
     splits_path: Path
-    info: str = """splitting_matrices.pkl contains a nested dictionary with structure time_period -> purpose -> ticket_type -> array."
-                "An example of accessing an array would be 'splitting_matrices['AM']['Business']['F']'"""
+    info: Optional[str]
+    
+    @pydantic.validator("splits_path")
+    def _check_contents(cls, value):
+        files = os.listdir(value)
+        if "TicketTypeSplits.csv" not in files:
+            raise ValueError("splits_path must contain a file called TicketTypeSplits.csv, containing ticket type split data.")
+        for i in files:
+            if '_stn2stn_costs.csv' in i:
+                return value
+        raise ValueError("splits_path must contain files called {tp}_stn2stn_costs.csv, where tp are time periods (usually 'AM', 'IP', 'PM', 'OP')")
+
 
 
 class EDGEParameters(caf.toolkit.BaseConfig):
@@ -283,7 +295,6 @@ class EDGEParameters(caf.toolkit.BaseConfig):
 
     # Input folders
     matrices_to_grow_dir: Path
-    ticket_splits_dir: Path
     irsj_props_dir: Path
 
     # Input files
