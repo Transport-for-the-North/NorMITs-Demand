@@ -3,39 +3,42 @@ import_path: I:\NorMITs Demand\import
 assignment_model: NoHAM
 base_year: 2018
 future_years:
-  - 2028
-export_folder: E:\ntem_outputs\
-ntem_parameters:
-  data_path: I:\Data\NTEM
-  version: 8.0
-  scenario: Regional
+- 2040
+export_folder: E:\ntem_outputs
+export_path_fmt: '{export_folder}/Forecasting/{forecast_model}/{forecast_version}/iter{iteration}/{scenario}/{mode}'
 matrix_import_path: I:\NorMITs Demand\import\noham\post_me\tms_seg_pa
 hb_purposes_needed:
-  - 1
-  - 2
-  - 3
-  - 4
-  - 5
-  - 6
-  - 7
-  - 8
+- 1
+- 2
+- 3
+- 4
+- 5
+- 6
+- 7
+- 8
 nhb_purposes_needed:
-  - 12
-  - 13
-  - 14
-  - 15
-  - 16
-  - 18
-
+- 12
+- 13
+- 14
+- 15
+- 16
+- 18
 comparison_zone_systems:
   trip end: ca_sector_2020
   matrix 1: ca_sector_2020
 time_periods:
-  - 1
-  - 2
-  - 3
-  - 4
+- 1
+- 2
+- 3
+- 4
 user_classes:
-  - commute
-  - business
-  - other
+- commute
+- business
+- other
+output_trip_end_data: no
+output_trip_end_growth: no
+ntem_parameters:
+  data_path: I:\Data\NTEM
+  version: 8.0
+  scenario: Technology
+

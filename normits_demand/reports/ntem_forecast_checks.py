@@ -71,7 +71,7 @@ def _filename_contents(filename: str) -> Dict[str, Any]:
         r"_yr(?P<year>\d{4})"
         r"_p(?P<purpose>\d{,2})"
         r"_m(?P<mode>\d)"
-        r"_(?P<scenario>core|high|low|regional|technology|behaviour)"
+        r"_(?P<scenario>core|high|low|regional|technology|behavioural)"
         "$",
         re.IGNORECASE,
     )

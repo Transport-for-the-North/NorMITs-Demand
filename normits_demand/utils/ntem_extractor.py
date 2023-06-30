@@ -53,7 +53,8 @@ class TemproParser:
         'Low',
         'Regional',
         'Core',
-        'Behavioural'
+        'Behavioural',
+        'Technology'
     ]
     _output_years = [2011, 2018, 2033, 2035, 2040, 2050]
 
