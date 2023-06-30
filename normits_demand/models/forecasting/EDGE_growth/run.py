@@ -252,8 +252,8 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             (time_period, global_params.ticket_type_splits[time_period])
             for time_period in global_params.time_periods
         ]
-        for tp in global_params.time_periods:
-            tp_looper(tp, global_params.ticket_type_splits[tp])
+        # for tp in global_params.time_periods:
+        #     tp_looper(tp, global_params.ticket_type_splits[tp])
         outputs = multiprocess(
             tp_looper, args, in_order=True
         )
