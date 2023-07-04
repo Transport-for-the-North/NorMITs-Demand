@@ -15,8 +15,6 @@ import caf.toolkit as ctk
 # pylint: disable=import-error,wrong-import-position
 # Local imports here
 from normits_demand.matrices.cube_mat_converter import CUBEMatConverter
-from normits_demand.models.forecasting import forecast_cnfg
-from normits_demand.utils import file_ops
 # pylint: enable=import-error,wrong-import-position
 
 # # # CONSTANTS # # #

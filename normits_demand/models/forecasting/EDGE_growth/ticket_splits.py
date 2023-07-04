@@ -5,7 +5,6 @@ Module to process ticket type splitting factors.
 Splits by tag flow and purpose exist, which need to be converted to splits by station pair.
 """
 # Built-Ins
-from pathlib import Path
 import pickle
 
 # Third Party
