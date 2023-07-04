@@ -245,6 +245,6 @@ def splits_loop(
     with open(ticket_split_params.splits_path / "splitting_matrices.pkl", "wb") as file:
         pickle.dump(split_dict, file)
     ticket_split_params.info = """splitting_matrices.pkl contains a nested dictionary with structure time_period -> purpose -> ticket_type -> array.
-                                An example of accessing an array would be 'splitting_matrices['AM']['Business']['F']'"""
+An example of accessing an array would be 'splitting_matrices['AM']['Business']['F']'"""
     ticket_split_params.save_yaml(ticket_split_params.splits_path / "ticket_split_params.yml")
     return split_dict
