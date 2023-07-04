@@ -167,10 +167,6 @@ def _tp_loop(
             )
             # store matrix total demand
             tot_output_demand = round(np_stn2stn_grown_demand_mx.sum())
-            # LOG.info(
-            #     f"{time_period:>12}{segment:>15}"
-            #     f"{tot_input_demand:>12}{tot_output_demand:>12}"
-            # )
             # append to growth summary df
             # empty dataframe for growth summary
             segment_growth_summary = pd.DataFrame(
@@ -252,18 +248,16 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             (time_period, global_params.ticket_type_splits[time_period])
             for time_period in global_params.time_periods
         ]
-        # for tp in global_params.time_periods:
-        #     tp_looper(tp, global_params.ticket_type_splits[tp])
         outputs = multiprocess(
             tp_looper, args, in_order=True
         )
-        factored = [k["factored"] for k in outputs]
+        factored = [k.factored for k in outputs]
         factored_matrices = dict(zip(global_params.time_periods, factored))
-        overall_not_grown_demand = sum([i["overall_not_grown"] for i in outputs])
-        overall_base_demand = sum([i["overall_base"] for i in outputs])
+        overall_not_grown_demand = sum([i.overall_not_grown for i in outputs])
+        overall_base_demand = sum([i.overall_base for i in outputs])
 
         # calculate proportion of not grown demand
-        growth_summary = pd.concat([i["summary"] for i in outputs])
+        growth_summary = pd.concat([i.summary for i in outputs])
         not_grown_demand_pcent = (
             overall_not_grown_demand / overall_base_demand
         )

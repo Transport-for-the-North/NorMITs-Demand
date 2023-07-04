@@ -301,10 +301,11 @@ def zonal_from_to_stations_demand(
     # convert to long matrix
     cols = mx_df.columns
     np_mx = ctk.pandas_utils.long_to_wide_infill(
-                    mx_df,
-                    cols[0],
-                    cols[1],
-                    cols[2],
+                    df=mx_df,
+                    index_col=cols[0],
+                    columns_col=cols[1],
+                    values_col=cols[2],
+
                     infill=0
                 ).values
     missing_props_demand = missing_props.Demand.sum() / mx_df.Demand.sum()
