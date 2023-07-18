@@ -892,15 +892,14 @@ class TripLengthDistributionBuilder:
 
             # Generate aggregated names
             agg_segment_params = segment_params.copy()
-            agg_segment_params.pop(aggregated_exclude_segments, None)
+            agg_segment_types = segmentation.segment_types.copy()
+            for exclude in aggregated_exclude_segments:
+                agg_segment_params.pop(exclude, None)
+                agg_segment_types.pop(exclude, None)
 
             agg_naming_order = func_utils.list_safe_remove(
-                segmentation.naming_order,
-                [aggregated_exclude_segments],
+                segmentation.naming_order, aggregated_exclude_segments
             )
-
-            agg_segment_types = segmentation.segment_types.copy()
-            agg_segment_types.pop(aggregated_exclude_segments, None)
 
             # Build the TLD
             tld, tld_name, log_line = self._build_tld_from_segment_params(
