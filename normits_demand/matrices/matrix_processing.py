@@ -3366,8 +3366,12 @@ def split_internal_external(
             get_trip_origin=True,
             get_matrix_format=True,
         )
-        if seg_vals["matrix_format"] != matrix_format:
+        print(seg_vals)
+        # if seg_vals["matrix_format"] != matrix_format:
+        if matrix_format not in os.path.basename(path):
             continue
+        else:
+            seg_vals["matrix_format"] = matrix_format
 
         # Skip over any file which is not the wanted year
         if seg_vals["yr"] != year:
