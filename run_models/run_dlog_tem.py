@@ -31,6 +31,7 @@ RAW_LANDUSE_INDEX_COLUMNS = {
 }
 LANDUSE_ZONING = "msoa"
 
+
 ##### CLASSES #####
 @dataclasses.dataclass
 class _LandUseIter:
@@ -214,7 +215,7 @@ def split_raw_landuse(
 
     max_year = max(output_files)
     years = [str(i) for i in output_files]
-    LOG.info("Splitting raw %s landuse to separate years files", landuse)
+    LOG.info("Splitting raw %s landuse to separate years files from '%s'", landuse, raw_file)
     landuse_data = file_ops.read_df(raw_file, usecols=column_filter)
 
     # Aggregate rows because raw population is disaggregated by unneeded dwelling type column
