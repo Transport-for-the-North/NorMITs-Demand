@@ -131,6 +131,8 @@ class SegmentationLevel:
     _drop_splitter = ':'
     _segment_name_separator = '_'
 
+    _trip_origin_regex = r"(?:^|[\s_])(nhb|hb)[_\s]"
+
     def __init__(self,
                  name: str,
                  naming_order: List[str],
@@ -1891,12 +1893,30 @@ class SegmentationLevel:
 
     def get_trip_origin(self) -> nd.TripOrigin | None:
         """Get trip origin of segmentation, if applicable."""
-        pattern = r"(?:^|[\s_])(nhb|hb)[_\s]"
-        match = re.search(pattern, self.name.strip(), re.I)
+        match = re.search(self._trip_origin_regex, self.name.strip(), re.I)
         if match is None:
             return None
 
         return nd.TripOrigin(match.group(1))
+
+    def get_name_without_trip_origin(self) -> str:
+        """Return segmentation name without trip origin information.
+
+        Returns the original name if no trip origin information
+        is present.
+        """
+        trip_origin = self.get_trip_origin()
+        if trip_origin is None:
+            return self.name
+
+        # Remove trip origin then replace any duplicate "_"
+        name = re.sub(trip_origin.value, "", self.name, flags=re.I)
+        name = re.sub(r"_{2,}", "_", name)
+
+        if name.startswith("_"):
+            return name[1:]
+        return name
+
 
     def generate_file_name(
         self,

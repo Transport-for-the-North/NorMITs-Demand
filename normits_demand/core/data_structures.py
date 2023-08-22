@@ -2575,6 +2575,84 @@ class DVector:
             import_data=instance_dict['data'],
         )
 
+    @staticmethod
+    def build_filename_from_attributes(
+        segmentation: core.SegmentationLevel,
+        zoning_system: Optional[core.ZoningSystem] = None,
+        year: Optional[int] = None,
+        suffix: str = "dvec.pkl",
+        prefix: str = "",
+    ) -> str:
+        """Generate a filename for a DVector.
+
+        The filename follows the format
+        "{prefix}_{trip_origin}_{zone}_{segmentation}_{year}_{suffix}",
+        all values except `segmentation` are optional.
+
+        Parameters
+        ----------
+        segmentation : core.SegmentationLevel
+            Segmentation level of DVector, used for name of
+            segmentation and trip origin.
+        zoning_system : core.ZoningSystem, optional
+            Zoning system of DVector
+        year : int, optional
+            Year of data stored in DVector.
+        suffix : str, default "dvec.pkl"
+            Suffix to append to the end of the file name
+        prefix : str, default ""
+            Prefix to put at the start of the filename.
+
+        Returns
+        -------
+        str
+            Filename for DVector.
+
+        See Also
+        --------
+        build_filename: for generating the filename for an instance of DVector.
+        """
+        name_parts = []
+        prefix = prefix.strip()
+        if prefix != "":
+            name_parts.append(prefix)
+
+        trip_origin = segmentation.get_trip_origin()
+        if trip_origin is not None:
+            name_parts.append(trip_origin.value)
+
+        if zoning_system is not None:
+            name_parts.append(zoning_system.name)
+
+        name_parts.append(segmentation.get_name_without_trip_origin())
+
+        if year is not None:
+            name_parts.append(str(year))
+
+        if suffix.startswith("_"):
+            suffix = suffix[1:]
+        name_parts.append(suffix)
+
+        return "_".join(name_parts)
+
+    def build_filename(
+            self,
+            year: Optional[int] = None,
+            suffix: str = "pkl",
+            prefix: str = "",
+        ) -> str:
+        """Generate filename for DVector.
+
+        Wrapper around `build_filename_from_attributes`.
+
+        See Also
+        --------
+        build_filename_from_attributes: for information on the implementation.1
+        """
+        return self.build_filename_from_attributes(
+            self.segmentation, self.zoning_system, year, suffix, prefix
+        )
+
 
 class DVectorError(nd.NormitsDemandError):
     """
