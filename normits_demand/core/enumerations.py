@@ -203,8 +203,17 @@ class TripOrigin(IsValidEnum):
                 return to
 
         raise ValueError(
-            f"No TripOrigin exists with the value '{val}'. " f"Expected one of: {valid_values}"
+            f"No TripOrigin exists with the value '{val}'. Expected one of: {valid_values}"
         )
+
+    @classmethod
+    def _missing_(cls, value: str):
+        """Accept case insensitive versions of NHB / HB."""
+        value = value.lower().strip()
+        for member in cls:
+            if member.value == value:
+                return member
+        return None
 
 
 @enum.unique

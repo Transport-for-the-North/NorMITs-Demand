@@ -20,9 +20,8 @@ import math
 import pathlib
 import itertools
 import collections
-import pathlib
-
 from os import PathLike
+import re
 
 from typing import Any
 from typing import List
@@ -1890,6 +1889,15 @@ class SegmentationLevel:
 
         return tp_dict
 
+    def get_trip_origin(self) -> nd.TripOrigin | None:
+        """Get trip origin of segmentation, if applicable."""
+        pattern = r"(?:^|[\s_])(nhb|hb)[_\s]"
+        match = re.search(pattern, self.name.strip(), re.I)
+        if match is None:
+            return None
+
+        return nd.TripOrigin(match.group(1))
+
     def generate_file_name(
         self,
         segment_params: Dict[str, Any],
@@ -2427,12 +2435,19 @@ def list_segmentations() -> List[str]:
         Names of all segmentations found in NorMITs demand
         segmentation folder.
     """
-    seg_folder = pathlib.Path(SegmentationLevel._segment_definitions_path)
+    seg_folder = pathlib.Path(SegmentationLevel.segment_definitions_path)
+    segmentation_folders = [seg_folder]
+
+    groups_folder = seg_folder / "_segment_groups"
+
+    if groups_folder.is_dir():
+        segmentation_folders.extend(groups_folder.iterdir())
 
     segmentations = []
-    for path in seg_folder.iterdir():
-        if path.is_dir() and not path.name.startswith("_"):
-            segmentations.append(path.name)
+    for seg_folder in segmentation_folders:
+        for path in seg_folder.iterdir():
+            if path.is_dir() and not path.name.startswith("_"):
+                segmentations.append(path.name)
 
     return segmentations
 
