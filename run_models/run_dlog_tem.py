@@ -25,11 +25,12 @@ from normits_demand.pathing import NoTEMImportPaths
 LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_dlog_tem")
 LOG_FILE = "DLog_TEM.log"
 CONFIG_FILE = pathlib.Path(r"config\models\DLog_tem_config.yaml")
-RAW_LANDUSE_INDEX_COLUMNS = {
-    "population": ["msoa_zone_id", "tfn_traveller_type"],
-    "employment": ["msoa_zone_id", "sic_code"],
-}
+# TODO Update landuse zoning, in future this parameter should be moved to config
 LANDUSE_ZONING = "msoa"
+RAW_LANDUSE_INDEX_COLUMNS = {
+    "population": [f"{LANDUSE_ZONING}_zone_id", "tfn_traveller_type"],
+    "employment": [f"{LANDUSE_ZONING}_zone_id", "sic_code"],
+}
 
 
 ##### CLASSES #####
@@ -131,6 +132,13 @@ def _infill_area_type(
     # Area type is tied to MSOA but need to group rows because there
     # is more disaggregated data in the other land use file
     area_type_lookup = area_type_lookup.groupby(index_columns[0]).first()
+
+    # TODO Convert area type lookup to LANDUSE_ZONE_SYSTEM, this lookup should already exist
+    msoa_zoning = nd.get_zoning_system("msoa")
+    landuse_zoning = nd.get_zoning_system(LANDUSE_ZONING)
+    # MSOA to landuse zoning lookup
+    # msoa_zone_id, miham_zone_id, msoa_to_miham
+    translation = msoa_zoning._get_translation_definition(landuse_zoning)
 
     LOG.debug("Infilling area type column using %s", other_landuse)
     landuse_data = landuse_data.merge(
@@ -266,6 +274,7 @@ def main(params: DLogTEMParameters, init_logger: bool = True) -> None:
 
     LOG.debug("Input parameters:\n%s", params.to_yaml())
 
+    # TODO Double check these paths but I think all the trip rates inputs can stay the same
     import_builder = NoTEMImportPaths(
         import_home=params.notem_import_home,
         scenario=params.scenario,
@@ -317,6 +326,7 @@ def main(params: DLogTEMParameters, init_logger: bool = True) -> None:
         export_home=params.export_folder,
         hb_attraction_balance_zoning=False,
         nhb_attraction_balance_zoning=False,
+        # TODO Pass LANDUSE_ZONING as parameter
     )
     tem.run(generate_all=True, non_resi_path=False)
 

@@ -47,6 +47,8 @@ class NoTEM(NoTEMExportPaths):
                  hb_attraction_balance_zoning: nd.BalancingZones | bool = True,
                  nhb_attraction_balance_zoning: nd.BalancingZones | bool = True,
                  trip_end_adjustments: Optional[List[TripEndAdjustmentFactors]] = None,
+                 # TODO Add zoning_name parameter, store in instance variable and
+                 # pass to attraction and production models. Default should be "msoa"
                  ):
         """
         Assigns the attributes needed for NoTEM model.
