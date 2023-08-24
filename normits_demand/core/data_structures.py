@@ -2638,7 +2638,7 @@ class DVector:
     def build_filename(
             self,
             year: Optional[int] = None,
-            suffix: str = "pkl",
+            suffix: str = "dvec.pkl",
             prefix: str = "",
         ) -> str:
         """Generate filename for DVector.
