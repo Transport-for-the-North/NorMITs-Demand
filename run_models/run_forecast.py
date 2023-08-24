@@ -23,7 +23,7 @@ from normits_demand.models.forecasting import (
     tem_forecast,
     ntem_forecast,
     tempro_trip_ends,
-    forecast_cnfg
+    forecast_cnfg,
 )
 from normits_demand import logging as nd_log
 from normits_demand.reports import ntem_forecast_checks
@@ -214,6 +214,7 @@ def tem_forecasting(
             ntem_version=params.ntem_parameters.version,
             ntem_scenario=params.ntem_parameters.scenario,
         )
+
     elif forecast_model == forecast_cnfg.ForecastModel.TRIP_END:
         if not isinstance(params, forecast_cnfg.TEMForecastParameters):
             raise TypeError(
@@ -223,14 +224,19 @@ def tem_forecasting(
 
         trip_end_name = f"{params.assignment_model.get_name()} Trip End"
         tripend_data = tem_forecast.read_tripends(
-            params.base_year, params.future_years, params.tripend_path
+            params.base_year,
+            params.future_years,
+            params.tripend_path,
+            nd.get_zoning_system(params.tem_input_zoning),
         )
+
     else:
         raise ValueError(f"forecasting for trip end or NTEM only not {forecast_model}")
 
     if params.output_trip_end_data:
         tripend_data.save(params.export_path / f"{trip_end_name} Data")
 
+    # TODO This bit might break with non-msoa zone system
     tripend_data = model_mode_subset(tripend_data, params.assignment_model)
     tripend_growth = ntem_forecast.tempro_growth(
         tripend_data, params.assignment_model.get_zoning_system(), params.base_year

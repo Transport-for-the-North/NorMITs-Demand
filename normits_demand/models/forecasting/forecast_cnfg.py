@@ -107,6 +107,7 @@ class TEMForecastParameters(ForecastParameters):
     tem_scenario: nd.Scenario
     forecasting_model_version: str
     forecasting_model_name: str
+    tem_input_zoning: str = "msoa"
 
     @staticmethod
     def _build_tripend_path(base: Path, tripend_iteration: str, scenario: nd.Scenario) -> Path:

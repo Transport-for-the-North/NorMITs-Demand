@@ -20,8 +20,21 @@ LOG = nd_log.get_logger(__name__)
 
 
 ##### CLASSES #####
+# TODO Remove this function when no-longer needed
+def _overwrite_notem_segment_name(filename: str, segmentation: nd.SegmentationLevel) -> str:
+    """Temporary function to convert to older naming style used by NoTEM.
+
+    This should be removed once NoTEM has been updated to generate file
+    names using the DVector method.
+    """
+    return filename.replace(segmentation.get_name_without_trip_origin(), "notem_segmented")
+
+
 def read_tripends(
-    base_year: int, forecast_years: list[int], tripend_path: Path
+    base_year: int,
+    forecast_years: list[int],
+    tripend_path: Path,
+    zoning_system: nd.ZoningSystem,
 ) -> tempro_trip_ends.TEMProTripEnds:
     """
     Reads in trip-end dvectors from picklefiles
@@ -31,7 +44,15 @@ def read_tripends(
     Returns:
         tempro_trip_ends.TEMProTripEnds: the same trip-ends read in
     """
+    # TODO Update docstring
     LOG.info("Reading trip ends from %s", tripend_path)
+
+    input_segmentations = {
+        "hb_attractions": "notem_hb_output",
+        "hb_productions": "notem_hb_output",
+        "nhb_attractions": "notem_nhb_output",
+        "nhb_productions": "notem_nhb_output",
+    }
 
     SEGMENTATION = {"hb": "hb_p_m", "nhb": "nhb_p_m"}
     dvectors = {
@@ -45,15 +66,18 @@ def read_tripends(
             years = {}
             key = f"{i}_{j}"
             for year in [base_year] + forecast_years:
-                dvec = nd.DVector.load(
-                    os.path.join(
-                        tripend_path,
-                        key,
-                        f"{i}_msoa_notem_segmented_{year}_dvec.pkl",
-                    )
+                segmentation = nd.get_segmentation_level(input_segmentations[f"{i}_{j}"])
+                filename = nd.DVector.build_filename_from_attributes(
+                    segmentation, zoning_system, year
                 )
+                filename = _overwrite_notem_segment_name(filename, segmentation)
+
+                dvec = nd.DVector.load(os.path.join(tripend_path, key, filename))
                 if i == "nhb":
                     dvec = dvec.reduce(nd.get_segmentation_level("notem_nhb_output_reduced"))
+
                 years[year] = dvec.aggregate(nd.get_segmentation_level(SEGMENTATION[i]))
+
             dvectors[key] = years
+
     return tempro_trip_ends.TEMProTripEnds(**dvectors)
