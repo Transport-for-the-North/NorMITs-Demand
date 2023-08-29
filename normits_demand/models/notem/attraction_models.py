@@ -102,7 +102,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         balance_zoning: nd.BalancingZones | bool = True,
         constraint_paths: Dict[int, nd.PathLike] = None,
         process_count: int = consts.PROCESS_COUNT,
-        zoning_name: str = "msoa", # TODO Add to docstring
+        zoning_name: str = "msoa",  # TODO Add to docstring
     ) -> None:
         """
         Sets up and validates arguments for the Attraction model.
@@ -217,7 +217,11 @@ class HBAttractionModel(HBAttractionModelPaths):
         self.zoning = nd.get_zoning_system(zoning_name)
         # Define wanted columns
         self._target_col_dtypes = {
-            "employment": {self.zoning.col_name: str, "sic_code": int, "people": float},
+            "employment": {
+                self.zoning.col_name: self.zoning.unique_zones.dtype,
+                "sic_code": int,
+                "people": float,
+            },
             "trip_weight": {"purpose": int, "mode": int, "sic_code": int, "trip_rate": float},
         }
 

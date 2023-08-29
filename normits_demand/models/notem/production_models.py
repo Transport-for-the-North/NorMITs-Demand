@@ -180,7 +180,7 @@ class HBProductionModel(HBProductionModelPaths):
         # Define required columns
         self._target_col_dtypes = {
             'pop': {
-                self.zoning.col_name: str,
+                self.zoning.col_name: self.zoning.unique_zones.dtype,
                 'area_type': int,
                 'tfn_traveller_type': int,
                 'people': float
@@ -661,7 +661,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         # Define wanted columns
         self._target_col_dtypes = {
             'land_use': {
-                self.zoning.col_name: str,
+                self.zoning.col_name: self.zoning.unique_zones.dtype,
                 'area_type': int
             },
             'nhb_trip_rate': {

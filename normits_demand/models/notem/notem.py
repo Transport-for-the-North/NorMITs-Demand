@@ -47,6 +47,7 @@ class NoTEM(NoTEMExportPaths):
                  hb_attraction_balance_zoning: nd.BalancingZones | bool = True,
                  nhb_attraction_balance_zoning: nd.BalancingZones | bool = True,
                  trip_end_adjustments: Optional[List[TripEndAdjustmentFactors]] = None,
+                 zoning_name:str ="msoa",
                  # TODO Add zoning_name parameter, store in instance variable and
                  # pass to attraction and production models. Default should be "msoa"
                  ):
@@ -111,6 +112,7 @@ class NoTEM(NoTEMExportPaths):
         self.hb_attraction_balance_zoning = hb_attraction_balance_zoning
         self.nhb_attraction_balance_zoning = nhb_attraction_balance_zoning
         self.adjustment_factors = trip_end_adjustments
+        self.zoning_name = zoning_name
 
         # Generate the export paths
         super().__init__(
@@ -130,6 +132,8 @@ class NoTEM(NoTEMExportPaths):
         )
 
         self._write_running_report()
+
+    
 
     @property
     def name(self) -> str:
@@ -272,6 +276,7 @@ class NoTEM(NoTEMExportPaths):
             constraint_paths=None,
             export_home=self.hb_production.export_paths.home,
             trip_end_adjustments=self.adjustment_factors,
+            zoning_name=self.zoning_name
         )
 
         self._logger.info("Running the Home-Based Production Model")
@@ -307,6 +312,7 @@ class NoTEM(NoTEMExportPaths):
             constraint_paths=None,
             export_home=self.hb_attraction.export_paths.home,
             balance_zoning=self.hb_attraction_balance_zoning,
+            zoning_name=self.zoning_name
         )
 
         self._logger.info("Running the Home-Based Attraction Model")
@@ -335,6 +341,7 @@ class NoTEM(NoTEMExportPaths):
             hb_attraction_paths=hb_attraction_paths,
             export_home=self.nhb_production.export_paths.home,
             constraint_paths=None,
+            zoning_name=self.zoning_name
         )
 
         self._logger.info("Running the Non-Home-Based Production Model")
