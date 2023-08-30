@@ -36,15 +36,32 @@ def read_tripends(
     tripend_path: Path,
     zoning_system: nd.ZoningSystem,
 ) -> tempro_trip_ends.TEMProTripEnds:
-    """
-    Reads in trip-end dvectors from picklefiles
+    """Read trip-end dvectors from picklefiles
     Args:
         base_year (int): The base year for the forecast
         forecast_years (list[int]): A list of forecast years
     Returns:
         tempro_trip_ends.TEMProTripEnds: the same trip-ends read in
+
+    Parameters
+    ----------
+    base_year : int
+        Base year for the forecast.
+    forecast_years : list[int]
+        List of forecast years.
+    tripend_path : Path
+        Path to the base trip end folder, assumed
+        to have sub-folders for HB / NHB attractions
+        and productions e.g. "hb_productions".
+    zoning_system : nd.ZoningSystem
+        Zoning system of the trip ends.
+
+    Returns
+    -------
+    tempro_trip_ends.TEMProTripEnds
+        Trip end DVectors for HB / NHB productions
+        and attractions.
     """
-    # TODO Update docstring
     LOG.info("Reading trip ends from %s", tripend_path)
 
     input_segmentations = {

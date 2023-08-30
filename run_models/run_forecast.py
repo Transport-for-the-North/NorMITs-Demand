@@ -236,7 +236,6 @@ def tem_forecasting(
     if params.output_trip_end_data:
         tripend_data.save(params.export_path / f"{trip_end_name} Data")
 
-    # TODO This bit might break with non-msoa zone system
     tripend_data = model_mode_subset(tripend_data, params.assignment_model)
     tripend_growth = ntem_forecast.tempro_growth(
         tripend_data, params.assignment_model.get_zoning_system(), params.base_year

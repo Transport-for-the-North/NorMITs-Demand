@@ -559,6 +559,7 @@ class NoTEMModelPaths:
     )
 
     # Define output fnames
+    # TODO(MB) Use DVector.build_filename_from_attributes to create filenames
     _base_output_fname = '%s_%s_%s_%d_dvec.pkl'
     _base_report_fname = '%s_%s_%d_%s.csv'
 
@@ -566,6 +567,7 @@ class NoTEMModelPaths:
                  path_years: List[int],
                  export_home: nd.PathLike,
                  report_home: nd.PathLike,
+                 # TODO(MB) Add zoning system parameter (default MSOA)
                  ):
         """Validates input attributes and builds class
 

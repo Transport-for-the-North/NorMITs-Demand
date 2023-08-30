@@ -258,6 +258,16 @@ def trip_end_growth(
         raise NTEMForecastError(f"base year ({base_year}) data not given")
     growth_zone = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
 
+    LOG.info(
+        "Growth factors for the internal area are calculated at %s zone system, "
+        "the external area factors area calculated at the %s zone system. "
+        "Both growth factors are converted to %s zone system before being "
+        "combined together.",
+        growth_zone.name,
+        model_zoning.name,
+        model_zoning.name,
+    )
+
     # Split data into internal and external DVectors
     # for different growth calculations
     base = tempro_vectors[base_year]
