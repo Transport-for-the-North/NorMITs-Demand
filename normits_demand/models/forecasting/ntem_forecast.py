@@ -219,6 +219,8 @@ def trip_end_growth(
     model_zoning: nd.ZoningSystem,
     zone_weighting: str,
     base_year: int,
+    # TODO(MB) Add parameter to docstring
+    internal_growth_zoning: Optional[nd.ZoningSystem] = None,
 ) -> Dict[int, nd_core.DVector]:
     """Calculate growth at LAD level and return it a `model_zone_system`.
 
@@ -256,14 +258,16 @@ def trip_end_growth(
     """
     if base_year not in tempro_vectors:
         raise NTEMForecastError(f"base year ({base_year}) data not given")
-    growth_zone = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
+
+    if internal_growth_zoning is None:
+        internal_growth_zoning = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
 
     LOG.info(
         "Growth factors for the internal area are calculated at %s zone system, "
         "the external area factors area calculated at the %s zone system. "
         "Both growth factors are converted to %s zone system before being "
         "combined together.",
-        growth_zone.name,
+        internal_growth_zoning.name,
         model_zoning.name,
         model_zoning.name,
     )
@@ -272,7 +276,7 @@ def trip_end_growth(
     # for different growth calculations
     base = tempro_vectors[base_year]
     base_data = {
-        "internal": base.translate_zoning(growth_zone),
+        "internal": base.translate_zoning(internal_growth_zoning),
         "external": base.translate_zoning(model_zoning, weighting=zone_weighting),
     }
     masks = {
@@ -291,7 +295,7 @@ def trip_end_growth(
             forecast = {}
             for area, base in base_data.items():
                 forecast[area] = data.translate_zoning(
-                    growth_zone if area == "internal" else model_zoning,
+                    internal_growth_zoning if area == "internal" else model_zoning,
                     None if area == "internal" else zone_weighting,
                 )
                 forecast[area] = forecast[area] / base
@@ -356,6 +360,8 @@ def tempro_growth(
             model_zone_system,
             zone_translation_weights[segment.name],
             base_year=base_year,
+            # TODO(MB) Add this parameter to this function and the config
+            internal_growth_zoning=model_zone_system,
         )
     return TEMProTripEnds(**grown)
 

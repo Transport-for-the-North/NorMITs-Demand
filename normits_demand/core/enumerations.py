@@ -349,9 +349,12 @@ class AssignmentModel(IsValidEnum):
 
     NOHAM = "NoHAM"
     NORMS = "NoRMS"
+
     # Models for Midlands Connect
     MIHAM = "MiHAM"
     MIRANDA = "MiRANDA"
+    # MiHAM with development zones
+    MIHAM_DEV = "MiHAM_Dev"
 
     @classmethod
     def from_str(cls, model_name: str) -> AssignmentModel:
@@ -395,6 +398,7 @@ class AssignmentModel(IsValidEnum):
             cls.NORMS: Mode.TRAIN,
             cls.MIHAM: Mode.CAR,
             cls.MIRANDA: Mode.TRAIN,
+            cls.MIHAM_DEV: Mode.CAR,
         }
 
     def get_mode(self) -> Mode:
