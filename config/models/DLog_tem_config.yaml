@@ -1,11 +1,10 @@
 raw_dlog_landuse:
-  population: I:\Data\D-Log\DLIT\Outputs\residential_msoa_build_out.csv
-  employment: I:\Data\D-Log\DLIT\Outputs\employment_msoa_build_out.csv
+  population: C:\Users\UKKXF022\Documents\Midlands_connect_freight\freight_and_economy_outputs\pop_constrained_totals_miham_test.csv
+  employment: C:\Users\UKKXF022\Documents\Midlands_connect_freight\freight_and_economy_outputs\job_constrained_totals_miham_test.csv
 notem_import_home: I:\NorMITs Demand\import\NoTEM
 base_year: 2018
 years:
-  - 2025
-  - 2030
+  - 2050
 # Iteration and location of the base TfN land use, which was used in D-Lit
 land_use_import_home: I:\
 land_use_iteration:
@@ -16,6 +15,6 @@ import_version:
   hb_attraction: 2.3
   nhb_production: 3.0
 trip_end_iteration: 1.0
-export_folder: E:\dlit\DLIT_output\dlog_tem
+export_folder: C:/Users/UKKXF022/Documents/Midlands_connect_freight/NorMits_Outputs
 scenario: DLOG
 overwrite_intermediary_landuse: true

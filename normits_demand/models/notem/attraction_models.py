@@ -78,12 +78,6 @@ class HBAttractionModel(HBAttractionModelPaths):
     # Constants
     __version__ = nd.__version__
 
-    # Define wanted columns
-    _target_col_dtypes = {
-        "employment": {"msoa_zone_id": str, "sic_code": int, "people": float},
-        "trip_weight": {"purpose": int, "mode": int, "sic_code": int, "trip_rate": float},
-    }
-
     # Define segmentations used
     _segmentations = {
         "employment": "sic",
@@ -98,8 +92,6 @@ class HBAttractionModel(HBAttractionModelPaths):
         "mode": "m",
     }
 
-    _zoning = "msoa"
-
     def __init__(
         self,
         employment_paths: Dict[int, nd.PathLike],
@@ -110,6 +102,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         balance_zoning: nd.BalancingZones | bool = True,
         constraint_paths: Dict[int, nd.PathLike] = None,
         process_count: int = consts.PROCESS_COUNT,
+        zoning_name: str = "msoa",
     ) -> None:
         """
         Sets up and validates arguments for the Attraction model.
@@ -159,6 +152,9 @@ class HBAttractionModel(HBAttractionModelPaths):
             The number of processes to create in the Pool. Typically this
             should not exceed the number of cores available.
             Defaults to consts.PROCESS_COUNT.
+
+        zoning_name: str, default "msoa"
+            Name of zoning system for the input land use data.
         """
         # Check that the paths we need exist!
         for path in employment_paths.values():
@@ -220,6 +216,17 @@ class HBAttractionModel(HBAttractionModelPaths):
         # Save balancing zones to file
         if isinstance(self.balance_zoning, nd.BalancingZones):
             self.balance_zoning.save(os.path.join(self.export_home, "HB_balancing_zones.ini"))
+
+        self.zoning = nd.get_zoning_system(zoning_name)
+        # Define wanted columns
+        self._target_col_dtypes = {
+            "employment": {
+                self.zoning.col_name: self.zoning.unique_zones.dtype,
+                "sic_code": int,
+                "people": float,
+            },
+            "trip_weight": {"purpose": int, "mode": int, "sic_code": int, "trip_rate": float},
+        }
 
     def run(
         self,
@@ -355,7 +362,6 @@ class HBAttractionModel(HBAttractionModelPaths):
             Returns employment as a Dvector
         """
         # Define the zoning and segmentations we want to use
-        zoning = nd.get_zoning_system(self._zoning)
         emp_seg = nd.get_segmentation_level(self._segmentations["employment"])
 
         # Read the land use data corresponding to the year
@@ -372,10 +378,10 @@ class HBAttractionModel(HBAttractionModelPaths):
         )
 
         return nd.DVector(
-            zoning_system=zoning,
+            zoning_system=self.zoning,
             segmentation=emp_seg,
             import_data=emp.rename(columns=self._seg_rename),
-            zone_col=f"{zoning.name}_zone_id",
+            zone_col=f"{self.zoning.name}_zone_id",
             val_col="people",
         )
 

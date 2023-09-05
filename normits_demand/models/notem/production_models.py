@@ -75,30 +75,6 @@ class HBProductionModel(HBProductionModelPaths):
     __version__ = nd.__version__
     _return_segmentation_name = 'notem_hb_output'
 
-    # Define wanted columns
-    _target_col_dtypes = {
-        'pop': {
-            'msoa_zone_id': str,
-            'area_type': int,
-            'tfn_traveller_type': int,
-            'people': float
-        },
-        'trip_rate': {
-            'tfn_tt': int,
-            'tfn_at': int,
-            'p': int,
-            'trip_rate': float
-        },
-        'm_tp': {
-            'p': int,
-            'tfn_tt': int,
-            'tfn_at': int,
-            'm': int,
-            'tp': int,
-            'split': float
-        },
-    }
-
     # Define segment renames needed
     _seg_rename = {
         'tfn_traveller_type': 'tfn_tt',
@@ -113,6 +89,7 @@ class HBProductionModel(HBProductionModelPaths):
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT,
                  trip_end_adjustments: Optional[List[TripEndAdjustmentFactors]] = None,
+                 zoning_name: str = "msoa",
                  ) -> None:
         """
         Sets up and validates arguments for the Production model.
@@ -152,6 +129,9 @@ class HBProductionModel(HBProductionModelPaths):
             List of all adjustment factors to apply to the trip ends. Adjustments
             are applied one after another at to the productions in the output
             segmentation.
+
+        zoning_name: str, default "msoa"
+            Name of zoning system for the input land use data.
         """
         # Check that the paths we need exist!
         [file_ops.check_file_exists(x, find_similar=True) for x in population_paths.values()]
@@ -197,6 +177,38 @@ class HBProductionModel(HBProductionModelPaths):
             log_file_path=log_file_path,
             instantiate_msg="Initialised HB Production Model",
         )
+
+        self.zoning = nd.get_zoning_system(zoning_name)
+        self._target_col_dtypes = self._define_target_columns(self.zoning)
+
+    @staticmethod
+    def _define_target_columns(zone_system: nd.ZoningSystem) -> dict[str, dict[str, type]]:
+        """Hardcoded column names and data types for input data CSVs.
+
+        Parameters
+        ----------
+        zone_system : nd.ZoningSystem
+            Zone system used to define name (and datatype) of zone
+            ID column in population data.
+
+        Returns
+        -------
+        dict[str, dict[str, type]]
+            Dictionary containing keys 'pop', 'trip_rate' and 'm_tp',
+            with the column names and datatypes expected for that input
+            CSV.
+        """
+        trip_rate = {'tfn_tt': int, 'tfn_at': int, 'p': int, 'trip_rate': float}
+        m_tp = {'p': int, 'tfn_tt': int, 'tfn_at': int, 'm': int, 'tp': int, 'split': float}
+
+        population = {
+            zone_system.col_name: zone_system.unique_zones.dtype,
+            'area_type': int,
+            'tfn_traveller_type': int,
+            'people': float
+        }
+
+        return {'pop': population, 'trip_rate': trip_rate, 'm_tp': m_tp}
 
     def run(self,
             export_pure_demand: bool = False,
@@ -368,8 +380,6 @@ class HBProductionModel(HBProductionModelPaths):
         pop_dvec:
             Returns the population Dvector
         """
-        # Define the zoning and segmentations we want to use
-        msoa_zoning = nd.get_zoning_system('msoa')
         pop_seg = nd.get_segmentation_level('notem_lu_pop')
 
         # Read the land use data corresponding to the year
@@ -389,10 +399,10 @@ class HBProductionModel(HBProductionModelPaths):
 
         # Instantiate
         return nd.DVector(
-            zoning_system=msoa_zoning,
+            zoning_system=self.zoning,
             segmentation=pop_seg,
             import_data=pop.rename(columns=self._seg_rename),
-            zone_col="msoa_zone_id",
+            zone_col=self.zoning.col_name,
             val_col="people",
         )
 
@@ -548,28 +558,6 @@ class NHBProductionModel(NHBProductionModelPaths):
     __version__ = nd.__version__
     _return_segmentation_name = 'notem_nhb_output'
 
-    # Define wanted columns
-    _target_col_dtypes = {
-        'land_use': {
-            'msoa_zone_id': str,
-            'area_type': int
-        },
-        'nhb_trip_rate': {
-            'nhb_p': int,
-            'nhb_m': int,
-            'p': int,
-            'm': int,
-            'nhb_trip_rate': float
-        },
-        'tp': {
-            'nhb_p': int,
-            'nhb_m': int,
-            'tfn_at': int,
-            'tp': int,
-            'split': float
-        },
-    }
-
     # Define segment renames needed
     _seg_rename = {
         'area_type': 'tfn_at',
@@ -582,7 +570,8 @@ class NHBProductionModel(NHBProductionModelPaths):
                  time_splits_path: str,
                  export_home: str,
                  constraint_paths: Dict[int, nd.PathLike] = None,
-                 process_count: int = consts.PROCESS_COUNT
+                 process_count: int = consts.PROCESS_COUNT,
+                 zoning_name: str = "msoa",
                  ) -> None:
         """
         Sets up and validates arguments for the NHB Production model.
@@ -621,6 +610,9 @@ class NHBProductionModel(NHBProductionModelPaths):
             The number of processes to create in the Pool. Typically this
             should not exceed the number of cores available.
             Defaults to consts.PROCESS_COUNT.
+
+        zoning_name: str, default "msoa"
+            Name of zoning system for the input land use data.
         """
         # Check that the paths we need exist!
         [file_ops.check_file_exists(x) for x in hb_attraction_paths.values()]
@@ -675,6 +667,31 @@ class NHBProductionModel(NHBProductionModelPaths):
             log_file_path=log_file_path,
             instantiate_msg="Initialised NHB Production Model",
         )
+
+        self.zoning = nd.get_zoning_system(zoning_name)
+        self._target_col_dtypes = self._define_target_columns(self.zoning)
+
+    @staticmethod
+    def _define_target_columns(zone_system: nd.ZoningSystem) -> dict[str, dict[str, type]]:
+        """Hardcoded column names and data types for input data CSVs.
+
+        Parameters
+        ----------
+        zone_system : nd.ZoningSystem
+            Zone system used to define name (and datatype) of zone
+            ID column in population data.
+
+        Returns
+        -------
+        dict[str, dict[str, type]]
+            Dictionary containing keys 'land_use', 'nhb_trip_rate' and 'tp',
+            with the column names and datatypes expected for that input CSV.
+        """
+        land_use = {zone_system.col_name: zone_system.unique_zones.dtype, "area_type": int}
+        trip_rate = {"nhb_p": int, "nhb_m": int, "p": int, "m": int, "nhb_trip_rate": float}
+        tp = {"nhb_p": int, "nhb_m": int, "tfn_at": int, "tp": int, "split": float}
+
+        return {"land_use": land_use, "nhb_trip_rate": trip_rate, "tp": tp}
 
     def run(self,
             export_nhb_pure_demand: bool = False,
@@ -853,8 +870,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         hb_attr_dvec:
             Returns the HB attraction Dvector with tfn_at.
         """
-        # Define the zoning and segmentations we want to use
-        msoa_zoning = nd.get_zoning_system('msoa')
+        # Define the segmentations we want to use
         notem_no_tp_seg = nd.get_segmentation_level('notem_hb_output_no_tp')
 
         # ## READ IN AND VALIDATE THE LAND USE DATA ## #
@@ -873,11 +889,12 @@ class NHBProductionModel(NHBProductionModelPaths):
 
         # Set up for validations
         pop_zones = set(pop['zone'].unique().tolist())
-        unique_zones = set(msoa_zoning.unique_zones)
+        unique_zones = set(self.zoning.unique_zones)
 
         # Check that we have all the zones we need
         missing_zones = unique_zones - pop_zones
         if len(missing_zones) > 0:
+            # TODO Update error messages to use zoning.name
             raise ValueError(
                 "The given land use data does not have tfn_at data for all "
                 "MSOAs!\n"
@@ -898,7 +915,7 @@ class NHBProductionModel(NHBProductionModelPaths):
         # Convert area_types into a DVector
         pop['value'] = 1
         area_type = nd.DVector(
-            zoning_system=msoa_zoning,
+            zoning_system=self.zoning,
             segmentation=nd.get_segmentation_level('tfn_at'),
             import_data=pop,
             zone_col="zone",
