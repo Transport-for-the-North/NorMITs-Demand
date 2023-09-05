@@ -102,7 +102,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         balance_zoning: nd.BalancingZones | bool = True,
         constraint_paths: Dict[int, nd.PathLike] = None,
         process_count: int = consts.PROCESS_COUNT,
-        zoning_name: str = "msoa",  # TODO Add to docstring
+        zoning_name: str = "msoa",
     ) -> None:
         """
         Sets up and validates arguments for the Attraction model.
@@ -152,6 +152,9 @@ class HBAttractionModel(HBAttractionModelPaths):
             The number of processes to create in the Pool. Typically this
             should not exceed the number of cores available.
             Defaults to consts.PROCESS_COUNT.
+
+        zoning_name: str, default "msoa"
+            Name of zoning system for the input land use data.
         """
         # Check that the paths we need exist!
         for path in employment_paths.values():

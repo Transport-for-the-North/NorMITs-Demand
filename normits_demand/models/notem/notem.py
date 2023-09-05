@@ -47,9 +47,7 @@ class NoTEM(NoTEMExportPaths):
                  hb_attraction_balance_zoning: nd.BalancingZones | bool = True,
                  nhb_attraction_balance_zoning: nd.BalancingZones | bool = True,
                  trip_end_adjustments: Optional[List[TripEndAdjustmentFactors]] = None,
-                 zoning_name:str ="msoa",
-                 # TODO Add zoning_name parameter, store in instance variable and
-                 # pass to attraction and production models. Default should be "msoa"
+                 zoning_name: str = "msoa",
                  ):
         """
         Assigns the attributes needed for NoTEM model.
@@ -97,6 +95,10 @@ class NoTEM(NoTEMExportPaths):
         trip_end_adjustments: List[TripEndAdjustmentFactors], optional
             List of all adjustment factors to apply to the HB productions trip ends.
             Adjustments are applied one after another at to the HB productions.
+
+        zoning_name: str, default "msoa"
+            Name of zoning system for the input land use data for the
+            attraction and production models.
         """
         # Validate inputs
         if not isinstance(import_builder, nd.pathing.NoTEMImportPathsBase):

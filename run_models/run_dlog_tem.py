@@ -25,7 +25,7 @@ from normits_demand.pathing import NoTEMImportPaths
 LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_dlog_tem")
 LOG_FILE = "DLog_TEM.log"
 CONFIG_FILE = pathlib.Path(r"config\models\DLog_tem_config.yaml")
-# TODO Update landuse zoning, in future this parameter should be moved to config
+# BACKLOG(MB) Move land use zoning parameter to config
 LANDUSE_ZONING = "miham"
 RAW_LANDUSE_INDEX_COLUMNS = {
     "population": [f"{LANDUSE_ZONING}_zone_id", "tfn_traveller_type"],
@@ -140,7 +140,6 @@ def _infill_area_type(
     # is more disaggregated data in the other land use file
     area_type_lookup = area_type_lookup.groupby(msoa_index_columns[0]).first()
 
-    # TODO Convert area type lookup to LANDUSE_ZONE_SYSTEM, this lookup should already exist
     if MSOA_ZONING != LANDUSE_ZONING:
         area_type_lookup = _transform_area_type_lookup(
             area_type_lookup, MSOA_ZONING, LANDUSE_ZONING
@@ -168,9 +167,26 @@ def _infill_area_type(
 def _transform_area_type_lookup(
     area_type_lookup: pd.DataFrame, msoa: str, zone: str
 ) -> pd.DataFrame:
+    """Transform area type lookup from MSOA to `zone` zoning.
+
+    Parameters
+    ----------
+    area_type_lookup : pd.DataFrame
+        DataFrame containing two columns
+        "msoa_zone_id" and "area_type".
+    msoa : str
+        Name of the MSOA zoning e.g. "msoa".
+    zone : str
+        Name of zoning to translate to.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with index containing the translated
+        zone ID and a single "area_type" column.
+    """
     factor_col = msoa + "_to_" + zone
     area_type_col = "area_type"
-    # TODO add docstring
 
     msoa_zoning = nd.get_zoning_system(msoa)
     landuse_zoning = nd.get_zoning_system(zone)
@@ -180,12 +196,14 @@ def _transform_area_type_lookup(
 
     area_type_lookup = area_type_lookup.merge(translation, how="left", on=msoa_zoning.col_name)
     area_type_lookup_sums = (
-        area_type_lookup.groupby([landuse_zoning.col_name, area_type_col])[factor_col].sum().reset_index()
+        area_type_lookup.groupby([landuse_zoning.col_name, area_type_col])[factor_col]
+        .sum()
+        .reset_index()
     )
 
-    transformed_area_type_lookup = area_type_lookup_sums.groupby(landuse_zoning.col_name).apply(
-        _calculate_area_type, split_col=factor_col, area_type_col=area_type_col
-    )
+    transformed_area_type_lookup = area_type_lookup_sums.groupby(
+        landuse_zoning.col_name
+    ).apply(_calculate_area_type, split_col=factor_col, area_type_col=area_type_col)
     transformed_area_type_lookup = transformed_area_type_lookup.to_frame()
     transformed_area_type_lookup.columns = [area_type_col]
     return transformed_area_type_lookup
@@ -194,12 +212,31 @@ def _transform_area_type_lookup(
 def _calculate_area_type(
     area_type_split: pd.DataFrame, split_col: str, area_type_col: str
 ) -> int:
+    """Determine area type based on largest split factor.
+
+    This function is designed to be called from `groupby.apply`.
+
+    Parameters
+    ----------
+    area_type_split : pd.DataFrame
+        Group from dataframe containing columns `area_type_col`
+        and `split_col`.
+    split_col : str
+        Name of column containing split factors.
+    area_type_col : str
+        Name of column containing area type.
+
+    Returns
+    -------
+    int
+        Area type ID.
+    """
     # TODO docstring
     if len(area_type_split) == 1:
         return area_type_split[area_type_col].values[0]
-    else:
-        max_id = area_type_split[split_col].idxmax()
-        return area_type_split.loc[max_id, area_type_col]
+
+    max_id = area_type_split[split_col].idxmax()
+    return area_type_split.loc[max_id, area_type_col]
 
 
 def split_raw_landuse(
@@ -321,7 +358,6 @@ def main(params: DLogTEMParameters, init_logger: bool = True) -> None:
 
     LOG.debug("Input parameters:\n%s", params.to_yaml())
 
-    # TODO Double check these paths but I think all the trip rates inputs can stay the same
     import_builder = NoTEMImportPaths(
         import_home=params.notem_import_home,
         scenario=params.scenario,
@@ -374,7 +410,6 @@ def main(params: DLogTEMParameters, init_logger: bool = True) -> None:
         hb_attraction_balance_zoning=True,
         nhb_attraction_balance_zoning=True,
         zoning_name=LANDUSE_ZONING,
-        # TODO Pass LANDUSE_ZONING as parameter
     )
     tem.run(generate_all=True, non_resi_path=False)
 

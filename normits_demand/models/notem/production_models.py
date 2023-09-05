@@ -89,7 +89,7 @@ class HBProductionModel(HBProductionModelPaths):
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT,
                  trip_end_adjustments: Optional[List[TripEndAdjustmentFactors]] = None,
-                 zoning_name: str = "msoa", # TODO Add to docstring
+                 zoning_name: str = "msoa",
                  ) -> None:
         """
         Sets up and validates arguments for the Production model.
@@ -129,6 +129,9 @@ class HBProductionModel(HBProductionModelPaths):
             List of all adjustment factors to apply to the trip ends. Adjustments
             are applied one after another at to the productions in the output
             segmentation.
+
+        zoning_name: str, default "msoa"
+            Name of zoning system for the input land use data.
         """
         # Check that the paths we need exist!
         [file_ops.check_file_exists(x, find_similar=True) for x in population_paths.values()]
@@ -176,30 +179,36 @@ class HBProductionModel(HBProductionModelPaths):
         )
 
         self.zoning = nd.get_zoning_system(zoning_name)
+        self._target_col_dtypes = self._define_target_columns(self.zoning)
 
-        # Define required columns
-        self._target_col_dtypes = {
-            'pop': {
-                self.zoning.col_name: self.zoning.unique_zones.dtype,
-                'area_type': int,
-                'tfn_traveller_type': int,
-                'people': float
-            },
-            'trip_rate': {
-                'tfn_tt': int,
-                'tfn_at': int,
-                'p': int,
-                'trip_rate': float
-            },
-            'm_tp': {
-                'p': int,
-                'tfn_tt': int,
-                'tfn_at': int,
-                'm': int,
-                'tp': int,
-                'split': float
-            },
+    @staticmethod
+    def _define_target_columns(zone_system: nd.ZoningSystem) -> dict[str, dict[str, type]]:
+        """Hardcoded column names and data types for input data CSVs.
+
+        Parameters
+        ----------
+        zone_system : nd.ZoningSystem
+            Zone system used to define name (and datatype) of zone
+            ID column in population data.
+
+        Returns
+        -------
+        dict[str, dict[str, type]]
+            Dictionary containing keys 'pop', 'trip_rate' and 'm_tp',
+            with the column names and datatypes expected for that input
+            CSV.
+        """
+        trip_rate = {'tfn_tt': int, 'tfn_at': int, 'p': int, 'trip_rate': float}
+        m_tp = {'p': int, 'tfn_tt': int, 'tfn_at': int, 'm': int, 'tp': int, 'split': float}
+
+        population = {
+            zone_system.col_name: zone_system.unique_zones.dtype,
+            'area_type': int,
+            'tfn_traveller_type': int,
+            'people': float
         }
+
+        return {'pop': population, 'trip_rate': trip_rate, 'm_tp': m_tp}
 
     def run(self,
             export_pure_demand: bool = False,
@@ -562,7 +571,7 @@ class NHBProductionModel(NHBProductionModelPaths):
                  export_home: str,
                  constraint_paths: Dict[int, nd.PathLike] = None,
                  process_count: int = consts.PROCESS_COUNT,
-                 zoning_name: str = "msoa", # TODO Add to docstring
+                 zoning_name: str = "msoa",
                  ) -> None:
         """
         Sets up and validates arguments for the NHB Production model.
@@ -601,6 +610,9 @@ class NHBProductionModel(NHBProductionModelPaths):
             The number of processes to create in the Pool. Typically this
             should not exceed the number of cores available.
             Defaults to consts.PROCESS_COUNT.
+
+        zoning_name: str, default "msoa"
+            Name of zoning system for the input land use data.
         """
         # Check that the paths we need exist!
         [file_ops.check_file_exists(x) for x in hb_attraction_paths.values()]
@@ -657,28 +669,29 @@ class NHBProductionModel(NHBProductionModelPaths):
         )
 
         self.zoning = nd.get_zoning_system(zoning_name)
+        self._target_col_dtypes = self._define_target_columns(self.zoning)
 
-        # Define wanted columns
-        self._target_col_dtypes = {
-            'land_use': {
-                self.zoning.col_name: self.zoning.unique_zones.dtype,
-                'area_type': int
-            },
-            'nhb_trip_rate': {
-                'nhb_p': int,
-                'nhb_m': int,
-                'p': int,
-                'm': int,
-                'nhb_trip_rate': float
-            },
-            'tp': {
-                'nhb_p': int,
-                'nhb_m': int,
-                'tfn_at': int,
-                'tp': int,
-                'split': float
-            },
-        }
+    @staticmethod
+    def _define_target_columns(zone_system: nd.ZoningSystem) -> dict[str, dict[str, type]]:
+        """Hardcoded column names and data types for input data CSVs.
+
+        Parameters
+        ----------
+        zone_system : nd.ZoningSystem
+            Zone system used to define name (and datatype) of zone
+            ID column in population data.
+
+        Returns
+        -------
+        dict[str, dict[str, type]]
+            Dictionary containing keys 'land_use', 'nhb_trip_rate' and 'tp',
+            with the column names and datatypes expected for that input CSV.
+        """
+        land_use = {zone_system.col_name: zone_system.unique_zones.dtype, "area_type": int}
+        trip_rate = {"nhb_p": int, "nhb_m": int, "p": int, "m": int, "nhb_trip_rate": float}
+        tp = {"nhb_p": int, "nhb_m": int, "tfn_at": int, "tp": int, "split": float}
+
+        return {"land_use": land_use, "nhb_trip_rate": trip_rate, "tp": tp}
 
     def run(self,
             export_nhb_pure_demand: bool = False,
