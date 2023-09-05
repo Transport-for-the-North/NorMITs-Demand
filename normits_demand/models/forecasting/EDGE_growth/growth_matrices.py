@@ -22,6 +22,8 @@ from normits_demand.models.forecasting.edge_growth import utils
 # # # CLASSES # # #
 
 # # # FUNCTIONS # # #
+
+
 def prepare_growth_matrices(
     demand_segments_df: pd.DataFrame,
     factors_df: pd.DataFrame,
@@ -46,16 +48,11 @@ def prepare_growth_matrices(
     growth_matrices : dict
         numpy growth matrices for all purposes and ticket types
     """
-    # get list of purposes
+    # Init
     purposes = demand_segments_df["Purpose"].unique()
-    # get list of ticket types
     ticket_types = factors_df["TicketType"].unique()
-    # create a list of model used stations
-    # factors_df = utils.filter_stations(stations_lookup, factors_df)
-    # add stns zones
-    # merge on origin/production
     factors_df = utils.merge_to_stations(
-        stations_lookup, factors_df, "ZoneCodeFrom", "ZoneCodeTo"
+        stations_lookup, factors_df, "ZoneCodeFrom", "ZoneCodeTo",
     )
     # keep needed columns
     factors_df = factors_df[
