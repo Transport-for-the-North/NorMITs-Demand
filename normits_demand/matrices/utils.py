@@ -10,6 +10,8 @@ Other updates made by:
 File purpose:
 Utility functions specific to matrices
 """
+from __future__ import annotations
+
 # builtins
 import os
 import pathlib
@@ -258,3 +260,14 @@ def split_matrix_by_time_periods(
         )
 
     return tp_mats
+
+
+def apply_factor(
+    input_path: os.PathLike,
+    output_path: os.PathLike,
+    factor: int | float,
+) -> None:
+    """Apply a factor to a matrix"""
+    mat = file_ops.read_df(input_path, index_col=0)
+    mat *= factor
+    file_ops.write_df(mat, output_path)

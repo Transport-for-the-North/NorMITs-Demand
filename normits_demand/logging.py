@@ -10,7 +10,11 @@ Other updates made by:
 File purpose:
 Initialiser for all logging in normits_demand
 """
+from __future__ import annotations
+
 # Builtins
+from __future__ import annotations
+
 import logging
 from typing import Any, Dict
 
@@ -330,3 +334,36 @@ def capture_warnings(
     if file_handler_args is not None:
         warning_logger.addHandler(get_file_handler(**file_handler_args))
 
+
+class TemporaryLogFile:
+    """Add temporary log file to a logger."""
+
+    def __init__(self, logger: logging.Logger, log_file: nd.PathLike, **kwargs) -> None:
+        """Add temporary log file handler to `logger`.
+
+        Parameters
+        ----------
+        logger : logging.Logger
+            Logger to add FileHandler to.
+        log_file : nd.PathLike
+            Path to new log file to create.
+        kwargs : Keyword arguments, optional
+            Any arguments to pass to `get_file_handler`.
+        """
+        self.logger = logger
+        self.log_file = log_file
+        self.logger.debug('Creating temporary log file: "%s"', self.log_file)
+        self.handler = get_file_handler(log_file, **kwargs)
+        self.logger.addHandler(self.handler)
+
+    def __enter__(self) -> TemporaryLogFile:
+        """Initialise TemporaryLogFile."""
+        return self
+
+    def __exit__(self, excepType, excepVal, traceback) -> None:
+        """Close temporary log file."""
+        if excepType is not None or excepVal is not None or traceback is not None:
+            self.logger.critical("Oh no a critical error occurred", exc_info=True)
+
+        self.logger.removeHandler(self.handler)
+        self.logger.debug('Closed temporary log file: "%s"', self.log_file)

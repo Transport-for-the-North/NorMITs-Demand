@@ -153,6 +153,7 @@ class Scenario(IsValidEnum):
     SC02_PP = "SC02_PP"
     SC03_DD = "SC03_DD"
     SC04_UZC = "SC04_UZC"
+    DLOG = "DLOG"
 
     @staticmethod
     def tfn_scenarios():
@@ -395,3 +396,49 @@ class AssignmentModel(IsValidEnum):
     def tfn_models(cls) -> set[AssignmentModel]:
         """Transport for the North's assignment models."""
         return {cls.NOHAM, cls.NORMS}
+
+
+@enum.unique
+class LandUseType(IsValidEnumWithAutoNameLower):
+    """Types of land use data available."""
+
+    POPULATION = enum.auto()
+    EMPLOYMENT = enum.auto()
+
+    def get_abbreviation(self) -> str:
+        """Abbreviation of the type name."""
+        abbrs = {LandUseType.POPULATION: "pop", LandUseType.EMPLOYMENT: "emp"}
+        return abbrs[self]
+
+
+class TripEndType(str, IsValidEnumWithAutoNameLower):
+    """Defined trip end types."""
+
+    HB_PRODUCTIONS = enum.auto()
+    HB_ATTRACTIONS = enum.auto()
+    NHB_PRODUCTIONS = enum.auto()
+    NHB_ATTRACTIONS = enum.auto()
+
+    @staticmethod
+    def trip_origin_lookup() -> dict[TripEndType, TripOrigin]:
+        """Lookup between TripEndType and TripOrigin."""
+        return {
+            TripEndType.HB_PRODUCTIONS: TripOrigin.HB,
+            TripEndType.HB_ATTRACTIONS: TripOrigin.HB,
+            TripEndType.NHB_PRODUCTIONS: TripOrigin.NHB,
+            TripEndType.NHB_ATTRACTIONS: TripOrigin.NHB,
+        }
+
+    @property
+    def trip_origin(self) -> TripOrigin:
+        """TripOrigin related to the current TripEndType."""
+        return self.trip_origin_lookup()[self]
+
+    def formatted(self) -> str:
+        """Format text for outputs and display purposes."""
+        to, pa = self.value.split("_")
+        return f"{to.upper()} {pa.title()}"
+
+    def __str__(self) -> str:
+        """Lowercase name of the trip end type."""
+        return self.value

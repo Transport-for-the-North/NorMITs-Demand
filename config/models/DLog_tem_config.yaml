@@ -1,0 +1,21 @@
+raw_dlog_landuse:
+  population: I:\Data\D-Log\DLIT\Outputs\residential_msoa_build_out.csv
+  employment: I:\Data\D-Log\DLIT\Outputs\employment_msoa_build_out.csv
+notem_import_home: I:\NorMITs Demand\import\NoTEM
+base_year: 2018
+years:
+  - 2025
+  - 2030
+# Iteration and location of the base TfN land use, which was used in D-Lit
+land_use_import_home: I:\
+land_use_iteration:
+  base: iter3e
+  future: iter3e
+import_version:
+  hb_production: 3.0
+  hb_attraction: 2.3
+  nhb_production: 3.0
+trip_end_iteration: 1.0
+export_folder: E:\dlit\DLIT_output\dlog_tem
+scenario: DLOG
+overwrite_intermediary_landuse: true

@@ -1,20 +1,26 @@
-iteration: 1.8
+iteration: 2.0
 base_output_folder: I:\NorMITs Demand\Traveller Segmentation Tool
 notem_iteration: 9.10
 notem_export_home: I:\NorMITs Demand\NoTEM
 scenario: SC01_JAM
-matrix_folder: I:\NorMITs Demand\Distribution Model\iter9.10.3\train\Final Outputs\Full TP PA Matrices
 model: NoRMS
-matrix_zoning: NoRMS
 year: 2018
 disaggregation_output_segment: soc
 trip_length_distribution_folder: I:\NorMITs Demand\import\traveller_segment_tool\trip_length_distributions\v1.1\uc_m_soc_m6
 cost_folder: I:\NorMITs Demand\import\modal\train\costs\norms\userclass
-aggregate_time_periods:
-  - 1
-  - 2
-  - 3
-  - 4
+matrix_zoning_system_name: norms
+hb_matrix_parameters:
+  folder: I:\NorMITs Demand\Distribution Model\iter9.10.3\train\Final Outputs\Full TP PA Matrices
+  file_description: hb_synthetic_pa
+  matrix_type: pa
+  segmentation_name: hb_p_m_ca_tp_wday_rail
+  aggregate_segmentation_name: hb_uc_m_ca_rail
+nhb_matrix_parameters:
+  folder: I:\NorMITs Demand\Distribution Model\iter9.10.3\train\Final Outputs\Full TP PA Matrices
+  file_description: nhb_synthetic_pa
+  matrix_type: pa
+  segmentation_name: nhb_p_m_ca_tp_wday_rail
+  aggregate_segmentation_name: nhb_uc_m_ca_rail
 disaggregation_settings:
   export_original: yes
   export_furness: no

@@ -15,7 +15,16 @@ import shutil
 import sys
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    Iterator,
+    List,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Union,
+)
 
 # Third party imports
 import geopandas as gpd
@@ -27,12 +36,17 @@ import pandas as pd
 from matplotlib import cm, colors, figure, lines, patches
 from matplotlib import pyplot as plt
 from matplotlib import ticker
-from openpyxl.worksheet.datavalidation import DataValidation, DataValidationList
+from openpyxl.worksheet.datavalidation import (
+    DataValidation,
+    DataValidationList,
+)
 from scipy import stats
 from shapely import geometry
 
 # Local imports
+sys.path.append(".")
 sys.path.append("..")
+sys.path.append("...")
 # pylint: disable=import-error,wrong-import-position
 import normits_demand as nd
 from normits_demand import colours as tfn_colours
@@ -40,11 +54,14 @@ from normits_demand import logging as nd_log
 from normits_demand.core import enumerations as nd_enum
 from normits_demand.reports import ntem_forecast_checks
 from normits_demand.utils import file_ops, pandas_utils
+import ntem_plot_conf as config
 
 # pylint: enable=import-error,wrong-import-position
 
 ##### CONSTANTS #####
-LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".ntem_plots")
+LOG = nd_log.get_logger(
+    nd_log.get_package_logger_name() + ".ntem_plots"
+)
 TRIP_ORIGINS = {"hb": "Home-based", "nhb": "Non-home-based"}
 TFN_COLOURS = [
     tfn_colours.TFN_NAVY,
@@ -63,27 +80,32 @@ class MatrixTripEnds:
 
     def _check_other(self, other: Any, operation: str) -> None:
         if not isinstance(other, type(self)):
-            raise TypeError(f"cannot perform {operation} with {type(other)}")
+            raise TypeError(
+                f"cannot perform {operation} with {type(other)}"
+            )
 
     def __add__(self, other: MatrixTripEnds) -> MatrixTripEnds:
         """Add productions and attractions from `other` to self."""
         self._check_other(other, "addition")
         return MatrixTripEnds(
-            self.productions + other.productions, self.attractions + other.attractions
+            self.productions + other.productions,
+            self.attractions + other.attractions,
         )
 
     def __sub__(self, other: MatrixTripEnds) -> MatrixTripEnds:
         """Subtract productions and attractions from `other` from self."""
         self._check_other(other, "subtraction")
         return MatrixTripEnds(
-            self.productions - other.productions, self.attractions - other.attractions
+            self.productions - other.productions,
+            self.attractions - other.attractions,
         )
 
     def __truediv__(self, other: MatrixTripEnds) -> MatrixTripEnds:
         """Divide productions and attractions from self by `other`."""
         self._check_other(other, "division")
         return MatrixTripEnds(
-            self.productions / other.productions, self.attractions / other.attractions
+            self.productions / other.productions,
+            self.attractions / other.attractions,
         )
 
 
@@ -128,16 +150,25 @@ class CustomCmap:
     def __add__(self, other: CustomCmap) -> CustomCmap:
         """Return new CustomCmap with the attributes from `self` and `other` concatenated."""
         if not isinstance(other, CustomCmap):
-            raise TypeError(f"other should be a CustomCmap not {type(other)}")
+            raise TypeError(
+                f"other should be a CustomCmap not {type(other)}"
+            )
         return CustomCmap(
-            pd.concat([self.bin_categories, other.bin_categories], verify_integrity=True),
-            pd.concat([self.colours, other.colours], verify_integrity=True),
+            pd.concat(
+                [self.bin_categories, other.bin_categories],
+                verify_integrity=True,
+            ),
+            pd.concat(
+                [self.colours, other.colours], verify_integrity=True
+            ),
             self.legend_elements + other.legend_elements,
         )
 
 
 ##### FUNCTIONS #####
-def match_files(folder: Path, pattern: re.Pattern) -> Iterator[tuple[dict[str, str], Path]]:
+def match_files(
+    folder: Path, pattern: re.Pattern
+) -> Iterator[tuple[dict[str, str], Path]]:
     """Iterate through all files in folder which match `pattern`.
 
     Parameters
@@ -164,7 +195,11 @@ def match_files(folder: Path, pattern: re.Pattern) -> Iterator[tuple[dict[str, s
 
 
 def get_matrix_totals(
-    matrix: pd.DataFrame, zoning_name: str, trip_origin: str, user_class: str, year: str
+    matrix: pd.DataFrame,
+    zoning_name: str,
+    trip_origin: str,
+    user_class: str,
+    year: str,
 ) -> pd.DataFrame:
     """Calculate the matrix II, IE, EI, EE trip end totals.
 
@@ -199,7 +234,11 @@ def get_matrix_totals(
             ("total", "external"),
         ]
     )
-    totals.index = totals.index.get_level_values(0) + "-" + totals.index.get_level_values(1)
+    totals.index = (
+        totals.index.get_level_values(0)
+        + "-"
+        + totals.index.get_level_values(1)
+    )
     totals.index = totals.index.str.replace("total-total", "total")
 
     # Check sum adds up correctly
@@ -209,7 +248,9 @@ def get_matrix_totals(
         "external-internal",
         "external-external",
     ]
-    abs_diff = np.abs(totals.at["total"] - totals.loc[index_check].sum())
+    abs_diff = np.abs(
+        totals.at["total"] - totals.loc[index_check].sum()
+    )
     if abs_diff > 1e-5:
         LOG.warning(
             "matrix II, IE, EI and EE don't sum to matrix total, absolue difference is %.1e",
@@ -253,7 +294,9 @@ def matrix_trip_ends(
     mat.columns = pd.to_numeric(mat.columns, downcast="integer")
     totals = get_matrix_totals(mat, matrix_zoning, **kwargs)
     if to_zoning:
-        mat = ntem_forecast_checks.translate_matrix(mat, matrix_zoning, to_zoning)
+        mat = ntem_forecast_checks.translate_matrix(
+            mat, matrix_zoning, to_zoning
+        )
         matrix_zoning = to_zoning
     return MatrixTripEnds(mat.sum(axis=1), mat.sum(axis=0)), totals
 
@@ -281,7 +324,8 @@ def get_base_trip_ends(
         Dataframe containing the trip end totals for all matrices.
     """
     UC_LOOKUP = collections.defaultdict(
-        lambda: "other", {**dict.fromkeys((2, 12), "business"), 1: "commute"}
+        lambda: "other",
+        {**dict.fromkeys((2, 12), "business"), 1: "commute"},
     )
     LOG.info("Extracting base trip ends from %s", folder)
     file_pattern = re.compile(
@@ -381,7 +425,10 @@ def _plot_line(
 
 
 def matrix_total_plots(
-    totals: pd.DataFrame, title: str, ylabel: str, plot_type: PlotType = PlotType.BAR
+    totals: pd.DataFrame,
+    title: str,
+    ylabel: str,
+    plot_type: PlotType = PlotType.BAR,
 ) -> figure.Figure:
     """Create single graph for trip end totals and return figure.
 
@@ -426,20 +473,29 @@ def matrix_total_plots(
             )
             if plot_type == PlotType.BAR:
                 _plot_bars(
-                    ax, x + i * width, row.values, width=width, max_height=max_height, **kwargs
+                    ax,
+                    x + i * width,
+                    row.values,
+                    width=width,
+                    max_height=max_height,
+                    **kwargs,
                 )
             elif plot_type == PlotType.LINE:
                 years = pd.to_numeric(row.index, downcast="integer")
                 _plot_line(ax, years, row.values, **kwargs)
             else:
-                raise ValueError(f"plot_type should be PlotType not {plot_type}")
+                raise ValueError(
+                    f"plot_type should be PlotType not {plot_type}"
+                )
 
         ax.set_ylabel(ylabel)
         ax.set_xlabel("Year")
         ax.set_title(TRIP_ORIGINS[to].title())
         if plot_type == PlotType.BAR:
             ax.set_xticks(x + (FULL_WIDTH / 2))
-            ax.set_xticklabels(totals.columns.str.replace("2018", "Base (2018)"))
+            ax.set_xticklabels(
+                totals.columns.str.replace("2018", "Base (2018)")
+            )
         elif plot_type == PlotType.LINE:
             ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
         ax.legend()
@@ -487,7 +543,9 @@ def get_geo_data(file: GeoSpatialFile) -> gpd.GeoSeries:
     """Read shapefile data, set index to given ID column and convert CRS to EPSG=27700."""
     geo = gpd.read_file(file.path)
     if file.id_column not in geo.columns:
-        raise KeyError(f"{file.id_column} missing from {file.path.name}")
+        raise KeyError(
+            f"{file.id_column} missing from {file.path.name}"
+        )
     geo = geo.set_index(file.id_column)
     geo = geo.to_crs(27700)
     return geo["geometry"]
@@ -498,12 +556,16 @@ def _heatmap_figure(
     column_name: str,
     title: str,
     bins: Optional[List[Union[int, float]]] = None,
-    analytical_area: Union[geometry.Polygon, geometry.MultiPolygon] = None,
+    analytical_area: Union[
+        geometry.Polygon, geometry.MultiPolygon
+    ] = None,
     postive_negative_colormaps: bool = False,
 ):
     LEGEND_KWARGS = dict(title_fontsize="xx-large", fontsize="x-large")
 
-    fig, axes = plt.subplots(1, 2, figsize=(20, 15), frameon=False, constrained_layout=True)
+    fig, axes = plt.subplots(
+        1, 2, figsize=(20, 15), frameon=False, constrained_layout=True
+    )
     fig.suptitle(title, fontsize="xx-large")
     for ax in axes:
         ax.set_aspect("equal")
@@ -565,7 +627,9 @@ def _heatmap_figure(
                 linewidth=kwargs["linewidth"],
                 edgecolor=kwargs["edgecolor"],
             )
-        axes[1].legend(handles=cmap.legend_elements, **kwargs.pop("legend_kwds"))
+        axes[1].legend(
+            handles=cmap.legend_elements, **kwargs.pop("legend_kwds")
+        )
 
     else:
         if bins:
@@ -626,7 +690,9 @@ def trip_end_growth_heatmap(
     output_path: Path,
     title: str,
     bins: list[Union[int, float]] = None,
-    analytical_area: Union[geometry.Polygon, geometry.MultiPolygon] = None,
+    analytical_area: Union[
+        geometry.Polygon, geometry.MultiPolygon
+    ] = None,
 ):
     """Create heatmap of the trip end growth.
 
@@ -662,7 +728,12 @@ def trip_end_growth_heatmap(
             )
 
             fig = _heatmap_figure(
-                geodata, name, title, bins, analytical_area, postive_negative_colormaps=True
+                geodata,
+                name,
+                title,
+                bins,
+                analytical_area,
+                postive_negative_colormaps=True,
             )
             pdf.savefig(fig)
             plt.close()
@@ -674,9 +745,8 @@ def ntem_pa_plots(
     base_folder: Path,
     forecast_folder: Path,
     matrix_zoning: str,
-    plot_zoning: str,
+    plot_params: config.plotting_params,
     out_folder: Path,
-    geospatial_file: GeoSpatialFile,
     analytical_area_file: GeoSpatialFile,
 ):
     """Create PA trip end growth graphs and maps.
@@ -699,9 +769,15 @@ def ntem_pa_plots(
         File containing the spatial data for the analytical area boundary.
     """
     warnings.filterwarnings(
-        "ignore", message=".*zones in the matrix are missing", category=UserWarning
+        "ignore",
+        message=".*zones in the matrix are missing",
+        category=UserWarning,
     )
-    base_trip_ends, base_totals = get_base_trip_ends(base_folder, matrix_zoning, plot_zoning)
+    plot_zoning = plot_params.plot_zoning
+    geospatial_file = plot_params.geospatial_file
+    base_trip_ends, base_totals = get_base_trip_ends(
+        base_folder, matrix_zoning, plot_zoning
+    )
     index_cols = ["matrix_area", "trip_origin", "user_class"]
     base_totals = base_totals.groupby(index_cols).sum()
 
@@ -745,7 +821,20 @@ def ntem_pa_plots(
                 params["user_class"].title(),
             ),
             analytical_area=analytical_area,
-            bins=[-1, -0.5, -0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2, 0.5, 1, np.inf],
+            bins=[
+                -1,
+                -0.5,
+                -0.2,
+                -0.1,
+                -0.05,
+                0,
+                0.05,
+                0.1,
+                0.2,
+                0.5,
+                1,
+                np.inf,
+            ],
         )
 
     forecast_totals: pd.DataFrame = pd.concat(forecast_totals)
@@ -756,7 +845,9 @@ def ntem_pa_plots(
     )
 
 
-def _linear_fit(data: pd.DataFrame, ax: plt.Axes, color: str, label: str) -> lines.Line2D:
+def _linear_fit(
+    data: pd.DataFrame, ax: plt.Axes, color: str, label: str
+) -> lines.Line2D:
     """Plot line of best fit on `ax`."""
     fit = stats.linregress(data[["matrix", "tempro"]].values)
     fit_x = (np.min(data["matrix"]), np.max(data["matrix"]))
@@ -774,7 +865,9 @@ def _linear_fit(data: pd.DataFrame, ax: plt.Axes, color: str, label: str) -> lin
     return line
 
 
-def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title: str) -> None:
+def growth_comparison_regression(
+    growth: pd.DataFrame, output_path: Path, title: str
+) -> None:
     """Create NTEM model vs TEMPro trip end growth comparison plot.
 
     Parameters
@@ -797,8 +890,15 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
         "tempro_growth",
         "matrix_forecast",
     ]
-    growth = growth.reset_index().set_index(expected_columns[:4]).loc[:, expected_columns[4:]]
-    growth.rename(columns={"matrix_growth": "matrix", "tempro_growth": "tempro"}, inplace=True)
+    growth = (
+        growth.reset_index()
+        .set_index(expected_columns[:4])
+        .loc[:, expected_columns[4:]]
+    )
+    growth.rename(
+        columns={"matrix_growth": "matrix", "tempro_growth": "tempro"},
+        inplace=True,
+    )
     growth.dropna(inplace=True)
 
     with backend_pdf.PdfPages(output_path) as pdf:
@@ -815,17 +915,23 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
                     tight_layout=True,
                 )
 
-                filtered = growth.loc[:, to.get_name(), pa, :]
+                filtered = growth.loc[:, to.value, pa, :]
 
                 # Use different markers for internal/external zones
                 cmap_norm = colors.LogNorm(
-                    filtered["matrix_forecast"].min(), filtered["matrix_forecast"].max()
+                    filtered["matrix_forecast"].min(),
+                    filtered["matrix_forecast"].max(),
                 )
                 lower, upper = np.inf, -np.inf
                 for m, ie in (("o", "Internal"), ("+", "External")):
                     ax = axd[ie.lower()]
 
-                    mask = filtered.index.get_level_values("IE").str.lower() == ie.lower()
+                    mask = (
+                        filtered.index.get_level_values(
+                            "IE"
+                        ).str.lower()
+                        == ie.lower()
+                    )
                     scatter = ax.scatter(
                         filtered.loc[mask, "matrix"],
                         filtered.loc[mask, "tempro"],
@@ -835,7 +941,9 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
                         cmap="YlGn",
                         norm=cmap_norm,
                     )
-                    _linear_fit(filtered.loc[mask], ax, "black", "Linear Fit")
+                    _linear_fit(
+                        filtered.loc[mask], ax, "black", "Linear Fit"
+                    )
 
                     ax.set_aspect("equal")
                     ax.legend()
@@ -856,10 +964,12 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
                     axd[ie].set_xlim(lower, upper)
                     axd[ie].set_ylim(lower, upper)
 
-                fig.suptitle(f"{title}\n{to.get_name().upper()} {pa.title()}")
+                fig.suptitle(
+                    f"{title}\n{to.value.upper()} {pa.title()}"
+                )
                 cbar = fig.colorbar(
                     scatter,
-                    label=f"Model {to.get_name().upper()} {pa.title()}",
+                    label=f"Model {to.value.upper()} {pa.title()}",
                     cax=axd["colorbar"],
                 )
                 # cbar.ax.yaxis.set_minor_formatter(
@@ -874,8 +984,7 @@ def growth_comparison_regression(growth: pd.DataFrame, output_path: Path, title:
 
 def ntem_tempro_comparison_plots(
     comparison_folder: Path,
-    geospatial_file: GeoSpatialFile,
-    plot_zoning: str,
+    geo_data: config.plotting_params,
     analytical_area_shape: GeoSpatialFile,
     output_folder: Path,
 ):
@@ -896,17 +1005,27 @@ def ntem_tempro_comparison_plots(
         Folder to save output CSVs and PDF graphs to.
     """
     LOG.info("Producing NTEM vs TEMPro comparison plots")
-    nice_zone_name = {"lad_2020_internal_noham": "LAD Internal NoHAM External"}
+    nice_zone_name = {
+        "lad_2020_internal_noham": "LAD Internal NoHAM External"
+    }
+    geospatial_file = geo_data.geospatial_file
+    plot_zoning = geo_data.plot_zoning
     geospatial = get_geo_data(geospatial_file).to_frame()
     analytical_area = get_geo_data(analytical_area_shape).iloc[0]
 
     plot_zone_system = nd.get_zoning_system(plot_zoning)
     geospatial.loc[:, "IE"] = np.nan
-    geospatial.loc[geospatial.index.isin(plot_zone_system.internal_zones), "IE"] = "Internal"
-    geospatial.loc[geospatial.index.isin(plot_zone_system.external_zones), "IE"] = "External"
+    geospatial.loc[
+        geospatial.index.isin(plot_zone_system.internal_zones), "IE"
+    ] = "Internal"
+    geospatial.loc[
+        geospatial.index.isin(plot_zone_system.external_zones), "IE"
+    ] = "External"
     geospatial.dropna(axis=0, inplace=True)
 
-    for year, file in _tempro_comparisons_iterator(comparison_folder, plot_zoning):
+    for year, file in _tempro_comparisons_iterator(
+        comparison_folder, plot_zoning
+    ):
         columns = {
             "matrix_type": "trip_origin",
             "trip_end_type": "pa",
@@ -920,9 +1039,15 @@ def ntem_tempro_comparison_plots(
             "tempro_growth": "tempro_growth",
             "growth_difference": "growth_difference",
         }
-        comparison = pd.read_csv(file, usecols=columns.keys()).rename(columns=columns)
+        comparison = pd.read_csv(file, usecols=columns.keys()).rename(
+            columns=columns
+        )
         comparison = comparison.merge(
-            geospatial, left_on="zone", right_index=True, how="left", validate="m:1"
+            geospatial,
+            left_on="zone",
+            right_index=True,
+            how="left",
+            validate="m:1",
         )
 
         # Group into HB/NHB productions and attractions, then recalculate growth
@@ -939,16 +1064,25 @@ def ntem_tempro_comparison_plots(
         )
         for nm in ("matrix", "tempro"):
             trip_end_groups.loc[:, f"{nm}_growth"] = (
-                trip_end_groups[f"{nm}_forecast"] / trip_end_groups[f"{nm}_base"]
+                trip_end_groups[f"{nm}_forecast"]
+                / trip_end_groups[f"{nm}_base"]
             )
         trip_end_groups.loc[:, "growth_difference"] = (
-            trip_end_groups["matrix_growth"] - trip_end_groups["tempro_growth"]
+            trip_end_groups["matrix_growth"]
+            - trip_end_groups["tempro_growth"]
         )
         plot_iterator = (
-            trip_end_groups[["trip_origin", "pa"]].drop_duplicates().itertuples(index=False)
+            trip_end_groups[["trip_origin", "pa"]]
+            .drop_duplicates()
+            .itertuples(index=False)
         )
-        trip_end_groups.set_index(["zone", "trip_origin", "pa", "IE"], inplace=True)
-        out = output_folder / f"PA_TEMPro_growth_comparison_{year}_{plot_zoning}.csv"
+        trip_end_groups.set_index(
+            ["zone", "trip_origin", "pa", "IE"], inplace=True
+        )
+        out = (
+            output_folder
+            / f"PA_TEMPro_growth_comparison_{year}_{plot_zoning}.csv"
+        )
         trip_end_groups.drop(columns=["geometry"]).to_csv(out)
         LOG.info("Written: %s", out)
 
@@ -964,15 +1098,23 @@ def ntem_tempro_comparison_plots(
         trip_end_groups = gpd.GeoDataFrame(
             trip_end_groups, crs=geospatial.crs, geometry="geometry"
         )
-        trip_end_groups.rename(columns={"growth_difference": plot_column}, inplace=True)
+        trip_end_groups.rename(
+            columns={"growth_difference": plot_column}, inplace=True
+        )
         out = out.with_suffix(".pdf")
         with backend_pdf.PdfPages(out) as pdf:
             # Calculate consistent bins for all heatmaps
             neg_bins = mapclassify.NaturalBreaks(
-                trip_end_groups.loc[trip_end_groups[plot_column] <= 0, plot_column], k=5
+                trip_end_groups.loc[
+                    trip_end_groups[plot_column] <= 0, plot_column
+                ],
+                k=5,
             )
             pos_bins = mapclassify.NaturalBreaks(
-                trip_end_groups.loc[trip_end_groups[plot_column] >= 0, plot_column], k=5
+                trip_end_groups.loc[
+                    trip_end_groups[plot_column] >= 0, plot_column
+                ],
+                k=5,
             )
             bins = np.concatenate([neg_bins.bins, [0], pos_bins.bins])
 
@@ -1046,12 +1188,18 @@ def _tempro_comparison_matrix_growth(
     tempro: pd.DataFrame = pd.read_excel(
         excel,
         sheet_name="TEMPro Data",
-        usecols=["matrix_type", "p", f"tempro_{base_year}", f"tempro_{forecast_year}"],
+        usecols=[
+            "matrix_type",
+            "p",
+            f"tempro_{base_year}",
+            f"tempro_{forecast_year}",
+        ],
     )
     tempro.rename(columns={"p": "purpose"}, inplace=True)
     tempro = tempro.groupby(GROUP_COLS).sum()
     tempro.loc[:, "tempro_growth"] = (
-        tempro[f"tempro_{forecast_year}"] / tempro[f"tempro_{base_year}"]
+        tempro[f"tempro_{forecast_year}"]
+        / tempro[f"tempro_{base_year}"]
     )
 
     matrices = pd.read_excel(
@@ -1059,23 +1207,38 @@ def _tempro_comparison_matrix_growth(
         sheet_name=["Base Matrices Data", "Forecast Matrices Data"],
         usecols=["matrix_type", "purpose", "trips"],
     )
-    matrices: Dict[str, pd.DataFrame] = {k.split()[0].lower(): v for k, v in matrices.items()}
+    matrices: Dict[str, pd.DataFrame] = {
+        k.split()[0].lower(): v for k, v in matrices.items()
+    }
     for nm, mat in matrices.items():
         mat = mat.groupby(GROUP_COLS).sum()
         matrices[nm] = mat.rename(columns={"trips": nm})
 
-    combined = pd.concat([tempro, matrices["base"], matrices["forecast"]], axis=1)
+    combined = pd.concat(
+        [tempro, matrices["base"], matrices["forecast"]], axis=1
+    )
     combined.reset_index(inplace=True)
 
-    combined.loc[:, "matrix_growth"] = combined["forecast"] / combined["base"]
+    combined.loc[:, "matrix_growth"] = (
+        combined["forecast"] / combined["base"]
+    )
     combined.loc[:, "matrix_type"] = combined["matrix_type"].str.upper()
     combined.loc[:, "growth_difference"] = (
         combined["matrix_growth"] - combined["tempro_growth"]
     )
-    combined.columns = combined.columns.str.replace("_", " ").str.title()
+    combined.columns = combined.columns.str.replace(
+        "_", " "
+    ).str.title()
 
     growth = combined.loc[
-        :, ["Matrix Type", "Purpose", "Matrix Growth", "Tempro Growth", "Growth Difference"]
+        :,
+        [
+            "Matrix Type",
+            "Purpose",
+            "Matrix Growth",
+            "Tempro Growth",
+            "Growth Difference",
+        ],
     ].copy()
     growth.insert(2, "Year", forecast_year)
 
@@ -1083,28 +1246,37 @@ def _tempro_comparison_matrix_growth(
 
 
 def _tempro_comparisons_iterator(
-    comparisons_folder: Path, zoning: str, file_type: Optional[str] = None
+    comparisons_folder: Path,
+    zoning: str,
+    file_type: Optional[str] = None,
 ) -> Iterator[Tuple[int, Path]]:
     """Iterate through PA TEMPro comparison spreadsheets."""
     file_name = f"PA_TEMPro_comparisons-{{year}}-{zoning}"
     if file_type is None:
         file_type = ".*"
 
-    for path in comparisons_folder.glob(file_name.format(year="????") + file_type):
+    for path in comparisons_folder.glob(
+        file_name.format(year="????") + file_type
+    ):
         match = re.match(
             file_name.format(year=r"(\d{4})"),
             file_ops.remove_suffixes(path).stem,
             re.IGNORECASE,
         )
         if match is None:
-            LOG.warning("Skipping file %s because cannot find year in name", path.name)
+            LOG.warning(
+                "Skipping file %s because cannot find year in name",
+                path.name,
+            )
             continue
 
         year = int(match.group(1))
         yield year, path
 
 
-def tempro_comparison_summary(comparisons_folder: Path, zoning: str, base_year: int) -> None:
+def tempro_comparison_summary(
+    comparisons_folder: Path, zoning: str, base_year: int
+) -> None:
     """Produce matrix totals TEMPro comparisons summary by purpose.
 
     Parameters
@@ -1117,19 +1289,29 @@ def tempro_comparison_summary(comparisons_folder: Path, zoning: str, base_year: 
     base_year : int
         Base model year.
     """
-    output_path = comparisons_folder / "PA_TEMPro_comparisons_summary.xlsx"
+    output_path = (
+        comparisons_folder / "PA_TEMPro_comparisons_summary.xlsx"
+    )
     LOG.info("Summarising TEMPro comparisons")
 
     with pd.ExcelWriter(output_path) as excel_file:
         growth_dfs = []
-        for year, path in _tempro_comparisons_iterator(comparisons_folder, zoning, ".xlsx"):
+        for year, path in _tempro_comparisons_iterator(
+            comparisons_folder, zoning, ".xlsx"
+        ):
             LOG.info("Summarising: %s", path.name)
-            comparison, growth = _tempro_comparison_matrix_growth(path, base_year, year)
-            comparison.to_excel(excel_file, sheet_name=str(year), index=False)
+            comparison, growth = _tempro_comparison_matrix_growth(
+                path, base_year, year
+            )
+            comparison.to_excel(
+                excel_file, sheet_name=str(year), index=False
+            )
             growth_dfs.append(growth)
 
         growth = pd.concat(growth_dfs)
-        growth.to_excel(excel_file, sheet_name="Growth Summary", index=False)
+        growth.to_excel(
+            excel_file, sheet_name="Growth Summary", index=False
+        )
 
     LOG.info("Written: %s", output_path)
 
@@ -1147,17 +1329,25 @@ def tempro_uc_summary(comparisons_folder: Path, zoning: str) -> None:
     purpose_lookup = {
         1: "commute",
         **dict.fromkeys((2, 12), "business"),
-        **dict.fromkeys(itertools.chain(range(3, 9), range(13, 17), (18,)), "other"),
+        **dict.fromkeys(
+            itertools.chain(range(3, 9), range(13, 17), (18,)), "other"
+        ),
     }
 
     LOG.info("Summarising TEMPro comparisons by user class")
-    for _, excel_path in _tempro_comparisons_iterator(comparisons_folder, zoning, ".xlsx"):
-        output_path = excel_path.with_name(excel_path.stem + "-by_userclass.xlsx")
+    for _, excel_path in _tempro_comparisons_iterator(
+        comparisons_folder, zoning, ".xlsx"
+    ):
+        output_path = excel_path.with_name(
+            excel_path.stem + "-by_userclass.xlsx"
+        )
 
         # Copy file and update new version
         shutil.copy(excel_path, output_path)
 
-        with pd.ExcelWriter(output_path, mode="a", if_sheet_exists="replace") as excel_out:
+        with pd.ExcelWriter(
+            output_path, mode="a", if_sheet_exists="replace"
+        ) as excel_out:
             wb: openpyxl.Workbook = excel_out.book
 
             summary = wb["Summary"]
@@ -1165,7 +1355,9 @@ def tempro_uc_summary(comparisons_folder: Path, zoning: str) -> None:
             # otherwise new validation won't overwrite old
             summary.data_validations = DataValidationList()
             options = tuple(set(purpose_lookup.values()))
-            valid_uc = DataValidation(type="list", formula1=f'"{",".join(options)}"')
+            valid_uc = DataValidation(
+                type="list", formula1=f'"{",".join(options)}"'
+            )
             summary.add_data_validation(valid_uc)
 
             purp_cell = "C2"
@@ -1186,15 +1378,26 @@ def tempro_uc_summary(comparisons_folder: Path, zoning: str) -> None:
             )
 
             tempro = tempro.groupby(
-                ["matrix_type", "trip_end_type", "uc", "m", f"{zoning}_zone_id", "id"],
+                [
+                    "matrix_type",
+                    "trip_end_type",
+                    "uc",
+                    "m",
+                    f"{zoning}_zone_id",
+                    "id",
+                ],
                 as_index=False,
             ).sum()
-            tempro.to_excel(excel_out, sheet_name=sheet_name, index=False)
+            tempro.to_excel(
+                excel_out, sheet_name=sheet_name, index=False
+            )
 
             for nm in ("Base", "Forecast"):
                 sheet_name = f"{nm} Matrices Data"
                 df = pd.read_excel(excel_out, sheet_name=sheet_name)
-                df.loc[:, "purpose"] = df["purpose"].replace(purpose_lookup)
+                df.loc[:, "purpose"] = df["purpose"].replace(
+                    purpose_lookup
+                )
                 df.rename(columns={"purpose": "uc"}, inplace=True)
 
                 df.loc[:, "id"] = (
@@ -1206,14 +1409,17 @@ def tempro_uc_summary(comparisons_folder: Path, zoning: str) -> None:
                 )
 
                 df = df.groupby(
-                    ["matrix_type", "uc", "from_zone", "to_zone", "id"], as_index=False
+                    ["matrix_type", "uc", "from_zone", "to_zone", "id"],
+                    as_index=False,
                 ).sum()
-                df.to_excel(excel_out, sheet_name=sheet_name, index=False)
+                df.to_excel(
+                    excel_out, sheet_name=sheet_name, index=False
+                )
 
         LOG.info("Written: %s", output_path)
 
 
-def main(params: PAPlotsParameters) -> None:
+def main(params: config.PAPlotsParameters) -> None:
     """Produce the PA growth and TEMPro comparison maps and graphs.
 
     Parameters
@@ -1224,25 +1430,26 @@ def main(params: PAPlotsParameters) -> None:
     params.output_folder.mkdir(exist_ok=True)
     tempro_comparison_summary(
         params.tempro_comparison_folder,
-        params.tempro_comparison_summary_zoning,
+        params.tempro_comp_summary_zoning,
         params.base_year,
     )
-    tempro_uc_summary(params.tempro_comparison_folder, params.tempro_comparison_summary_zoning)
+    ntem_tempro_comparison_plots(
+        params.tempro_comparison_folder,
+        params.diff_plot_params,
+        params.analytical_area_shape,
+        params.output_folder,
+    )
+    tempro_uc_summary(
+        params.tempro_comparison_folder,
+        params.tempro_comparison_summary_zoning,
+    )
     ntem_pa_plots(
         params.base_matrix_folder,
         params.forecast_matrix_folder,
         params.matrix_zoning,
-        params.plot_zoning,
+        params.total_plot_params,
         params.output_folder,
-        params.geospatial_file,
         params.analytical_area_shape,
-    )
-    ntem_tempro_comparison_plots(
-        params.tempro_comparison_folder,
-        params.geospatial_file,
-        params.plot_zoning,
-        params.analytical_area_shape,
-        params.output_folder,
     )
 
 
@@ -1265,7 +1472,9 @@ def _colormap_classify(
     finite = data.dropna()
     if finite.empty:
         # Return empty colour map
-        return CustomCmap(pd.Series(dtype=float), pd.DataFrame(dtype=float), [])
+        return CustomCmap(
+            pd.Series(dtype=float), pd.DataFrame(dtype=float), []
+        )
 
     if bins is not None:
         mc_bins = mapclassify.UserDefined(finite, bins)
@@ -1277,7 +1486,9 @@ def _colormap_classify(
 
     cmap = cm.get_cmap(cmap_name, mc_bins.k)
     colours = pd.DataFrame(
-        cmap(bin_categories), index=bin_categories.index, columns=iter("RGBA")
+        cmap(bin_categories),
+        index=bin_categories.index,
+        columns=iter("RGBA"),
     )
     colours.loc[bin_categories.isna(), :] = np.nan
 
@@ -1291,7 +1502,8 @@ def _colormap_classify(
     bins = [min_bin, *mc_bins.bins]
     labels = [make_label(l, u) for l, u in zip(bins[:-1], bins[1:])]
     legend = [
-        patches.Patch(fc=c, label=l, ls="") for c, l in zip(cmap(range(mc_bins.k)), labels)
+        patches.Patch(fc=c, label=l, ls="")
+        for c, l in zip(cmap(range(mc_bins.k)), labels)
     ]
 
     return CustomCmap(bin_categories, colours, legend)
@@ -1299,32 +1511,62 @@ def _colormap_classify(
 
 ##### MAIN #####
 if __name__ == "__main__":
-    iteration_folder = Path(r"I:\NorMITs Demand\noham\NTEM\iter1d")
-    forecast_matrix_folder = iteration_folder / r"Matrices\24hr VDM PA Matrices"
-
-    pa_parameters = PAPlotsParameters(
-        base_matrix_folder=Path(r"I:\NorMITs Demand\import\noham\post_me\tms_seg_pa"),
-        forecast_matrix_folder=forecast_matrix_folder,
-        matrix_zoning="noham",
-        plot_zoning="lad_2020_internal_noham",
-        output_folder=forecast_matrix_folder / "Plots",
-        geospatial_file=GeoSpatialFile(
-            Path(
-                r"Y:\Data Strategy\GIS Shapefiles"
-                r"\lad_2020_internal_noham\lad_2020_internal_noham_zoning.shp"
+    scenarios = ["Core", "Low", "High"]
+    for scenario in scenarios:
+        iteration_folder = Path(
+            r"I:\NorMITs Demand\Forecasting\NTEM\8.0\iter3.1"
+        )
+        forecast_matrix_folder = (
+            iteration_folder
+            / scenario
+            / "car_and_passenger"
+            / "Matrices"
+            / "24hr VDM PA Matrices"
+        )
+        diff_geo = config.plotting_params(
+            geospatial_file=config.GeoSpatialFile(
+                path=Path(
+                    r"Y:\Data Strategy\GIS Shapefiles\LAD_2021\LAD_MAY_2021_UK_BFE_V2.shp"
+                ),
+                id_column="LAD21CD",
             ),
-            "zone_name",
-        ),
-        analytical_area_shape=GeoSpatialFile(
-            Path(
-                r"Y:\Data Strategy\GIS Shapefiles\North Analytical Area"
-                r"\Boundary\north_analytical_area_simple_boundary.shp"
-            ),
-            "Name",
-        ),
-        tempro_comparison_folder=iteration_folder / r"Matrices\PA\TEMPro Comparisons",
-        tempro_comparison_summary_zoning="3_sector",
-        base_year=2018,
-    )
+            plot_zoning="lad_2020",
+        )
 
-    main(pa_parameters)
+        plot_geo = config.plotting_params(
+            geospatial_file=config.GeoSpatialFile(
+                path=Path(
+                    r"Y:\Data Strategy\GIS Shapefiles\lad_2020_internal_noham\lad_2020_internal_noham_zoning.shp"
+                ),
+                id_column="zone_name",
+            ),
+            plot_zoning="lad_2020_internal_noham",
+        )
+
+        pa_parameters = config.PAPlotsParameters(
+            base_matrix_folder=Path(
+                r"I:\NorMITs Demand\import\noham\post_me\tms_seg_pa"
+            ),
+            forecast_matrix_folder=forecast_matrix_folder,
+            matrix_zoning="noham",
+            output_folder=forecast_matrix_folder / "Plots" / "dummy",
+            analytical_area_shape=config.GeoSpatialFile(
+                path=Path(
+                    r"Y:\Data Strategy\GIS Shapefiles\North Analytical Area"
+                    r"\Boundary\north_analytical_area_simple_boundary.shp"
+                ),
+                id_column="Name",
+            ),
+            tempro_comparison_folder=iteration_folder
+            / scenario
+            / "car_and_passenger"
+            / "Matrices"
+            / "PA"
+            / "TEMPro Comparisons",
+            tempro_comp_summary_zoning="ca_sector_2020",
+            base_year=2018,
+            diff_plot_params=diff_geo,
+            total_plot_params=plot_geo,
+        )
+
+        main(pa_parameters)
