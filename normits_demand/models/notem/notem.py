@@ -47,6 +47,7 @@ class NoTEM(NoTEMExportPaths):
                  hb_attraction_balance_zoning: nd.BalancingZones | bool = True,
                  nhb_attraction_balance_zoning: nd.BalancingZones | bool = True,
                  trip_end_adjustments: Optional[List[TripEndAdjustmentFactors]] = None,
+                 zoning_name: str = "msoa",
                  ):
         """
         Assigns the attributes needed for NoTEM model.
@@ -94,6 +95,10 @@ class NoTEM(NoTEMExportPaths):
         trip_end_adjustments: List[TripEndAdjustmentFactors], optional
             List of all adjustment factors to apply to the HB productions trip ends.
             Adjustments are applied one after another at to the HB productions.
+
+        zoning_name: str, default "msoa"
+            Name of zoning system for the input land use data for the
+            attraction and production models.
         """
         # Validate inputs
         if not isinstance(import_builder, nd.pathing.NoTEMImportPathsBase):
@@ -109,6 +114,7 @@ class NoTEM(NoTEMExportPaths):
         self.hb_attraction_balance_zoning = hb_attraction_balance_zoning
         self.nhb_attraction_balance_zoning = nhb_attraction_balance_zoning
         self.adjustment_factors = trip_end_adjustments
+        self.zoning_name = zoning_name
 
         # Generate the export paths
         super().__init__(
@@ -128,6 +134,8 @@ class NoTEM(NoTEMExportPaths):
         )
 
         self._write_running_report()
+
+    
 
     @property
     def name(self) -> str:
@@ -270,6 +278,7 @@ class NoTEM(NoTEMExportPaths):
             constraint_paths=None,
             export_home=self.hb_production.export_paths.home,
             trip_end_adjustments=self.adjustment_factors,
+            zoning_name=self.zoning_name
         )
 
         self._logger.info("Running the Home-Based Production Model")
@@ -305,6 +314,7 @@ class NoTEM(NoTEMExportPaths):
             constraint_paths=None,
             export_home=self.hb_attraction.export_paths.home,
             balance_zoning=self.hb_attraction_balance_zoning,
+            zoning_name=self.zoning_name
         )
 
         self._logger.info("Running the Home-Based Attraction Model")
@@ -333,6 +343,7 @@ class NoTEM(NoTEMExportPaths):
             hb_attraction_paths=hb_attraction_paths,
             export_home=self.nhb_production.export_paths.home,
             constraint_paths=None,
+            zoning_name=self.zoning_name
         )
 
         self._logger.info("Running the Non-Home-Based Production Model")
