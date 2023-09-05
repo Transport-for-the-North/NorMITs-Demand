@@ -438,14 +438,20 @@ def get_tour_proportion_seed_values(
 
     # Get appropriate phis and filter to purpose
     phi_factors = pa2od.get_time_period_splits(
-        m, phi_type, aggregate_to_wday=aggregate_to_wday, lookup_folder=phi_lookup_folder
+        m,
+        phi_type,
+        aggregate_to_wday=aggregate_to_wday,
+        lookup_folder=phi_lookup_folder,
     )
     phi_factors = pa2od.simplify_phi_factors(phi_factors)
     phi_factors = phi_factors[phi_factors["purpose_from_home"] == p]
 
     # Get the time period splits
     tp_splits = du.get_mean_tp_splits(
-        tp_split_path=tp_split_path, p=p, aggregate_to_weekday=aggregate_to_wday, tp_as="int"
+        tp_split_path=tp_split_path,
+        p=p,
+        aggregate_to_weekday=aggregate_to_wday,
+        tp_as="int",
     )
 
     # Create the seed values
@@ -559,10 +565,14 @@ def furness_tour_proportions(
 
     # Load the zone aggregation dictionaries for this model
     model2lad = du.get_zone_translation(
-        import_dir=zone_translate_dir, from_zone=model_name, to_zone="lad"
+        import_dir=zone_translate_dir,
+        from_zone=model_name,
+        to_zone="lad",
     )
     model2tfn = du.get_zone_translation(
-        import_dir=zone_translate_dir, from_zone=model_name, to_zone="tfn_sectors"
+        import_dir=zone_translate_dir,
+        from_zone=model_name,
+        to_zone="tfn_sectors",
     )
 
     # Define the default value for the nested defaultdict
@@ -674,7 +684,14 @@ def furness_tour_proportions(
         tfn_dest = model2tfn.get(dest, -1)
         tfn_tour_props[tfn_orig][tfn_dest] += furnessed_mat
 
-    return (tour_proportions, lad_tour_props, tfn_tour_props, pa_out_mats, report, zero_count)
+    return (
+        tour_proportions,
+        lad_tour_props,
+        tfn_tour_props,
+        pa_out_mats,
+        report,
+        zero_count,
+    )
 
 
 def _tms_seg_tour_props_internal(
@@ -793,11 +810,19 @@ def _tms_seg_tour_props_internal(
     )
 
     # Split out the return values
-    model_tour_props, lad_tour_props, tfn_tour_props = furness_return_vals[:3]
+    (
+        model_tour_props,
+        lad_tour_props,
+        tfn_tour_props,
+    ) = furness_return_vals[:3]
     pa_out_mats, report, zero_count = furness_return_vals[3:6]
 
     # Normalise all of the tour proportion matrices to 1
-    for agg_tour_props in [model_tour_props, lad_tour_props, tfn_tour_props]:
+    for agg_tour_props in [
+        model_tour_props,
+        lad_tour_props,
+        tfn_tour_props,
+    ]:
         for key1, inner_dict in agg_tour_props.items():
             for key2, mat in inner_dict.items():
                 # Avoid warning if 0
@@ -934,7 +959,9 @@ def _tms_seg_tour_props(
 
     # Multiprocess and write final matrices to disk
     zero_counts = multiprocessing.multiprocess(
-        _tms_seg_tour_props_internal, kwargs=kwargs_list, process_count=process_count
+        _tms_seg_tour_props_internal,
+        kwargs=kwargs_list,
+        process_count=process_count,
     )
 
     # Output a log of the zero counts found
@@ -955,7 +982,8 @@ def _tms_seg_tour_props(
         for fname in nhb_mats:
             pa_name = fname.replace("od", "pa")
             du.copy_and_rename(
-                src=os.path.join(od_import, fname), dst=os.path.join(pa_export, pa_name)
+                src=os.path.join(od_import, fname),
+                dst=os.path.join(pa_export, pa_name),
             )
 
 
@@ -1087,11 +1115,19 @@ def _vdm_seg_tour_props_internal(
     )
 
     # Split out the return values
-    model_tour_props, lad_tour_props, tfn_tour_props = furness_return_vals[:3]
+    (
+        model_tour_props,
+        lad_tour_props,
+        tfn_tour_props,
+    ) = furness_return_vals[:3]
     pa_out_mats, report, zero_count = furness_return_vals[3:6]
 
     # Normalise all of the tour proportion matrices to 1
-    for agg_tour_props in [model_tour_props, lad_tour_props, tfn_tour_props]:
+    for agg_tour_props in [
+        model_tour_props,
+        lad_tour_props,
+        tfn_tour_props,
+    ]:
         for key1, inner_dict in agg_tour_props.items():
             for key2, mat in inner_dict.items():
                 # Avoid warning if 0
@@ -1203,7 +1239,9 @@ def _vdm_seg_tour_props(
 
     # Multiprocess and write final matrices to disk
     zero_counts = multiprocessing.multiprocess(
-        _vdm_seg_tour_props_internal, kwargs=kwargs_list, process_count=process_count
+        _vdm_seg_tour_props_internal,
+        kwargs=kwargs_list,
+        process_count=process_count,
     )
 
     # Output a log of the zero counts found
@@ -1221,7 +1259,8 @@ def _vdm_seg_tour_props(
         for fname in nhb_mats:
             pa_name = fname.replace("od", "pa")
             du.copy_and_rename(
-                src=os.path.join(od_import, fname), dst=os.path.join(pa_export, pa_name)
+                src=os.path.join(od_import, fname),
+                dst=os.path.join(pa_export, pa_name),
             )
 
 
@@ -1476,7 +1515,11 @@ def build_norms_vdm_compile_params(
 
             # Add lines to output
             for mat_name in compile_mats:
-                line_parts = (mat_name, compiled_mat_name, output_format)
+                line_parts = (
+                    mat_name,
+                    compiled_mat_name,
+                    output_format,
+                )
                 out_lines.append(line_parts)
 
         # Write outputs for this year
@@ -1527,7 +1570,10 @@ def build_norms_compile_params(
         iterator = itertools.product(consts.USER_CLASS_PURPOSES.items(), tp_needed)
 
         for (user_class, purposes), tp in iterator:
-            for sub_uc, seg_dict in efs_consts.NORMS_SUB_USER_CLASS_SEG.items():
+            for (
+                sub_uc,
+                seg_dict
+            ) in efs_consts.NORMS_SUB_USER_CLASS_SEG.items():
                 # Init
                 compile_mats = all_od_matrices.copy()
 
@@ -1587,7 +1633,11 @@ def build_norms_compile_params(
 
                 # Add lines to output
                 for mat_name in compile_mats:
-                    line_parts = (mat_name, compiled_mat_name, output_format)
+                    line_parts = (
+                        mat_name,
+                        compiled_mat_name,
+                        output_format,
+                    )
                     out_lines.append(line_parts)
 
         # Write outputs for this year
@@ -1613,6 +1663,7 @@ def build_compile_params(
     output_headers: List[str] = None,
     output_format: str = "wide",
     output_fname: str = None,
+    scenario: str = None,
 ) -> List[str]:
 
     """
@@ -1665,6 +1716,10 @@ def build_compile_params(
         The name to give to the output file. If left as None,
         du.get_compile_params_name(matrix_format, year) is used to generate
         the output name.
+
+    scenario:
+        The NTEM scenario for this run. Don't include if this is used for
+        non-NTEM forecasting.
 
     Returns
     -------
@@ -1753,11 +1808,16 @@ def build_compile_params(
                     ca=ca,
                     tp=str(tp),
                     csv=True,
+                    scenario=scenario,
                 )
 
                 # Add lines to output
                 for mat_name in compile_mats:
-                    line_parts = (mat_name, compiled_mat_name, output_format)
+                    line_parts = (
+                        mat_name,
+                        compiled_mat_name,
+                        output_format,
+                    )
                     out_lines.append(line_parts)
 
         # Write outputs for this year
@@ -1791,7 +1851,10 @@ def build_24hr_vdm_mats(
     # Go through all segmentations, for all years
     for year in years_needed:
         loop_generator = du.vdm_segment_loop_generator(
-            to_list=to_needed, uc_list=uc_needed, m_list=m_needed, ca_list=ca_needed
+            to_list=to_needed,
+            uc_list=uc_needed,
+            m_list=m_needed,
+            ca_list=ca_needed,
         )
 
         for to, uc, m, ca in loop_generator:
@@ -2159,6 +2222,7 @@ def nhb_tp_split_via_factors(
     process_count: int = consts.PROCESS_COUNT,
     compress_out: bool = False,
     verbose: bool = True,
+    scenario: str = None,
 ) -> None:
     # TODO(BT): Write nhb_tp_split_via_factors() docs
     # Init
@@ -2225,6 +2289,7 @@ def nhb_tp_split_via_factors(
                 matrix_format=import_matrix_format,
                 calib_params=in_dist_params,
                 csv=True,
+                scenario=scenario,
             )
 
             # Find the best match from the splitting factors
@@ -2730,7 +2795,10 @@ def matrices_to_vector(
     # BACKLOG: matrices_to_vector() needs checks adding for edge cases
     #  labels: EFS, error checks
     # Init
-    du.print_w_toggle("Generating vectors from %s..." % mat_import_dir, verbose=verbose)
+    du.print_w_toggle(
+        "Generating vectors from %s..." % mat_import_dir,
+        verbose=verbose,
+    )
     mat_names = [x for x in du.list_files(mat_import_dir) if file_ops.is_csv(x)]
 
     # Try to figure out what all the zones are
@@ -3439,7 +3507,11 @@ def compile_norms_to_vdm(
         internal_zones=internal_zones,
     )
 
-    for mtx_fmt in [od_from_matrix_format, od_to_matrix_format, nhb_od_matrix_format]:
+    for mtx_fmt in [
+        od_from_matrix_format,
+        od_to_matrix_format,
+        nhb_od_matrix_format,
+    ]:
         split_internal_external(
             mat_import=mat_od_import,
             matrix_format=mtx_fmt,
