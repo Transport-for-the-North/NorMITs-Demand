@@ -432,6 +432,7 @@ class NoTEMExportPaths:
                  scenario: nd_core.Scenario,
                  iteration_name: str,
                  export_home: nd.PathLike,
+                 zoning_name: str = "msoa",
                  ):
         """
         Builds the export paths for all the NoTEM sub-models
@@ -452,6 +453,10 @@ class NoTEMExportPaths:
         export_home:
             The home directory of all the export paths. A sub-directory will
             be made for each of the NoTEM sub models.
+
+        
+        zoning_name: str, default "msoa"
+            Name of zoning system for the input land use data.
         """
         # Init
         file_ops.check_path_exists(export_home)
@@ -473,6 +478,7 @@ class NoTEMExportPaths:
             path_years=path_years,
             export_home=hb_p_export_home,
             report_home=hb_p_report_home,
+            zoning_name = zoning_name,
         )
 
         # nhb productions
@@ -485,6 +491,7 @@ class NoTEMExportPaths:
             path_years=path_years,
             export_home=nhb_p_export_home,
             report_home=nhb_p_report_home,
+            zoning_name = zoning_name,
         )
 
         # hb attractions
@@ -497,6 +504,7 @@ class NoTEMExportPaths:
             path_years=path_years,
             export_home=hb_a_export_home,
             report_home=hb_a_report_home,
+            zoning_name = zoning_name,
         )
 
         # nhb attractions
@@ -509,6 +517,7 @@ class NoTEMExportPaths:
             path_years=path_years,
             export_home=nhb_a_export_home,
             report_home=nhb_a_report_home,
+            zoning_name = zoning_name,
         )
 
 
