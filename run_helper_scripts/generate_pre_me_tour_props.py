@@ -84,6 +84,7 @@ class IOPaths:
             scenario=self.notem_scenario,
             iteration_name=self.notem_iteration_name,
             export_home=self.normits_dir / self.notem_dir_name,
+            zoning_name= self.zoning_system_name
         )
 
         proxy = notem_paths.hb_production.export_paths
