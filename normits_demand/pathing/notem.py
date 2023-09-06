@@ -534,7 +534,6 @@ class NoTEMModelPaths:
     """
     # Export fname params
     _trip_origin = None
-    _zoning_system = 'msoa'
 
     # Segmentation names
     _pure_demand = 'pure_demand'
@@ -567,7 +566,7 @@ class NoTEMModelPaths:
                  path_years: List[int],
                  export_home: nd.PathLike,
                  report_home: nd.PathLike,
-                 # TODO(MB) Add zoning system parameter (default MSOA)
+                 zoning_name: str = "msoa",
                  ):
         """Validates input attributes and builds class
 
@@ -581,8 +580,12 @@ class NoTEMModelPaths:
 
         report_home:
             The home directory of all the model reports paths.
+
+        zoning_name: str, default "msoa"
+            Name of zoning system for the input land use data.
         """
         # Assign attributes
+        self.zoning_name = zoning_name
         self.path_years = path_years
         self.export_home = export_home
         self.report_home = report_home
@@ -716,7 +719,7 @@ class HBProductionModelPaths(NoTEMModelPaths):
         """
         # Init
         base_fname = self._base_output_fname
-        fname_parts = [self._trip_origin, self._zoning_system]
+        fname_parts = [self._trip_origin, self.zoning_name]
 
         pure_demand_paths = dict()
         fully_segmented_paths = dict()
@@ -804,7 +807,7 @@ class HBAttractionModelPaths(NoTEMModelPaths):
         """
         # Init
         base_fname = self._base_output_fname
-        fname_parts = [self._trip_origin, self._zoning_system]
+        fname_parts = [self._trip_origin, self.zoning_name]
 
         pure_demand_paths = dict()
         fully_segmented_paths = dict()
@@ -892,7 +895,7 @@ class NHBProductionModelPaths(NoTEMModelPaths):
         """
         # Init
         base_fname = self._base_output_fname
-        fname_parts = [self._trip_origin, self._zoning_system]
+        fname_parts = [self._trip_origin, self.zoning_name]
 
         pure_demand_paths = dict()
         fully_segmented_paths = dict()
@@ -980,7 +983,7 @@ class NHBAttractionModelPaths(NoTEMModelPaths):
         """
         # Init
         base_fname = self._base_output_fname
-        fname_parts = [self._trip_origin, self._zoning_system]
+        fname_parts = [self._trip_origin, self.zoning_name]
 
         pure_demand_paths = dict()
         fully_segmented_paths = dict()

@@ -204,6 +204,7 @@ class HBAttractionModel(HBAttractionModelPaths):
             path_years=self.years,
             export_home=export_home,
             report_home=report_home,
+            zoning_name=zoning_name,
         )
         # Create a logger
         logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
@@ -217,7 +218,7 @@ class HBAttractionModel(HBAttractionModelPaths):
         if isinstance(self.balance_zoning, nd.BalancingZones):
             self.balance_zoning.save(os.path.join(self.export_home, "HB_balancing_zones.ini"))
 
-        self.zoning = nd.get_zoning_system(zoning_name)
+        self.zoning = nd.get_zoning_system(self.zoning_name)
         # Define wanted columns
         self._target_col_dtypes = {
             "employment": {
@@ -491,6 +492,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         balance_zoning: nd.BalancingZones | bool = True,
         constraint_paths: Dict[int, nd.PathLike] = None,
         process_count: int = consts.PROCESS_COUNT,
+        zoning_name: str = "msoa",
     ) -> None:
         """
         Sets up and validates arguments for the NHB Attraction model.
@@ -529,6 +531,9 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             The number of processes to create in the Pool. Typically this
             should not exceed the number of cores available.
             Defaults to consts.PROCESS_COUNT.
+
+        zoning_name: str, default "msoa"
+            Name of zoning system for the input land use data.
         """
         # Check that the paths we need exist!
         _ = [file_ops.check_file_exists(x) for x in hb_attraction_paths.values()]
@@ -572,6 +577,7 @@ class NHBAttractionModel(NHBAttractionModelPaths):
             path_years=self.years,
             export_home=export_home,
             report_home=report_home,
+            zoning_name=zoning_name,
         )
         # Create a logger
         logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
@@ -719,6 +725,13 @@ class NHBAttractionModel(NHBAttractionModelPaths):
         # Reading the notem segmented HB attractions compressed pickle
         hb_attr_notem = nd.DVector.load(self.hb_attraction_paths[year])
         df = hb_attr_notem.to_df()
+
+        # Check zoning system is as expected
+        if hb_attr_notem.zoning_system.name != self.zoning_name:
+            raise ValueError(
+                f"DVector zoning is {hb_attr_notem.zoning_system.name} "
+                f"expected {self.zoning_name}"
+            )
 
         # Removing p1 and p7
         mask = df["p"] != 7

@@ -168,6 +168,7 @@ class HBProductionModel(HBProductionModelPaths):
             path_years=self.years,
             export_home=export_home,
             report_home=report_home,
+            zoning_name=zoning_name,
         )
         # Create a logger
         logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
@@ -178,7 +179,7 @@ class HBProductionModel(HBProductionModelPaths):
             instantiate_msg="Initialised HB Production Model",
         )
 
-        self.zoning = nd.get_zoning_system(zoning_name)
+        self.zoning = nd.get_zoning_system(self.zoning_name)
         self._target_col_dtypes = self._define_target_columns(self.zoning)
 
     @staticmethod
@@ -658,6 +659,7 @@ class NHBProductionModel(NHBProductionModelPaths):
             path_years=self.years,
             export_home=export_home,
             report_home=report_home,
+            zoning_name=zoning_name,
         )
         # Create a logger
         logger_name = "%s.%s" % (nd.get_package_logger_name(), self.__class__.__name__)
@@ -668,7 +670,7 @@ class NHBProductionModel(NHBProductionModelPaths):
             instantiate_msg="Initialised NHB Production Model",
         )
 
-        self.zoning = nd.get_zoning_system(zoning_name)
+        self.zoning = nd.get_zoning_system(self.zoning_name)
         self._target_col_dtypes = self._define_target_columns(self.zoning)
 
     @staticmethod
