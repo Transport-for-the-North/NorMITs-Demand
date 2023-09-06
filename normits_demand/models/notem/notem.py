@@ -10,9 +10,11 @@ Other updates made by: Nirmal Kumar
 File purpose:
 NoTEM Class Frontend for calling all production and attraction models
 """
+from __future__ import annotations
 # Builtins
-import os
+from __future__ import annotations
 
+import os
 from typing import List, Optional
 
 # Third Party
@@ -42,8 +44,8 @@ class NoTEM(NoTEMExportPaths):
                  iteration_name: str,
                  import_builder: nd.pathing.NoTEMImportPathsBase,
                  export_home: nd.PathLike,
-                 hb_attraction_balance_zoning: nd.BalancingZones = None,
-                 nhb_attraction_balance_zoning: nd.BalancingZones = None,
+                 hb_attraction_balance_zoning: nd.BalancingZones | bool = True,
+                 nhb_attraction_balance_zoning: nd.BalancingZones | bool = True,
                  trip_end_adjustments: Optional[List[TripEndAdjustmentFactors]] = None,
                  ):
         """
@@ -79,13 +81,15 @@ class NoTEM(NoTEMExportPaths):
             The zoning systems to balance the home-based attractions to the productions
             at, for each segment of the attractions segmentation. A translation must exist
             between this and the running zoning system, which is MSOA by default.
-            If left as None, then no spatial balance is done, only a segmental balance.
+            If True, then no spatial balance is done, only a segmental balance and if
+            False no balancing is done.
 
         nhb_attraction_balance_zoning:
             The zoning systems to balance the non-home-based attractions to the productions
             at, for each segment of the attractions segmentation. A translation must exist
             between this and the running zoning system, which is MSOA by default.
-            If left as None, then no spatial balance is done, only a segmental balance.
+            If True, then no spatial balance is done, only a segmental balance and if
+            False no balancing is done.
 
         trip_end_adjustments: List[TripEndAdjustmentFactors], optional
             List of all adjustment factors to apply to the HB productions trip ends.
@@ -174,6 +178,7 @@ class NoTEM(NoTEMExportPaths):
             generate_nhb: bool = False,
             generate_nhb_production: bool = False,
             generate_nhb_attraction: bool = False,
+            non_resi_path: bool = True, # TODO Remove this temporary parameter, see issue #981
             ) -> None:
         """
         Runs the notem trip end models based on the criteria given.
@@ -200,6 +205,11 @@ class NoTEM(NoTEMExportPaths):
 
         generate_nhb_attraction:
             Runs the non home based attraction trip end model only.
+
+        non_resi_path : bool, default True
+            Whether to use the `non_resi_path` (True) or the
+            `employment_paths` for the employment file used in
+            HB attractions.
 
         Returns
         -------
@@ -234,7 +244,7 @@ class NoTEM(NoTEMExportPaths):
             self._generate_hb_production()
 
         if generate_hb_attraction:
-            self._generate_hb_attraction()
+            self._generate_hb_attraction(non_resi_path)
 
         if generate_nhb_production:
             self._generate_nhb_production()
@@ -270,9 +280,15 @@ class NoTEM(NoTEMExportPaths):
             export_reports=True,
         )
 
-    def _generate_hb_attraction(self) -> None:
+    def _generate_hb_attraction(self, non_resi_path: bool = True) -> None:
         """
         Runs the home based Attraction trip end model
+
+        Parameters
+        ----------
+        non_resi_path : bool, default True
+            Whether to use the `non_resi_path` (True) or the
+            `employment_paths` for the employment file.
         """
         self._logger.debug("Generating Home-Based Attraction Model imports")
         # Runs the module to create import dictionary
@@ -296,6 +312,7 @@ class NoTEM(NoTEMExportPaths):
             export_pure_attractions=False,
             export_notem_segmentation=True,
             export_reports=True,
+            non_resi_path=non_resi_path,
         )
 
     def _generate_nhb_production(self) -> None:

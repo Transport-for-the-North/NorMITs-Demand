@@ -15,6 +15,7 @@ import itertools
 import pandas as pd
 import geopandas as gpd
 
+from string import ascii_lowercase
 from normits_demand import tms_constants
 from normits_demand.utils import shapefiles
 
@@ -49,15 +50,33 @@ class CjtwTranslator:
 
         self.tempro_path = tempro_path
 
-    # What will be function parameter defs
-    def cjtw_to_model_zone(self,
-                           target_year=None):
-        """
-        Build a 2011 cjtw set in MSOA, adjust to a future year and translate
-        to model zoning.
+        # Define p/a cols
+        self.pa_cols = ['1_msoaAreaofresidence',
+                   '2_msoaAreaofworkplace']
 
-        target_year:
-            Target year if you want to rebase
+        self.cjtw_pa_to_normits_pa = {'1_msoaAreaofresidence': 'p_zone',
+                                      '2_msoaAreaofworkplace': 'a_zone'}
+
+        # Define key to mode bin
+        self.mode_bins = {1: ['13_Onfoot'],
+                          2: ['12_Bicycle'],
+                          3: ['8_Taxi',
+                              '9_Motorcyclescooterormoped',
+                              '10_Drivingacarorvan',
+                              '11_Passengerinacarorvan'],
+                          5: ['7_Busminibusorcoach'],
+                          6: ['6_Train'],
+                          7: ['5_Undergroundmetrolightrailtram']}
+
+    def build_base_cjtw(self):
+
+        """
+        Uses class attributes to import, label and format a CJtW input.
+
+        Returns
+        -------
+        msoa_cjtw:
+            NorMITs format CJtW DataFrame
         """
 
         # Build base year MSOA
@@ -66,19 +85,112 @@ class CjtwTranslator:
         # Adjust to NorMITs format
         msoa_cjtw = self._adjust_to_normits_format(msoa_cjtw)
 
+        return msoa_cjtw
+
+    def cjtw_to_future_year(self,
+                            msoa_cjtw: pd.DataFrame,
+                            target_year: int = None,
+                            infill_tp: bool = True,
+                            take_ntem_totals: bool = True,
+                            ):
+        """
+        Adjust CJtW to a future model year using NTEM data.
+
+        Parameters
+        ----------
+        msoa_cjtw:
+            A  NorMITs format adjusted CJtW dataframe.
+        target_year:
+            Target future year, int in yyyy format
+        infill_tp:
+            Add a time period split from NTEM into CJtW or not
+        take_ntem_totals:
+            Inherit future year NTEM totals and retain distribution, or
+            grow productions with zonal growth factor from NTEM
+
+        Returns
+        -------
+        fy_cjtw:
+            Future year cjtw
+        """
+
         # Do adjustment to target year
         if target_year is not None:
-            msoa_cjtw = self._ntem_adjustments(msoa_cjtw,
-                                               target_year=target_year,
-                                               infill_tp=True,
-                                               take_ntem_totals=True
-                                               )
+            fy_cjtw = self._ntem_adjustments(msoa_cjtw,
+                                             target_year=target_year,
+                                             infill_tp=infill_tp,
+                                             take_ntem_totals=take_ntem_totals,
+                                             )
+
+        return fy_cjtw
+
+    def cjtw_to_model_zone(self,
+                           msoa_cjtw):
+        """
+        Translate CJtW to target model zoning.
+
+        Parameters
+        ----------
+        msoa_cjtw:
+            A  NorMITs format adjusted CJtW dataframe.
+
+        Returns
+        -------
+        zone_cjtw:
+            Translated zonal cjtw
+        """
 
         # Translate to Model Zoning
         if self.model_name != 'msoa':
             zone_cjtw = self._translate_to_model_zoning(msoa_cjtw)
+        else:
+            zone_cjtw = msoa_cjtw.copy()
 
         return zone_cjtw
+
+    def export_by_segment(self,
+                          cjtw_normits_format: pd.DataFrame,
+                          model_zoning: str,
+                          year: int,
+                          out_path: str,
+                          ):
+
+        """
+        Export CJtW by unique segments.
+
+        Parameters
+        ----------
+        cjtw_normits_format:
+            A  NorMITs format adjusted CJtW dataframe.
+        model_zoning:
+            Model output zoning in str, for export labelling only
+        year:
+            Year in int format, for export labelling only
+        out_path:
+            export target path
+
+        Returns
+        -------
+        None
+        """
+
+        unq_m = cjtw_normits_format['mode'].unique()
+        unq_tp = cjtw_normits_format['TimePeriod'].unique()
+
+        for m, tp in itertools.product(unq_m, unq_tp):
+
+            out_sub = cjtw_normits_format.copy()
+
+            # Filter
+            out_sub = out_sub[out_sub['TimePeriod'] == tp]
+            out_sub = out_sub[out_sub['mode'] == m]
+
+            # Path
+            path = '%s_cjtw_yr%d_p1_m%d_tp%d' % (model_zoning, year, m, tp)
+
+            # Out
+            out_sub.to_csv(os.path.join(
+                out_path, path + '.csv'), index=False)
 
     def _translate_to_model_zoning(self,
                                    msoa_cjtw,
@@ -202,40 +314,23 @@ class CjtwTranslator:
 
         return zonal_cjtw
 
-    @staticmethod
-    def _adjust_to_normits_format(msoa_cjtw):
+    def _adjust_to_normits_format(self,
+                                  msoa_cjtw):
         """
         msoa_cjtw:
             Pandas dataframe with original format cjtw
         """
 
-        # Define p/a cols
-        pa_cols = ['1_msoaAreaofresidence',
-                   '2_msoaAreaofworkplace']
-
-        # Define key to mode bin
-        mode_bins = {1: ['13_Onfoot'],
-                     2: ['12_Bicycle'],
-                     3: ['8_Taxi',
-                         '9_Motorcyclescooterormoped',
-                         '10_Drivingacarorvan',
-                         '11_Passengerinacarorvan'],
-                     4: ['5_Undergroundmetrolightrailtram'],
-                     5: ['7_Busminibusorcoach'],
-                     6: ['6_Train']}
-
         mode_list = list()
-        for key, cols in mode_bins.items():
+        for key, cols in self.mode_bins.items():
 
             # Subset by mode, col wise
             mode_sub = msoa_cjtw.reindex(
-                pa_cols + mode_bins[key], axis=1
+                self.pa_cols + self.mode_bins[key], axis=1
             )
-            mode_sub['demand'] = mode_sub[mode_bins[key]].sum(axis=1)
-            mode_sub = mode_sub.drop(mode_bins[key], axis=1)
-            mode_sub = mode_sub.rename(
-                columns={'1_msoaAreaofresidence': 'p_zone',
-                         '2_msoaAreaofworkplace': 'a_zone'})
+            mode_sub['demand'] = mode_sub[self.mode_bins[key]].sum(axis=1)
+            mode_sub = mode_sub.drop(self.mode_bins[key], axis=1)
+            mode_sub = mode_sub.rename(columns=self.cjtw_pa_to_normits_pa)
 
             # Drop 0 cells
             mode_sub = mode_sub[mode_sub['demand'] > 0]
@@ -250,11 +345,11 @@ class CjtwTranslator:
         return normits_cjtw
 
     def _ntem_adjustments(self,
-                          msoa_cjtw,
-                          target_year,
-                          take_ntem_totals=True,
-                          infill_tp=True,
-                          verbose=True):
+                          msoa_cjtw: pd.DataFrame,
+                          target_year: int,
+                          take_ntem_totals: bool = True,
+                          infill_tp: bool = True,
+                          verbose: bool = True):
         """
         Function to adjust CJtW in line with NTEM.
         Can adjust for future year production wise - P/A Furness on backlog.
@@ -272,6 +367,7 @@ class CjtwTranslator:
         verbose: bool
             chatty toggle
         """
+
         # Init
         fy_cjtw = msoa_cjtw.copy()
 
@@ -292,17 +388,27 @@ class CjtwTranslator:
         tempro = tempro.groupby(group_cols).sum().reset_index()
 
         # Separate p/a
-        productions = tempro[tempro['trip_end_type'] == 'productions']
-        attractions = tempro[tempro['trip_end_type'] == 'attractions']
+        tempro_productions = tempro[tempro['trip_end_type'] == 'productions']
+        tempro_attractions = tempro[tempro['trip_end_type'] == 'attractions']
         del tempro
-        productions = productions.reset_index(drop=True)
-        attractions = attractions.reset_index(drop=True)
+        tempro_productions = tempro_productions.reset_index(drop=True)
+        tempro_attractions = tempro_attractions.reset_index(drop=True)
 
         # TODO: Should balance P/A & furness
         # Attractions are already here
 
         # Get growth factor from NTEM
-        productions['gf'] = productions[str(target_year)] / productions[str(self.cjtw_year)]
+        # Aggregate out tp for growth factors
+        tempro_p_growth = tempro_productions.copy()
+        tempro_p_growth = tempro_p_growth.drop('TimePeriod', axis=1)
+        growth_group_cols = ['msoa_zone_id', 'trip_end_type',
+                             'Purpose', 'Mode']
+        tempro_p_growth = tempro_p_growth.groupby(growth_group_cols)
+        tempro_p_growth = tempro_p_growth.sum()
+        tempro_p_growth = tempro_p_growth.reset_index()
+
+        tempro_p_growth['gf'] = tempro_p_growth[str(target_year)] /\
+                                tempro_p_growth[str(self.cjtw_year)]
 
         # Grow prod wise
         unq_mode = fy_cjtw['mode'].unique()
@@ -310,24 +416,32 @@ class CjtwTranslator:
         out_list = list()
         for m in unq_mode:
 
-            # Subset dat
+            # Tram handling - NTEM has no tram so growth comes from bus
+            if m == 7:
+                tempro_m = 5
+            else:
+                tempro_m = m
+
+            # Subset census journey to work data
             dat = fy_cjtw.copy()
             dat = dat[dat['mode'] == m]
 
-            tempro_sub = productions[productions['Mode'] == m]
-            tempro_sub = tempro_sub.reindex(
-                ['msoa_zone_id', str(target_year), 'gf'],
-                axis=1)
-            tempro_sub = tempro_sub.reset_index(drop=True)
-
             demand_before = dat['demand'].sum()
 
-            if take_ntem_totals:
+            # Subset tempro data
+            tempro_growth_sub = tempro_p_growth[
+                tempro_p_growth['Mode'] == tempro_m]
+            tempro_growth_sub = tempro_growth_sub.reindex(
+                ['msoa_zone_id', str(target_year), 'gf'],
+                axis=1)
+            tempro_growth_sub = tempro_growth_sub.reset_index(drop=True)
+
+            if take_ntem_totals and m != 7:
                 # Reduce cjtw to a factor, using a 64 bit float
                 dat['demand'] = dat['demand'].astype('float64')
                 dat['demand'] /= dat['demand'].sum()
                 # Get NTEM total
-                tempro_total = tempro_sub['2018'].sum()
+                tempro_total = tempro_growth_sub[str(target_year)].sum()
                 # Multiply factor by total
                 dat['demand'] *= tempro_total
 
@@ -337,18 +451,18 @@ class CjtwTranslator:
 
             else:
                 dat = dat.merge(
-                    tempro_sub,
+                    tempro_growth_sub,
                     how='left',
                     left_on='p_zone',
                     right_on='msoa_zone_id'
                 ).fillna(1)
                 dat['demand'] *= dat['gf']
                 dat = dat.drop(
-                    ['msoa_zone_id', 'gf'], axis=1)
+                    ['msoa_zone_id', 'gf', str(target_year)], axis=1)
 
             if infill_tp:
                 # Get MSOA time props from productions
-                time_sub = productions[productions['Mode'] == m]
+                time_sub = tempro_productions[tempro_productions['Mode'] == tempro_m]
                 time_sub = time_sub.reindex(
                     ['msoa_zone_id', 'TimePeriod', str(target_year)],
                     axis=1).reset_index(drop=True)

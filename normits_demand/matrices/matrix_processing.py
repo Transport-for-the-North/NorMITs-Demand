@@ -2413,7 +2413,7 @@ def compile_matrices(
     compile_params_path: nd.PathLike,
     factor_pickle_path: str = None,
     round_dp: int = consts.DEFAULT_ROUNDING,
-    factors_fname: str = "od_compilation_factors.pickle",
+    factors_fname: str = "od_compilation_factors.pkl",
     avoid_zero_splits: bool = False,
     process_count: int = consts.PROCESS_COUNT,
     overwrite: bool = True,
@@ -2470,7 +2470,7 @@ def compile_matrices(
         if pathlib.Path(factor_pickle_path).suffix == "":
             print(
                 "WARNING: No filename was given for the pickle factors. "
-                "Defaulting to od_compilation_factors.pickle, but this is "
+                "Defaulting to od_compilation_factors.pkl, but this is "
                 "deprecated and will be removed in future!"
             )
             factor_pickle_path = os.path.join(factor_pickle_path, factors_fname)

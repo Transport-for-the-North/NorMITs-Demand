@@ -108,11 +108,12 @@ def _tp_loop(
             growth_method = row.Growth_Method
             userclass = row.Userclass
             purpose = row.Purpose
+
             # read demand matrix
             zonal_base_demand_mx = utils.wide_to_long_np(omx_mat.get_matrix_level(segment))
-            # check if matrix has no demand then continue
+
+            # If demand is 0, skip the work, keep as is. Can't grow anyway
             if zonal_base_demand_mx["Demand"].sum() == 0:
-                # keep matrix as it is, i.e. = 0
                 cols = zonal_base_demand_mx.columns
                 factored_matrices[segment] = ctk.pandas_utils.long_to_wide_infill(
                     zonal_base_demand_mx,
@@ -124,9 +125,11 @@ def _tp_loop(
                     f"{time_period:>12}{segment:>15}" f"{0:>12}{0:>12}"
                 )
                 continue
+
             # reduce probabilities to current userclass
             hdf_file = probs_dir / f"{time_period}_iRSj_probabilities_split.h5"
             irsj_probs_segment = pd.read_hdf(hdf_file, key=f'userclass_{userclass}')
+
             # convert matrix to numpy stn2stn and produce a conversion lookup
             if to_home:
                 zonal_base_demand_mx = utils.transpose_matrix(zonal_base_demand_mx)
@@ -155,18 +158,14 @@ def _tp_loop(
                     to_home,
                 )
             )
-            # get movements where no growth has been applied
-            no_growth_movements = np_stn2stn_base_demand_mx[
-                np_stn2stn_base_demand_mx == np_stn2stn_grown_demand_mx
-            ]
-            # Add to the total not grown demand
-            overall_not_grown_demand = (
-                overall_not_grown_demand + no_growth_movements.sum()
-            )
-            # store matrix total demand
+
+            # Log movements with no growth applied
+            mask = (np_stn2stn_base_demand_mx == np_stn2stn_grown_demand_mx)
+            no_growth_movements = np_stn2stn_base_demand_mx[mask]
+            overall_not_grown_demand += no_growth_movements.sum()
+
+            # Log the iteration into the growth summary
             tot_output_demand = round(np_stn2stn_grown_demand_mx.sum())
-            # append to growth summary df
-            # empty dataframe for growth summary
             segment_growth_summary = pd.DataFrame(
                 {
                     "Time_Period": [time_period],
@@ -222,7 +221,7 @@ def run_edge_growth(params: forecast_cnfg.EDGEParameters) -> None:
             global_params.station_tlcs,
         )
         # fill growth matrices
-        filled_growth_matrices= growth_matrices.fill_missing_factors(global_params.purposes,growth_matrix_dic)
+        filled_growth_matrices = growth_matrices.fill_missing_factors(global_params.purposes, growth_matrix_dic)
         # create empty dictionary to store matrices
         factored_24hr_matrices = {}
         # declare global demand total variables

@@ -1,0 +1,26 @@
+output_folder: C:\Users\ukmjb018\OneDrive - WSP O365\WSP_Projects\TfN Secondment\NorMITs-Demand\Outputs\EDDIE\Nov 21 NPIER - North factored\TfN Edited Comparison
+npier_ddg_folder: C:\Users\ukmjb018\OneDrive - WSP O365\WSP_Projects\TfN Secondment\NorMITs-Demand\Outputs\EDDIE\Nov 21 NPIER - North factored
+npier_scenario: NPIER
+eddie_ddg_folder: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Drivers\Nov 21 central - TfN Edited
+eddie_scenario: Central
+date: Nov21
+heatmap_years:
+  - 2018
+  - 2038
+  - 2039
+  - 2040
+  - 2041
+  - 2042
+  - 2043
+comparison_ddgs:
+  - Emp
+  - Pop
+  - frac{WOR}{WAP}
+  - EmpIndex
+  - PopLongIndex
+  - PopShortIndex
+base_year: 2018
+regions_data:
+  lad_lookup: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Drivers\LAD17_region_lookup.csv
+  shapefile: C:\Users\ukmjb018\OneDrive - WSP O365\WSP_Projects\TfN Secondment\NorMITs-Demand\GIS\UK Regions\ITL1_MAY_2021_UK_BFC.shp
+  id_column: region_nm

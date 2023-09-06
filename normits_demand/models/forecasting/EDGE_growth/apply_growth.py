@@ -58,7 +58,7 @@ def apply_demand_growth(
                 + filled_growth_matrices[ticketype].transpose()
             ) / 2
         # apply growth
-        ticketype_np_matrix *=  growth_mx
+        ticketype_np_matrix *= growth_mx
         # sum grown demand
         stn2stn_forecast_mx += ticketype_np_matrix
 

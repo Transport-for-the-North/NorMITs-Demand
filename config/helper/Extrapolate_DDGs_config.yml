@@ -1,0 +1,6 @@
+input_folder: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Drivers\Nov 21 Shared DDGs
+output_folder: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Drivers\Nov 21 Shared DDGs\extrapolated
+# Final year to extrapolate to
+final_year: 2070
+# Number of years to use when calculating factors for extrapolation, use -1 to select all years
+number_calculation_years: 2

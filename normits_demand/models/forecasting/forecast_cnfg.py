@@ -265,9 +265,9 @@ class TicketSplitParams(caf.toolkit.BaseConfig):
         raise ValueError("splits_path must contain files called {tp}_stn2stn_costs.csv, where tp are time periods (usually 'AM', 'IP', 'PM', 'OP')")
 
 
-
 class EDGEParameters(caf.toolkit.BaseConfig):
     """Parameters for the EDGE forecasting model.
+
     forecast_years: Self explanatory
 
     iteration: used in naming dir
@@ -275,7 +275,9 @@ class EDGEParameters(caf.toolkit.BaseConfig):
     forecast_scenario: used in naming dir
     export_folder: where export dir is built
     assignment_model: default to NoRMs
+
     matrices_to_grow_dir: folder containing matrices to be grown
+
     demand_segments: path to csv containing demand segments
     ticket_type_splits: If this has been generated already provide a path to it,
     if not provide parameters specified in TicketSplitParameters.
