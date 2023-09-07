@@ -1,13 +1,11 @@
-iteration: 1f
+iteration: 3.1
 import_path: I:\NorMITs Demand\import
 assignment_model: NoHAM
 base_year: 2018
 future_years:
   - 2028
-  - 2038
   - 2043
-  - 2048
-export_folder: E:\ntem_outputs
+export_folder: I:\NorMITs Demand
 ntem_parameters:
   data_path: I:\Data\NTEM
   version: 8.0

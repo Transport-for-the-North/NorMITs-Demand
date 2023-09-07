@@ -545,6 +545,7 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
 
     # ## CHECK ZONE NAME DTYPES ## #
     # Check the matrix index and column dtypes match
+    #TODO update this chekc to be compatible with pandas 2
     if matrix.columns.dtype != matrix.index.dtype:
         raise ValueError(
             "The datatype of the index and columns in matrix must be the same "
