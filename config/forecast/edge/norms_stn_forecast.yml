@@ -1,27 +1,27 @@
 iteration: 1.review
-forecast_scenario: North Factored
-export_folder: E:\NorMITs Demand
+forecast_scenario: Regional
+export_folder: E:\NorMITs Demand\Rotherham
 assignment_model: NoRMS
 
 # Input paths
-matrices_to_grow_dir: E:\Norms\Edge growth\desired_output\matrices
-irsj_props_dir: E:\Norms\Edge growth\desired_output\irsj
+matrices_to_grow_dir: E:\NorMITs Demand\edge_rewrite\matrices_to_grow_dir
+irsj_props_dir: E:\NorMITs Demand\edge_rewrite\irsj_props_dir
 
 # Custom inputs files
 demand_segments: I:\NorMITs Demand\import\edge_replicant\apply_growth\demand_segments.csv
 norms_to_edge_stns_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\TLCs_MOIRA.csv
 ticket_type_splits:
   edge_flows_path: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Base and Mappings\FC_fullfat1819_NEW_DDG.csv
-  splits_path: E:\Norms\Edge growth\desired_output\tt_splits
+  splits_path: E:\NorMITs Demand\edge_rewrite\ticket_splits_dir
   flow_cat_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\FlowCats.csv
 
 cube_exe: C:\Program Files\Citilabs\CubeVoyager\VOYAGER.EXE
 
 # EDGE outputs
-edge_growth_dir: I:\NorMITs Demand\import\EDGE_growth\NoRMS distance\Nov 21 NPIER - North Factored
+edge_growth_dir: I:\NorMITs Demand\import\edge_replicant\edge_inputs\output_data\Outputs\Apr 23 Reg
 
 # Forecast years dictionary
 # forecast year: EDGE growth factors file
 forecast_years:
-  2033: Out_Nov 21 NPIER - North Factored_2033_rate.csv.bz2
-  2043: Out_Nov 21 NPIER - North Factored_2043_rate.csv.bz2
+  2028: Out_Apr 23 Reg_2028_rate.csv.bz2
+  2043: Out_Apr 23 Reg_2043_rate.csv.bz2

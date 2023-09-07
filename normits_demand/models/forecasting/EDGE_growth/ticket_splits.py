@@ -11,6 +11,7 @@ import pickle
 import pandas as pd
 import numpy as np
 import caf.toolkit as ctk
+from caf.toolkit import pandas_utils
 
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
@@ -201,7 +202,7 @@ def produce_ticketype_splitting_matrices(
             # expand matrix
             index = range(1, len(stations_lookup) + 1)
             # convert to numpy and add to matrices dictionary
-            inner_dic[ticketype] = ctk.pandas_utils.long_to_wide_infill(mx_df, mx_df.columns[0], mx_df.columns[1], mx_df.columns[2], index, index, 0).values
+            inner_dic[ticketype] = pandas_utils.long_to_wide_infill(mx_df, mx_df.columns[0], mx_df.columns[1], mx_df.columns[2], index, index, 0).values
         splitting_matrices[purpose] = inner_dic    
     return splitting_matrices
 

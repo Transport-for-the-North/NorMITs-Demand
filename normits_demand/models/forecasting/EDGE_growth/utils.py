@@ -10,7 +10,7 @@ from typing import Tuple
 # Third Party
 import numpy as np
 import pandas as pd
-import caf.toolkit as ctk
+from caf.toolkit import pandas_utils
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
 # Local imports here
@@ -298,7 +298,7 @@ def zonal_from_to_stations_demand(
 
     # convert to long matrix
     cols = mx_df.columns
-    np_mx = ctk.pandas_utils.long_to_wide_infill(
+    np_mx = pandas_utils.long_to_wide_infill(
                     df=mx_df,
                     index_col=cols[0],
                     columns_col=cols[1],
@@ -371,7 +371,7 @@ def convert_stns_to_zonal_demand(
     )
     cols = zonal_mx.columns
     # convert back to wide numpy matrix
-    zonal_mx = ctk.pandas_utils.long_to_wide_infill(zonal_mx, cols[0], cols[1], cols[2], infill=0).values
+    zonal_mx = pandas_utils.long_to_wide_infill(zonal_mx, cols[0], cols[1], cols[2], infill=0).values
 
     return zonal_mx
 
@@ -410,4 +410,4 @@ def wide_to_long_np(mx: np.array, cols: list[str] = ["from_model_zone_id","to_mo
     shp = mx.shape
     ind = range(1, shp[0] + 1)
     df = pd.DataFrame(mx, ind, ind)
-    return ctk.pandas_utils.wide_to_long_infill(df, cols[0], cols[1], cols[2])
+    return pandas_utils.wide_to_long_infill(df, cols[0], cols[1], cols[2])

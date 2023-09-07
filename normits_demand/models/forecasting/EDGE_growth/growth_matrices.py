@@ -9,7 +9,7 @@ Formats matrices, including converting to numpy arrays, and infills missing grow
 # Third Party
 import pandas as pd
 import numpy as np
-import caf.toolkit as ctk
+from caf.toolkit import pandas_utils
 # Local Imports
 # pylint: disable=import-error,wrong-import-position
 # Local imports here
@@ -83,7 +83,7 @@ def prepare_growth_matrices(
             index = range(1, len(stations_lookup)+1)
             growth_matrices[purpose][
                 ticket_type
-            ] = ctk.pandas_utils.long_to_wide_infill(mx_df, mx_df.columns[0], mx_df.columns[1], mx_df.columns[2], index, index, infill=0).values
+            ] = pandas_utils.long_to_wide_infill(mx_df, mx_df.columns[0], mx_df.columns[1], mx_df.columns[2], index, index, infill=0).values
 
     return growth_matrices
 

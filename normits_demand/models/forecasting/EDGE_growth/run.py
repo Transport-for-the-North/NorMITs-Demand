@@ -20,7 +20,7 @@ import os
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-import caf.toolkit as ctk
+from caf.toolkit import pandas_utils
 from caf.toolkit.concurrency import multiprocess
 
 # Local Imports
@@ -115,7 +115,7 @@ def _tp_loop(
             # If demand is 0, skip the work, keep as is. Can't grow anyway
             if zonal_base_demand_mx["Demand"].sum() == 0:
                 cols = zonal_base_demand_mx.columns
-                factored_matrices[segment] = ctk.pandas_utils.long_to_wide_infill(
+                factored_matrices[segment] = pandas_utils.long_to_wide_infill(
                     zonal_base_demand_mx,
                     cols[0],
                     cols[1],
