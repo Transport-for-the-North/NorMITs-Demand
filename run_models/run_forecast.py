@@ -297,7 +297,7 @@ def tem_forecasting(
             params.time_periods,
             params.future_years,
         )
-    except FileNotFoundError:
+    except (FileNotFoundError, IndexError):
         LOG.error("Error performing OD matrix comparison", exc_info=True)
 
 
