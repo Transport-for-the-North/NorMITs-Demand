@@ -45,8 +45,8 @@ class OMXFile(tables.File):
             * *'r+'*: It is similar to 'a', but the file must already
             exist.
     omx_version : str, optional
-        Version of the OMX file, this option is ignored unless
-        mode = 'w', when it is mandatory. Expected OMX version is '0.2'.
+        Version of the OMX file, this option is ignored unless mode = 'w',
+        when it is mandatory. Expected OMX version is 0.2 or 0.3.
     shape : tuple[int, int], optional
         Shape of the matrices in the OMX file, this option is ignored
         unless mode = 'w', when it is mandatory.
@@ -58,6 +58,9 @@ class OMXFile(tables.File):
     ValueError
         If a `mode` other than those defined above is provided or
         `omx_version` and `shape` aren't provided in `mode` 'w'.
+    NotImplementedError
+        If OMX version isn't one of the implemented versions
+        0.2 or 0.3.
     """
 
     _allowed_omx_versions = ("0.2", "0.3")
@@ -152,6 +155,7 @@ class OMXFile(tables.File):
     def _get_shape(self) -> tuple[int, int]:
         """Get the shape of the matrices."""
         value = self.root._v_attrs[self._shape_attribute[self.omx_version]]
+        # TODO Convert value to integer(s)
         if self.omx_version == "0.3":
             # Version 0.3 has a single value for number of zones
             shape = (value, value)

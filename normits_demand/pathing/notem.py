@@ -454,7 +454,6 @@ class NoTEMExportPaths:
             The home directory of all the export paths. A sub-directory will
             be made for each of the NoTEM sub models.
 
-        
         zoning_name: str, default "msoa"
             Name of zoning system for the input land use data.
         """

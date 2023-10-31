@@ -219,12 +219,11 @@ def trip_end_growth(
     model_zoning: nd.ZoningSystem,
     zone_weighting: str,
     base_year: int,
-    # TODO(MB) Add parameter to docstring
     internal_growth_zoning: Optional[nd.ZoningSystem] = None,
 ) -> Dict[int, nd_core.DVector]:
     """Calculate growth at LAD level and return it a `model_zone_system`.
 
-    The trip ends are translated to `LAD_ZONE_SYSTEM` to calculate
+    The trip ends are translated to `internal_growth_zoning` to calculate
     growth factors for the internal area and at `model_zone_system`
     for calculating factors in the external area. The returned DVectors
     are in the `model_zone_system`.
@@ -242,6 +241,9 @@ def trip_end_growth(
         to `model_zone_system`.
     base_year : int
         Base model year.
+    internal_growth_zoning : ZoningSystem, optional
+        Zone system to translate internal area to when calculating the
+        growth factors, this defaults to `LAD_ZONE_SYSTEM` if not given.
 
     Returns
     -------

@@ -36,12 +36,7 @@ def read_tripends(
     tripend_path: Path,
     zoning_system: nd.ZoningSystem,
 ) -> tempro_trip_ends.TEMProTripEnds:
-    """Read trip-end dvectors from picklefiles
-    Args:
-        base_year (int): The base year for the forecast
-        forecast_years (list[int]): A list of forecast years
-    Returns:
-        tempro_trip_ends.TEMProTripEnds: the same trip-ends read in
+    """Load trip-end DVectors from pickled files.
 
     Parameters
     ----------
