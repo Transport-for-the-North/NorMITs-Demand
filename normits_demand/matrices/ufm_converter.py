@@ -244,7 +244,12 @@ class UFMConverter:
         LOG.debug("Written control file: %s", control_path)
 
         comp_proc = subprocess.run(
-            ["UFMSTACK", str(control_path.resolve())],
+            # SATURN STACK has a bug which duplicates the final character
+            # causing it to not be able to find the file.
+            # Removing suffix from control path and adding single space so
+            # SATURN duplicates the space before stripping whitespace from
+            # the end and adding '.DAT' suffix
+            ["UFMSTACK", str(control_path.resolve().with_suffix("")) + " "],
             capture_output=True,
             env=self.environment,
             cwd=control_path.parent,
