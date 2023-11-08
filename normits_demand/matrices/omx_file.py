@@ -70,6 +70,7 @@ class OMXFile(tables.File):
     }
     _matrix_folder = {"0.2": "/data", "0.3": "/matrices"}
     _shape_attribute = {"0.2": "SHAPE", "0.3": "OMX_ZONES"}
+    _default_filters = tables.Filters(complevel=1)
 
     def __init__(
         self,
@@ -80,6 +81,10 @@ class OMXFile(tables.File):
         **kwargs,
     ) -> None:
         self.mode = str(mode).strip().lower()
+
+        if "filters" not in kwargs:
+            kwargs["filters"] = self._default_filters
+
         super().__init__(filename, mode=self.mode, **kwargs)
 
         self._path = Path(filename)
@@ -276,4 +281,4 @@ class OMXFile(tables.File):
             raise ValueError(f"matrix shape should be {self.shape} not {matrix.shape}")
 
         path = self._matrix_folder[self.omx_version]
-        self.create_array(path, str(level_name), matrix, createparents=True)
+        self.create_carray(path, str(level_name), obj=matrix, createparents=True)
