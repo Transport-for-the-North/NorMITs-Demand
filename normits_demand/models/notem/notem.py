@@ -377,6 +377,7 @@ class NoTEM(NoTEMExportPaths):
             export_home=self.nhb_attraction.export_paths.home,
             constraint_paths=None,
             balance_zoning=self.nhb_attraction_balance_zoning,
+            zoning_name=self.zoning_name,
         )
 
         self._logger.info("Running the Non-Home-Based Attraction Model")

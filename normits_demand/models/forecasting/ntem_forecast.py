@@ -219,10 +219,11 @@ def trip_end_growth(
     model_zoning: nd.ZoningSystem,
     zone_weighting: str,
     base_year: int,
+    internal_growth_zoning: Optional[nd.ZoningSystem] = None,
 ) -> Dict[int, nd_core.DVector]:
     """Calculate growth at LAD level and return it a `model_zone_system`.
 
-    The trip ends are translated to `LAD_ZONE_SYSTEM` to calculate
+    The trip ends are translated to `internal_growth_zoning` to calculate
     growth factors for the internal area and at `model_zone_system`
     for calculating factors in the external area. The returned DVectors
     are in the `model_zone_system`.
@@ -240,6 +241,9 @@ def trip_end_growth(
         to `model_zone_system`.
     base_year : int
         Base model year.
+    internal_growth_zoning : ZoningSystem, optional
+        Zone system to translate internal area to when calculating the
+        growth factors, this defaults to `LAD_ZONE_SYSTEM` if not given.
 
     Returns
     -------
@@ -256,13 +260,25 @@ def trip_end_growth(
     """
     if base_year not in tempro_vectors:
         raise NTEMForecastError(f"base year ({base_year}) data not given")
-    growth_zone = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
+
+    if internal_growth_zoning is None:
+        internal_growth_zoning = nd_core.get_zoning_system(LAD_ZONE_SYSTEM)
+
+    LOG.info(
+        "Growth factors for the internal area are calculated at %s zone system, "
+        "the external area factors area calculated at the %s zone system. "
+        "Both growth factors are converted to %s zone system before being "
+        "combined together.",
+        internal_growth_zoning.name,
+        model_zoning.name,
+        model_zoning.name,
+    )
 
     # Split data into internal and external DVectors
     # for different growth calculations
     base = tempro_vectors[base_year]
     base_data = {
-        "internal": base.translate_zoning(growth_zone),
+        "internal": base.translate_zoning(internal_growth_zoning),
         "external": base.translate_zoning(model_zoning, weighting=zone_weighting),
     }
     masks = {
@@ -281,7 +297,7 @@ def trip_end_growth(
             forecast = {}
             for area, base in base_data.items():
                 forecast[area] = data.translate_zoning(
-                    growth_zone if area == "internal" else model_zoning,
+                    internal_growth_zoning if area == "internal" else model_zoning,
                     None if area == "internal" else zone_weighting,
                 )
                 forecast[area] = forecast[area] / base
@@ -346,6 +362,8 @@ def tempro_growth(
             model_zone_system,
             zone_translation_weights[segment.name],
             base_year=base_year,
+            # TODO(MB) Add this parameter to this function and the config
+            internal_growth_zoning=model_zone_system,
         )
     return TEMProTripEnds(**grown)
 

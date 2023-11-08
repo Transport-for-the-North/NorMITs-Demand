@@ -432,6 +432,7 @@ class NoTEMExportPaths:
                  scenario: nd_core.Scenario,
                  iteration_name: str,
                  export_home: nd.PathLike,
+                 zoning_name: str = "msoa",
                  ):
         """
         Builds the export paths for all the NoTEM sub-models
@@ -452,6 +453,9 @@ class NoTEMExportPaths:
         export_home:
             The home directory of all the export paths. A sub-directory will
             be made for each of the NoTEM sub models.
+
+        zoning_name: str, default "msoa"
+            Name of zoning system for the input land use data.
         """
         # Init
         file_ops.check_path_exists(export_home)
@@ -473,6 +477,7 @@ class NoTEMExportPaths:
             path_years=path_years,
             export_home=hb_p_export_home,
             report_home=hb_p_report_home,
+            zoning_name = zoning_name,
         )
 
         # nhb productions
@@ -485,6 +490,7 @@ class NoTEMExportPaths:
             path_years=path_years,
             export_home=nhb_p_export_home,
             report_home=nhb_p_report_home,
+            zoning_name = zoning_name,
         )
 
         # hb attractions
@@ -497,6 +503,7 @@ class NoTEMExportPaths:
             path_years=path_years,
             export_home=hb_a_export_home,
             report_home=hb_a_report_home,
+            zoning_name = zoning_name,
         )
 
         # nhb attractions
@@ -509,6 +516,7 @@ class NoTEMExportPaths:
             path_years=path_years,
             export_home=nhb_a_export_home,
             report_home=nhb_a_report_home,
+            zoning_name = zoning_name,
         )
 
 
@@ -534,7 +542,6 @@ class NoTEMModelPaths:
     """
     # Export fname params
     _trip_origin = None
-    _zoning_system = 'msoa'
 
     # Segmentation names
     _pure_demand = 'pure_demand'
@@ -559,6 +566,7 @@ class NoTEMModelPaths:
     )
 
     # Define output fnames
+    # TODO(MB) Use DVector.build_filename_from_attributes to create filenames
     _base_output_fname = '%s_%s_%s_%d_dvec.pkl'
     _base_report_fname = '%s_%s_%d_%s.csv'
 
@@ -566,6 +574,7 @@ class NoTEMModelPaths:
                  path_years: List[int],
                  export_home: nd.PathLike,
                  report_home: nd.PathLike,
+                 zoning_name: str = "msoa",
                  ):
         """Validates input attributes and builds class
 
@@ -579,8 +588,12 @@ class NoTEMModelPaths:
 
         report_home:
             The home directory of all the model reports paths.
+
+        zoning_name: str, default "msoa"
+            Name of zoning system for the input land use data.
         """
         # Assign attributes
+        self.zoning_name = zoning_name
         self.path_years = path_years
         self.export_home = export_home
         self.report_home = report_home
@@ -714,7 +727,7 @@ class HBProductionModelPaths(NoTEMModelPaths):
         """
         # Init
         base_fname = self._base_output_fname
-        fname_parts = [self._trip_origin, self._zoning_system]
+        fname_parts = [self._trip_origin, self.zoning_name]
 
         pure_demand_paths = dict()
         fully_segmented_paths = dict()
@@ -802,7 +815,7 @@ class HBAttractionModelPaths(NoTEMModelPaths):
         """
         # Init
         base_fname = self._base_output_fname
-        fname_parts = [self._trip_origin, self._zoning_system]
+        fname_parts = [self._trip_origin, self.zoning_name]
 
         pure_demand_paths = dict()
         fully_segmented_paths = dict()
@@ -890,7 +903,7 @@ class NHBProductionModelPaths(NoTEMModelPaths):
         """
         # Init
         base_fname = self._base_output_fname
-        fname_parts = [self._trip_origin, self._zoning_system]
+        fname_parts = [self._trip_origin, self.zoning_name]
 
         pure_demand_paths = dict()
         fully_segmented_paths = dict()
@@ -978,7 +991,7 @@ class NHBAttractionModelPaths(NoTEMModelPaths):
         """
         # Init
         base_fname = self._base_output_fname
-        fname_parts = [self._trip_origin, self._zoning_system]
+        fname_parts = [self._trip_origin, self.zoning_name]
 
         pure_demand_paths = dict()
         fully_segmented_paths = dict()
