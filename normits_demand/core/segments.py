@@ -20,9 +20,8 @@ import math
 import pathlib
 import itertools
 import collections
-import pathlib
-
 from os import PathLike
+import re
 
 from typing import Any
 from typing import List
@@ -131,6 +130,8 @@ class SegmentationLevel:
     _reduce_pointer = '-'
     _drop_splitter = ':'
     _segment_name_separator = '_'
+
+    _trip_origin_regex = r"(?:^|[\s_])(nhb|hb)[_\s]"
 
     def __init__(self,
                  name: str,
@@ -1890,6 +1891,33 @@ class SegmentationLevel:
 
         return tp_dict
 
+    def get_trip_origin(self) -> nd.TripOrigin | None:
+        """Get trip origin of segmentation, if applicable."""
+        match = re.search(self._trip_origin_regex, self.name.strip(), re.I)
+        if match is None:
+            return None
+
+        return nd.TripOrigin(match.group(1))
+
+    def get_name_without_trip_origin(self) -> str:
+        """Return segmentation name without trip origin information.
+
+        Returns the original name if no trip origin information
+        is present.
+        """
+        trip_origin = self.get_trip_origin()
+        if trip_origin is None:
+            return self.name
+
+        # Remove trip origin then replace any duplicate "_"
+        name = re.sub(trip_origin.value, "", self.name, flags=re.I)
+        name = re.sub(r"_{2,}", "_", name)
+
+        if name.startswith("_"):
+            return name[1:]
+        return name
+
+
     def generate_file_name(
         self,
         segment_params: Dict[str, Any],
@@ -2427,12 +2455,19 @@ def list_segmentations() -> List[str]:
         Names of all segmentations found in NorMITs demand
         segmentation folder.
     """
-    seg_folder = pathlib.Path(SegmentationLevel._segment_definitions_path)
+    seg_folder = pathlib.Path(SegmentationLevel.segment_definitions_path)
+    segmentation_folders = [seg_folder]
+
+    groups_folder = seg_folder / "_segment_groups"
+
+    if groups_folder.is_dir():
+        segmentation_folders.extend(groups_folder.iterdir())
 
     segmentations = []
-    for path in seg_folder.iterdir():
-        if path.is_dir() and not path.name.startswith("_"):
-            segmentations.append(path.name)
+    for seg_folder in segmentation_folders:
+        for path in seg_folder.iterdir():
+            if path.is_dir() and not path.name.startswith("_"):
+                segmentations.append(path.name)
 
     return segmentations
 

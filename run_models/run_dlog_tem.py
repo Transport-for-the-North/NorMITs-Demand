@@ -25,11 +25,19 @@ from normits_demand.pathing import NoTEMImportPaths
 LOG = nd_log.get_logger(nd_log.get_package_logger_name() + ".run_dlog_tem")
 LOG_FILE = "DLog_TEM.log"
 CONFIG_FILE = pathlib.Path(r"config\models\DLog_tem_config.yaml")
+# BACKLOG(MB) Move land use zoning parameter to config
+LANDUSE_ZONING = "miham"
 RAW_LANDUSE_INDEX_COLUMNS = {
-    "population": ["msoa_zone_id", "tfn_traveller_type"],
-    "employment": ["msoa_zone_id", "sic_code"],
+    "population": [f"{LANDUSE_ZONING}_zone_id", "tfn_traveller_type"],
+    "employment": [f"{LANDUSE_ZONING}_zone_id", "sic_code"],
 }
-LANDUSE_ZONING = "msoa"
+
+MSOA_ZONING = "msoa"
+MSOA_INDEX_COLUMNS = {
+    "population": [f"{MSOA_ZONING}_zone_id", "tfn_traveller_type"],
+    "employment": [f"{MSOA_ZONING}_zone_id", "sic_code"],
+}
+
 
 ##### CLASSES #####
 @dataclasses.dataclass
@@ -117,7 +125,8 @@ def _infill_area_type(
     scenario_folder: pathlib.Path, landuse_data: pd.DataFrame
 ) -> pd.DataFrame:
     """Infill area type in `landuse_data` using any existing land use files."""
-    index_columns = RAW_LANDUSE_INDEX_COLUMNS["population"].copy()
+    msoa_index_columns = MSOA_INDEX_COLUMNS["population"].copy()
+    land_use_index_columns = RAW_LANDUSE_INDEX_COLUMNS["population"].copy()
     area_col = "area_type"
 
     try:
@@ -125,15 +134,24 @@ def _infill_area_type(
     except FileNotFoundError as error:
         raise FileNotFoundError("cannot find file to infill population area type") from error
 
-    columns = [index_columns[0], area_col]
+    columns = [msoa_index_columns[0], area_col]
     area_type_lookup = file_ops.read_df(other_landuse, usecols=columns)[columns]
     # Area type is tied to MSOA but need to group rows because there
     # is more disaggregated data in the other land use file
-    area_type_lookup = area_type_lookup.groupby(index_columns[0]).first()
+    area_type_lookup = area_type_lookup.groupby(msoa_index_columns[0]).first()
+
+    if MSOA_ZONING != LANDUSE_ZONING:
+        area_type_lookup = _transform_area_type_lookup(
+            area_type_lookup, MSOA_ZONING, LANDUSE_ZONING
+        )
 
     LOG.debug("Infilling area type column using %s", other_landuse)
     landuse_data = landuse_data.merge(
-        area_type_lookup, on=index_columns[0], how="left", validate="m:1", indicator=True
+        area_type_lookup,
+        on=land_use_index_columns[0],
+        how="left",
+        validate="m:1",
+        indicator=True,
     )
     missing = landuse_data["_merge"] != "both"
     if missing.sum() > 0:
@@ -142,8 +160,83 @@ def _infill_area_type(
         )
     landuse_data = landuse_data.drop(columns="_merge")
 
-    index_columns.insert(1, area_col)
-    return landuse_data.set_index(index_columns, verify_integrity=True)
+    land_use_index_columns.insert(1, area_col)
+    return landuse_data.set_index(land_use_index_columns, verify_integrity=True)
+
+
+def _transform_area_type_lookup(
+    area_type_lookup: pd.DataFrame, msoa: str, zone: str
+) -> pd.DataFrame:
+    """Transform area type lookup from MSOA to `zone` zoning.
+
+    Parameters
+    ----------
+    area_type_lookup : pd.DataFrame
+        DataFrame containing two columns
+        "msoa_zone_id" and "area_type".
+    msoa : str
+        Name of the MSOA zoning e.g. "msoa".
+    zone : str
+        Name of zoning to translate to.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with index containing the translated
+        zone ID and a single "area_type" column.
+    """
+    factor_col = msoa + "_to_" + zone
+    area_type_col = "area_type"
+
+    msoa_zoning = nd.get_zoning_system(msoa)
+    landuse_zoning = nd.get_zoning_system(zone)
+    # MSOA to landuse zoning lookup
+    # msoa_zone_id, miham_zone_id, msoa_to_miham
+    translation = msoa_zoning._get_translation_definition(landuse_zoning)
+
+    area_type_lookup = area_type_lookup.merge(translation, how="left", on=msoa_zoning.col_name)
+    area_type_lookup_sums = (
+        area_type_lookup.groupby([landuse_zoning.col_name, area_type_col])[factor_col]
+        .sum()
+        .reset_index()
+    )
+
+    transformed_area_type_lookup = area_type_lookup_sums.groupby(
+        landuse_zoning.col_name
+    ).apply(_calculate_area_type, split_col=factor_col, area_type_col=area_type_col)
+    transformed_area_type_lookup = transformed_area_type_lookup.to_frame()
+    transformed_area_type_lookup.columns = [area_type_col]
+    return transformed_area_type_lookup
+
+
+def _calculate_area_type(
+    area_type_split: pd.DataFrame, split_col: str, area_type_col: str
+) -> int:
+    """Determine area type based on largest split factor.
+
+    This function is designed to be called from `groupby.apply`.
+
+    Parameters
+    ----------
+    area_type_split : pd.DataFrame
+        Group from dataframe containing columns `area_type_col`
+        and `split_col`.
+    split_col : str
+        Name of column containing split factors.
+    area_type_col : str
+        Name of column containing area type.
+
+    Returns
+    -------
+    int
+        Area type ID.
+    """
+    # TODO docstring
+    if len(area_type_split) == 1:
+        return area_type_split[area_type_col].values[0]
+
+    max_id = area_type_split[split_col].idxmax()
+    return area_type_split.loc[max_id, area_type_col]
 
 
 def split_raw_landuse(
@@ -214,7 +307,7 @@ def split_raw_landuse(
 
     max_year = max(output_files)
     years = [str(i) for i in output_files]
-    LOG.info("Splitting raw %s landuse to separate years files", landuse)
+    LOG.info("Splitting raw %s landuse to separate years files from '%s'", landuse, raw_file)
     landuse_data = file_ops.read_df(raw_file, usecols=column_filter)
 
     # Aggregate rows because raw population is disaggregated by unneeded dwelling type column
@@ -314,8 +407,9 @@ def main(params: DLogTEMParameters, init_logger: bool = True) -> None:
         iteration_name=params.trip_end_iteration,
         import_builder=import_builder,
         export_home=params.export_folder,
-        hb_attraction_balance_zoning=False,
-        nhb_attraction_balance_zoning=False,
+        hb_attraction_balance_zoning=True,
+        nhb_attraction_balance_zoning=True,
+        zoning_name=LANDUSE_ZONING,
     )
     tem.run(generate_all=True, non_resi_path=False)
 

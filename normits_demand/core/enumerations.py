@@ -203,8 +203,17 @@ class TripOrigin(IsValidEnum):
                 return to
 
         raise ValueError(
-            f"No TripOrigin exists with the value '{val}'. " f"Expected one of: {valid_values}"
+            f"No TripOrigin exists with the value '{val}'. Expected one of: {valid_values}"
         )
+
+    @classmethod
+    def _missing_(cls, value: str):
+        """Accept case insensitive versions of NHB / HB."""
+        value = value.lower().strip()
+        for member in cls:
+            if member.value == value:
+                return member
+        return None
 
 
 @enum.unique
@@ -340,9 +349,12 @@ class AssignmentModel(IsValidEnum):
 
     NOHAM = "NoHAM"
     NORMS = "NoRMS"
+
     # Models for Midlands Connect
     MIHAM = "MiHAM"
     MIRANDA = "MiRANDA"
+    # MiHAM with development zones
+    MIHAM_DEV = "MiHAM_Dev"
 
     @classmethod
     def from_str(cls, model_name: str) -> AssignmentModel:
@@ -386,6 +398,7 @@ class AssignmentModel(IsValidEnum):
             cls.NORMS: Mode.TRAIN,
             cls.MIHAM: Mode.CAR,
             cls.MIRANDA: Mode.TRAIN,
+            cls.MIHAM_DEV: Mode.CAR,
         }
 
     def get_mode(self) -> Mode:

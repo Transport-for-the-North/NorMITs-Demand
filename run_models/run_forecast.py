@@ -23,7 +23,7 @@ from normits_demand.models.forecasting import (
     tem_forecast,
     ntem_forecast,
     tempro_trip_ends,
-    forecast_cnfg
+    forecast_cnfg,
 )
 from normits_demand import logging as nd_log
 from normits_demand.reports import ntem_forecast_checks
@@ -169,7 +169,8 @@ def model_mode_subset(
     NotImplementedError
         If any `assignment_model` other than NoHAM or MiHAM is given.
     """
-    if assignment_model in (nd.AssignmentModel.NOHAM, nd.AssignmentModel.MIHAM):
+    car_modes = list(filter(lambda x: x.get_mode() == nd.Mode.CAR, nd.AssignmentModel))
+    if assignment_model in car_modes:
         segmentation = {
             "hb_attractions": "hb_p_m_car",
             "hb_productions": "hb_p_m_car",
@@ -178,8 +179,9 @@ def model_mode_subset(
         }
     else:
         raise NotImplementedError(
-            "Forecasting only implemented for NoHAM and MiHAM"
-            f"not {assignment_model.get_name()}"
+            "Forecasting only implemented for "
+            + ", ".join(i.value for i in car_modes)
+            + f" not {assignment_model.value}"
         )
 
     return trip_ends.subset(segmentation)
@@ -214,6 +216,7 @@ def tem_forecasting(
             ntem_version=params.ntem_parameters.version,
             ntem_scenario=params.ntem_parameters.scenario,
         )
+
     elif forecast_model == forecast_cnfg.ForecastModel.TRIP_END:
         if not isinstance(params, forecast_cnfg.TEMForecastParameters):
             raise TypeError(
@@ -223,8 +226,12 @@ def tem_forecasting(
 
         trip_end_name = f"{params.assignment_model.get_name()} Trip End"
         tripend_data = tem_forecast.read_tripends(
-            params.base_year, params.future_years, params.tripend_path
+            params.base_year,
+            params.future_years,
+            params.tripend_path,
+            nd.get_zoning_system(params.tem_input_zoning),
         )
+
     else:
         raise ValueError(f"forecasting for trip end or NTEM only not {forecast_model}")
 
@@ -244,14 +251,18 @@ def tem_forecasting(
     pa_output_folder = params.export_path / "Matrices" / "PA"
     ntem_forecast.grow_all_matrices(ntem_inputs, tripend_growth, pa_output_folder)
 
-    ntem_forecast_checks.pa_matrix_comparison(
-        ntem_inputs,
-        pa_output_folder,
-        tripend_data,
-        params.assignment_model.get_mode(),
-        params.comparison_zone_systems,
-        params.base_year,
-    )
+    try:
+        ntem_forecast_checks.pa_matrix_comparison(
+            ntem_inputs,
+            pa_output_folder,
+            tripend_data,
+            params.assignment_model.get_mode(),
+            params.comparison_zone_systems,
+            params.base_year,
+        )
+    except (FileNotFoundError, NotImplementedError):
+        LOG.error("Error performing PA matrix comparison", exc_info=True)
+
     od_folder = pa_output_folder.with_name("OD")
     ntem_forecast.convert_to_od(
         pa_output_folder,
@@ -276,15 +287,18 @@ def tem_forecasting(
         params.car_occupancies_path,
     )
 
-    ntem_forecast_checks.od_matrix_comparison(
-        ntem_inputs.od_matrix_folder,
-        compiled_od_path / "PCU",
-        params.assignment_model.get_zoning_system().name,
-        params.comparison_zone_systems["matrix 1"],
-        params.user_classes,
-        params.time_periods,
-        params.future_years,
-    )
+    try:
+        ntem_forecast_checks.od_matrix_comparison(
+            ntem_inputs.od_matrix_folder,
+            compiled_od_path / "PCU",
+            params.assignment_model.get_zoning_system().name,
+            params.comparison_zone_systems["matrix 1"],
+            params.user_classes,
+            params.time_periods,
+            params.future_years,
+        )
+    except (FileNotFoundError, IndexError):
+        LOG.error("Error performing OD matrix comparison", exc_info=True)
 
 
 ##### MAIN #####
@@ -294,6 +308,6 @@ if __name__ == "__main__":
 
     try:
         main(args.model, args.config_path)
-    except Exception as err:
+    except Exception:
         LOG.critical("Forecasting error:", exc_info=True)
         raise
