@@ -122,6 +122,7 @@ class NoTEM(NoTEMExportPaths):
             path_years=self.years,
             scenario=scenario,
             iteration_name=iteration_name,
+            zoning_name=zoning_name
         )
 
         # Create a logger
