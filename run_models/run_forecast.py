@@ -111,6 +111,8 @@ def main(
         params = forecast_cnfg.NTEMForecastParameters.load_yaml(config_path)
     elif model == forecast_cnfg.ForecastModel.EDGE:
         params = forecast_cnfg.EDGEParameters.load_yaml(config_path)
+    elif model == forecast_cnfg.ForecastModel.DLOG:
+        params = forecast_cnfg.DLOGForecastParameters.load_yaml(config_path)
     else:
         raise NotImplementedError(f"forecasting not implemented for {model.value}")
 
@@ -137,6 +139,10 @@ def main(
         tem_forecasting(params, model)
     elif model == forecast_cnfg.ForecastModel.EDGE:
         edge_replicant.run_edge_growth(params)
+    elif model == forecast_cnfg.ForecastModel.DLOG:
+        dlog_forecasting(params)
+    else:
+        raise ValueError(f"unknown forecast model {model}")
 
     LOG.info(
         "%s forecasting completed in %s",
@@ -187,49 +193,40 @@ def model_mode_subset(
     return trip_ends.subset(segmentation)
 
 
-def tem_forecasting(
-    params: Union[forecast_cnfg.TEMForecastParameters, forecast_cnfg.NTEMForecastParameters],
+def _get_trip_end_data(
     forecast_model: forecast_cnfg.ForecastModel,
-) -> None:
-    """Run the NTEM or trip end forecasting.
-
-    Parameters
-    ----------
-    params : NTEMForecastParameters | TEMForecastParameters
-        Parameters for running NTEM forecasting.
-
-    See Also
-    --------
-    normits_demand.models.ntem_forecast
-    """
+    data_params: Union[forecast_cnfg.TEMDataParameters, forecast_cnfg.NTEMDataParameters],
+    params: forecast_cnfg.ForecastParameters,
+) -> tuple[tempro_trip_ends.TEMProTripEnds, str]:
+    """Load the forecast trip end data."""
     if forecast_model == forecast_cnfg.ForecastModel.NTEM:
-        if not isinstance(params, forecast_cnfg.NTEMForecastParameters):
+        if not isinstance(data_params, forecast_cnfg.NTEMDataParameters):
             raise TypeError(
                 "expected NTEMForecastParameters for "
-                f"{forecast_model.value} forecasting not {type(params)}"
+                f"{forecast_model.value} forecasting not {type(data_params)}"
             )
 
         trip_end_name = "TEMPro"
         tripend_data = ntem_forecast.get_tempro_data(
-            params.ntem_parameters.data_path,
+            data_params.data_path,
             [params.base_year, *params.future_years],
-            ntem_version=params.ntem_parameters.version,
-            ntem_scenario=params.ntem_parameters.scenario,
+            ntem_version=data_params.version,
+            ntem_scenario=data_params.scenario,
         )
 
     elif forecast_model == forecast_cnfg.ForecastModel.TRIP_END:
-        if not isinstance(params, forecast_cnfg.TEMForecastParameters):
+        if not isinstance(data_params, forecast_cnfg.TEMDataParameters):
             raise TypeError(
                 "expected TEMForecastParameters for "
-                f"{forecast_model.value} forecasting not {type(params)}"
+                f"{forecast_model.value} forecasting not {type(data_params)}"
             )
 
         trip_end_name = f"{params.assignment_model.get_name()} Trip End"
         tripend_data = tem_forecast.read_tripends(
             params.base_year,
             params.future_years,
-            params.tripend_path,
-            nd.get_zoning_system(params.tem_input_zoning),
+            data_params.tripend_path,
+            nd.get_zoning_system(data_params.tem_input_zoning),
         )
 
     else:
@@ -238,19 +235,16 @@ def tem_forecasting(
     if params.output_trip_end_data:
         tripend_data.save(params.export_path / f"{trip_end_name} Data")
 
-    tripend_data = model_mode_subset(tripend_data, params.assignment_model)
-    tripend_growth = ntem_forecast.tempro_growth(
-        tripend_data, params.assignment_model.get_zoning_system(), params.base_year
-    )
-    if params.output_trip_end_growth:
-        tripend_growth.save(params.export_path / f"{trip_end_name} Growth Factors")
+    return tripend_data, trip_end_name
 
-    ntem_inputs = ntem_forecast.NTEMImportMatrices(
-        params.matrix_import_path, params.base_year, params.assignment_model
-    )
-    pa_output_folder = params.export_path / "Matrices" / "PA"
-    ntem_forecast.grow_all_matrices(ntem_inputs, tripend_growth, pa_output_folder)
 
+def _matrix_conversions(
+    ntem_inputs: ntem_forecast.NTEMImportMatrices,
+    pa_output_folder: pathlib.Path,
+    tripend_data: tempro_trip_ends.TEMProTripEnds,
+    params: forecast_cnfg.ForecastParameters,
+) -> None:
+    """Convert PA matrices to OD and to compiled highway and rail."""
     try:
         ntem_forecast_checks.pa_matrix_comparison(
             ntem_inputs,
@@ -299,6 +293,66 @@ def tem_forecasting(
         )
     except (FileNotFoundError, IndexError):
         LOG.error("Error performing OD matrix comparison", exc_info=True)
+
+
+def tem_forecasting(
+    params: Union[forecast_cnfg.TEMForecastParameters, forecast_cnfg.NTEMForecastParameters],
+    forecast_model: forecast_cnfg.ForecastModel,
+) -> None:
+    """Run the NTEM or trip end forecasting.
+
+    Parameters
+    ----------
+    params : NTEMForecastParameters | TEMForecastParameters
+        Parameters for running NTEM forecasting.
+    forecast_model : ForecastModel
+        Forecasting model being ran.
+
+    See Also
+    --------
+    normits_demand.models.ntem_forecast
+    """
+    tripend_data, trip_end_name = _get_trip_end_data(
+        forecast_model, params.data_parameters, params
+    )
+
+    tripend_data = model_mode_subset(tripend_data, params.assignment_model)
+    tripend_growth = ntem_forecast.tempro_growth(
+        tripend_data, params.assignment_model.get_zoning_system(), params.base_year
+    )
+    if params.output_trip_end_growth:
+        tripend_growth.save(params.export_path / f"{trip_end_name} Growth Factors")
+
+    ntem_inputs = ntem_forecast.NTEMImportMatrices(
+        params.matrix_import_path, params.base_year, params.assignment_model
+    )
+    pa_output_folder = params.export_path / "Matrices" / "PA"
+    ntem_forecast.grow_all_matrices(ntem_inputs, tripend_growth, pa_output_folder)
+
+    _matrix_conversions(
+        ntem_inputs=ntem_inputs,
+        pa_output_folder=pa_output_folder,
+        tripend_data=tripend_data,
+        params=params,
+    )
+
+
+def dlog_forecasting(params: forecast_cnfg.DLOGForecastParameters) -> None:
+    tripend_data, trip_end_name = _get_trip_end_data(
+        forecast_cnfg.ForecastModel.DLOG, params.background_trip_end_parameters, params
+    )
+
+    raise NotImplementedError(
+        "TODO implement background growth using trip ends "
+        "and DLOG growth with basic GM then combine matrices"
+    )
+
+    _matrix_conversions(
+        ntem_inputs=ntem_inputs,
+        pa_output_folder=pa_output_folder,
+        tripend_data=tripend_data,
+        params=params,
+    )
 
 
 ##### MAIN #####

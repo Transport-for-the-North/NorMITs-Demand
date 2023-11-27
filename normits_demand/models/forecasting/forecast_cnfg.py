@@ -1,7 +1,7 @@
 """Config files and options for `run_forecast`."""
 import enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import pydantic
 
@@ -23,6 +23,7 @@ class ForecastModel(nd_enum.IsValidEnumWithAutoNameLower):
     TRIP_END = enum.auto()
     EFS = enum.auto()
     EDGE = enum.auto()
+    DLOG = enum.auto()
 
 
 class ForecastParameters(config_base.BaseConfig):
@@ -99,14 +100,12 @@ class ForecastParameters(config_base.BaseConfig):
         return path
 
 
-class TEMForecastParameters(ForecastParameters):
-    """Class for storing parameters for trip end forecasting."""
+class TEMDataParameters(pydantic.BaseModel):  # pylint: disable=no-member
+    """Trip end data parameters for forecasting."""
 
     base_tripend_path: Path
     tem_iteration: str
     tem_scenario: nd.Scenario
-    forecasting_model_version: str
-    forecasting_model_name: str
     tem_input_zoning: str = "msoa"
 
     @staticmethod
@@ -139,6 +138,14 @@ class TEMForecastParameters(ForecastParameters):
             self.base_tripend_path, self.tem_iteration, self.tem_scenario
         )
 
+
+class TEMForecastParameters(ForecastParameters):
+    """Class for storing parameters for trip end forecasting."""
+
+    data_parameters: TEMDataParameters
+    forecasting_model_version: str
+    forecasting_model_name: str
+
     @property
     def export_path(self) -> Path:
         """Read-only path to export folder.
@@ -151,7 +158,7 @@ class TEMForecastParameters(ForecastParameters):
         )
 
 
-class NTEMDataParameters(pydantic.BaseModel):
+class NTEMDataParameters(pydantic.BaseModel):  # pylint: disable=no-member
     """Parameters for defining what NTEM data to use."""
 
     data_path: Path
@@ -181,7 +188,7 @@ class NTEMDataParameters(pydantic.BaseModel):
 class NTEMForecastParameters(ForecastParameters):
     """Class for storing parameters for NTEM forecasting."""
 
-    ntem_parameters: NTEMDataParameters
+    data_parameters: NTEMDataParameters
 
     @property
     def export_path(self) -> Path:
@@ -190,14 +197,51 @@ class NTEMForecastParameters(ForecastParameters):
         This is built from the `export_path_fmt` with variables filled
         in from the class attributes.
         """
-        if self.ntem_parameters.version <= 7.2:
+        if self.data_parameters.version <= 7.2:
             scenario = "Core"
-        elif self.ntem_parameters.scenario is not None:
-            scenario = self.ntem_parameters.scenario
+        elif self.data_parameters.scenario is not None:
+            scenario = self.data_parameters.scenario
         else:
             raise ValueError("expected scenario for NTEM version > 7.2")
 
-        return self._build_export_path("NTEM", str(self.ntem_parameters.version), scenario)
+        return self._build_export_path("NTEM", str(self.data_parameters.version), scenario)
+
+
+class DLOGForecastParameters(ForecastParameters):
+    """Parameters for DLOG forecasting."""
+
+    background_trip_end_parameters: Union[TEMDataParameters, NTEMDataParameters]
+    forecasting_model_version: str
+    forecasting_model_name: str
+    dlog_trip_end_folder: pydantic.DirectoryPath  # pylint: disable=no-member
+
+    @property
+    def scenario_name(self) -> str:
+        """Name of background growth scenario."""
+        if isinstance(self.background_trip_end_parameters, TEMDataParameters):
+            scenario = self.background_trip_end_parameters.tem_scenario.value
+        elif isinstance(self.background_trip_end_parameters, NTEMDataParameters):
+            scenario = self.background_trip_end_parameters.scenario
+            if scenario is None:
+                scenario = "NTEM"
+        else:
+            raise TypeError(
+                f"unexpected type ({type(self.background_trip_end_parameters)}) "
+                "for background_trip_end_parameters"
+            )
+
+        return scenario + "-DLOG"
+
+    @property
+    def export_path(self) -> Path:
+        """Read-only path to export folder.
+
+        This is built from the `export_path_fmt` with variables filled
+        in from the class attributes.
+        """
+        return self._build_export_path(
+            self.forecasting_model_name, self.forecasting_model_version, self.scenario_name
+        )
 
 
 class EDGEParameters(config_base.BaseConfig):
