@@ -71,18 +71,23 @@ class ForecastParameters(config_base.BaseConfig):
     @property
     def pa_to_od_factors(self) -> dict[str, Path]:
         """Dict[str, Path]
-        Paths to the PA to OD tour proportions, has
-        keys `post_me_tours` and `post_me_fh_th_factors`.
+        Paths to the PA to OD tour proportions, has keys
+        `post_me_tours`, `post_me_fh_th_factors`, `pre_me_tours`
+        and `pre_me_fh_th_factors`.
         """
         # TODO(MB) Add flexibility to how it finds the tour proportions
-        tour_prop_home = Path(
-            self.import_path
-            / self.assignment_model.get_name().lower()
-            / "post_me_tour_proportions"
+        tour_prop_home = (
+            self.import_path / self.assignment_model.name.lower() / "post_me_tour_proportions"
+        )
+
+        pre_me_tour_home = (
+            self.import_path / self.assignment_model.name.lower() / "pre_me_tour_proportions"
         )
         paths = {
             "post_me_tours": tour_prop_home,
             "post_me_fh_th_factors": tour_prop_home / "fh_th_factors",
+            "pre_me_tours": pre_me_tour_home,
+            "pre_me_fh_th_factors": pre_me_tour_home / "fh_th_factors",
         }
         for nm, p in paths.items():
             if not p.is_dir():

@@ -59,6 +59,8 @@ def read_tripends(
     """
     LOG.info("Reading trip ends from %s", tripend_path)
 
+    # TODO Check if trip ends are positive
+
     input_segmentations = {
         "hb_attractions": "notem_hb_output",
         "hb_productions": "notem_hb_output",

@@ -730,6 +730,7 @@ def convert_to_od(
     purposes: Dict[str, List[int]],
     pa_to_od_factors: Dict[str, Path],
     export_path: Path,
+    post_me_tours: bool = True
 ) -> None:
     """Converts PA matrices from folder to OD.
 
@@ -752,18 +753,28 @@ def convert_to_od(
         Paths to the folders containing the PA to OD tour
         proportions, should have keys "post_me_fh_th_factors"
         and "post_me_tours".
+    post_me_tours : bool, default True
+        If True, uses "post_me_fh_th_factors" and "post_me_tours",
+        otherwise "pre_me_fh_th_factors" and "pre_me_tours".
 
     See Also
     --------
     pa_to_od.build_od_from_fh_th_factors : for home-based conversion
     matrix_processing.nhb_tp_split_via_factors : for non-home-based conversion
     """
+    if post_me_tours:
+        tour_props_dir = pa_to_od_factors["post_me_tours"]
+        fh_th_factors_dir = pa_to_od_factors["post_me_fh_th_factors"]
+    else:
+        tour_props_dir = pa_to_od_factors["pre_me_tours"]
+        fh_th_factors_dir = pa_to_od_factors["pre_me_fh_th_factors"]
+
     LOG.info("Converting PA to OD")
     od_folder.mkdir(exist_ok=True, parents=True)
     pa_to_od.build_od_from_fh_th_factors_old(
         pa_import=pa_folder,
         od_export=od_folder,
-        fh_th_factors_dir=pa_to_od_factors["post_me_fh_th_factors"],
+        fh_th_factors_dir=fh_th_factors_dir,
         base_year=base_year,
         years_needed=future_years,
         seg_level="tms",
@@ -774,7 +785,7 @@ def convert_to_od(
         export_dir=od_folder,
         import_matrix_format="pa",
         export_matrix_format="od",
-        tour_proportions_dir=pa_to_od_factors["post_me_tours"],
+        tour_proportions_dir=tour_props_dir,
         future_years_needed=future_years,
         p_needed=purposes["nhb"],
         m_needed=modes,

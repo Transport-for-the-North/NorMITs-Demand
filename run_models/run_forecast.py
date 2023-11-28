@@ -267,6 +267,7 @@ def _matrix_conversions(
         {"hb": params.hb_purposes_needed, "nhb": params.nhb_purposes_needed},
         params.pa_to_od_factors,
         params.export_path,
+        post_me_tours=False,
     )
 
     # Compile to output formats
