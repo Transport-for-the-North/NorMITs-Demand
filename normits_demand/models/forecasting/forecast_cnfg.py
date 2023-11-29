@@ -216,9 +216,12 @@ class DLOGForecastParameters(ForecastParameters):
     """Parameters for DLOG forecasting."""
 
     background_trip_end_parameters: Union[TEMDataParameters, NTEMDataParameters]
+    dlog_trip_end_parameters: TEMDataParameters
     forecasting_model_version: str
     forecasting_model_name: str
-    dlog_trip_end_folder: pydantic.DirectoryPath  # pylint: disable=no-member
+    # TODO(MB) replace this with a folder containing cost matrices by purpose and mode
+    cost_matrix_path: pydantic.FilePath  # pylint: disable=no-member
+    cost_distribution_folder: pydantic.DirectoryPath  # pylint: disable=no-member
 
     @property
     def scenario_name(self) -> str:
