@@ -459,6 +459,8 @@ def grow_matrix(
     segment_name: str,
     attractions: nd_core.DVector,
     productions: nd_core.DVector,
+    # TODO(MB) Switch default value to False and add parameter in calling funciton
+    verbose_output: bool = True,
 ) -> pd.DataFrame:
     """Grow `matrix` based on given growth factors and save to `output_path`.
 
@@ -482,6 +484,9 @@ def grow_matrix(
     productions : nd_core.DVector
         DVector for the productions growth factors,
         should be the same zone system as matrix.
+    verbose_output : bool, default True
+        If True writes out intemediary files for debugging
+        to a new folder "{output_path}-verbose".
 
     Returns
     -------
@@ -489,27 +494,39 @@ def grow_matrix(
         Trip `matrix` grown to match target `attractions`
         and `productions`.
     """
+    verbose_folder = output_path.parent / f"{output_path.stem}-verbose"
+    if verbose_output:
+        verbose_folder.mkdir(exist_ok=True)
+
     # Calculate internal-internal target trip ends by
     # applying growth to matrix trip ends
     internals = attractions.zoning_system.internal_zones
-    int_targets = {}
-    growth = {}
+    int_targets: dict[str, pd.DataFrame] = {}
+    growth: dict[str, pd.Series] = {}
     dvectors = (("row_targets", productions), ("col_targets", attractions))
     for nm, dvec in dvectors:
         mat_te = matrix.loc[internals, internals].sum(axis=1 if nm == "row_targets" else 0)
         mat_te.name = "base_trips"
         mat_te.index.name = "model_zone_id"
+
         growth[nm] = pd.Series(
             dvec.get_segment_data(segment_name),
             index=dvec.zoning_system.unique_zones,
             name="growth",
         )
         growth[nm].index.name = "model_zone_id"
+
         int_targets[nm] = pd.concat([growth[nm], mat_te], axis=1)
         int_targets[nm].loc[:, "trips"] = (
             int_targets[nm]["growth"] * int_targets[nm]["base_trips"]
         )
         int_targets[nm] = int_targets[nm].loc[internals, "trips"]
+
+        if verbose_output:
+            mat_te.to_csv(verbose_folder / f"{nm}_base_matrix_trip_ends.csv")
+            growth[nm].to_csv(verbose_folder / f"{nm}_growth_factors.csv")
+            int_targets[nm].to_csv(verbose_folder / f"{nm}_internal_target_trip_ends.csv")
+            LOG.debug("Verbose trip ends and targets saved to %s", verbose_folder)
 
     # Distribute internal demand with 2D furnessing, targets
     # converted to DataFrames for this function
@@ -525,6 +542,12 @@ def grow_matrix(
         iters,
         rms,
     )
+
+    if verbose_output:
+        for nm, target in int_targets.items():
+            target.to_csv(f"{nm}_normalised_internal_target_trip_ends.csv")
+        int_future.to_csv(f"{nm}_furnessed_internal_matrix.csv")
+
     # Factor external demand to row and column targets, make sure
     # row and column targets have the same totals
     ext_future = matrix.mul(growth["col_targets"], axis="columns")
@@ -539,6 +562,11 @@ def grow_matrix(
     combined_future.rename(columns={i: int(i) for i in combined_future.columns}, inplace=True)
     combined_future.sort_index(axis=1, inplace=True)
     _check_matrix(combined_future, output_path.stem)
+
+    if verbose_output:
+        additional_growth.to_csv(verbose_folder / "additional_row_growth-external.csv")
+        ext_future.to_csv(verbose_folder / "grown_ie_ee_matrix.csv")
+
     # Write future to file
     file_ops.write_df(combined_future, output_path)
     LOG.info("Written: %s", output_path)
