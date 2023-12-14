@@ -274,7 +274,7 @@ def _matrix_conversions(
             params.comparison_zone_systems,
             params.base_year,
         )
-    except (FileNotFoundError, NotImplementedError):
+    except Exception:
         LOG.error("Error performing PA matrix comparison", exc_info=True)
 
     od_folder = pa_output_folder.with_name("OD")
@@ -312,7 +312,7 @@ def _matrix_conversions(
             params.time_periods,
             params.future_years,
         )
-    except (FileNotFoundError, IndexError):
+    except Exception:
         LOG.error("Error performing OD matrix comparison", exc_info=True)
 
 

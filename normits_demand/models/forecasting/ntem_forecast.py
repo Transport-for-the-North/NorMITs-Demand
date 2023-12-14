@@ -545,8 +545,8 @@ def grow_matrix(
 
     if verbose_output:
         for nm, target in int_targets.items():
-            target.to_csv(f"{nm}_normalised_internal_target_trip_ends.csv")
-        int_future.to_csv(f"{nm}_furnessed_internal_matrix.csv")
+            target.to_csv(verbose_folder / f"{nm}_normalised_internal_target_trip_ends.csv")
+        int_future.to_csv(verbose_folder / f"{nm}_furnessed_internal_matrix.csv")
 
     # Factor external demand to row and column targets, make sure
     # row and column targets have the same totals
