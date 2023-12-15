@@ -494,7 +494,10 @@ def grow_matrix(
         Trip `matrix` grown to match target `attractions`
         and `productions`.
     """
-    verbose_folder = output_path.parent / f"{output_path.stem}-verbose"
+    verbose_folder = (
+        output_path.parent
+        / f"{output_path.name.removesuffix(''.join(output_path.suffixes))}-V"
+    )
     if verbose_output:
         verbose_folder.mkdir(exist_ok=True)
 
@@ -523,9 +526,9 @@ def grow_matrix(
         int_targets[nm] = int_targets[nm].loc[internals, "trips"]
 
         if verbose_output:
-            mat_te.to_csv(verbose_folder / f"{nm}_base_matrix_trip_ends.csv")
+            mat_te.to_csv(verbose_folder / f"{nm}_base_mat_trip_ends.csv")
             growth[nm].to_csv(verbose_folder / f"{nm}_growth_factors.csv")
-            int_targets[nm].to_csv(verbose_folder / f"{nm}_internal_target_trip_ends.csv")
+            int_targets[nm].to_csv(verbose_folder / f"{nm}_ii_trip_ends.csv")
             LOG.debug("Verbose trip ends and targets saved to %s", verbose_folder)
 
     # Distribute internal demand with 2D furnessing, targets
@@ -545,8 +548,8 @@ def grow_matrix(
 
     if verbose_output:
         for nm, target in int_targets.items():
-            target.to_csv(verbose_folder / f"{nm}_normalised_internal_target_trip_ends.csv")
-        int_future.to_csv(verbose_folder / f"{nm}_furnessed_internal_matrix.csv")
+            target.to_csv(verbose_folder / f"{nm}_norm_ii_trip_ends.csv")
+        int_future.to_csv(verbose_folder / f"{nm}_furn_ii_mat.csv")
 
     # Factor external demand to row and column targets, make sure
     # row and column targets have the same totals
@@ -758,7 +761,7 @@ def convert_to_od(
     purposes: Dict[str, List[int]],
     pa_to_od_factors: Dict[str, Path],
     export_path: Path,
-    post_me_tours: bool = True
+    post_me_tours: bool = True,
 ) -> None:
     """Converts PA matrices from folder to OD.
 
