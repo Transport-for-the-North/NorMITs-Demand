@@ -5,6 +5,7 @@ from __future__ import annotations
 
 # Standard imports
 import argparse
+import collections
 import dataclasses
 import pathlib
 import re
@@ -14,6 +15,8 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
+
+from normits_demand.distribution import furness
 
 # Third party imports
 
@@ -215,6 +218,7 @@ def _get_trip_end_data(
     data_params: Union[forecast_cnfg.TEMDataParameters, forecast_cnfg.NTEMDataParameters],
     params: forecast_cnfg.ForecastParameters,
     name_suffix: str = "",
+    exclude_base_year: bool = False,
 ) -> tuple[tempro_trip_ends.TEMProTripEnds, str]:
     """Load the forecast trip end data."""
     if forecast_model == forecast_cnfg.ForecastModel.NTEM:
@@ -225,6 +229,11 @@ def _get_trip_end_data(
             )
 
         trip_end_name = _normal_spaces(f"TEMPro {name_suffix}")
+        if exclude_base_year:
+            years = params.future_years
+        else:
+            years = [params.base_year, *params.future_years]
+
         tripend_data = ntem_forecast.get_tempro_data(
             data_params.data_path,
             [params.base_year, *params.future_years],
@@ -240,10 +249,10 @@ def _get_trip_end_data(
             )
 
         trip_end_name = _normal_spaces(
-            f"{params.assignment_model.get_name()} {name_suffix} Trip End"
+            f"{params.assignment_model.get_name()} {name_suffix} TE"
         )
         tripend_data = tem_forecast.read_tripends(
-            params.base_year,
+            None if exclude_base_year else params.base_year,
             params.future_years,
             data_params.tripend_path,
             nd.get_zoning_system(data_params.tem_input_zoning),
@@ -378,8 +387,8 @@ def _development_gravity_distribute(
     export_folder: pathlib.Path,
     trip_ends: tempro_trip_ends.TEMProTripEnds,
     matrix_segmentations: dict[str, nd.SegmentationLevel],
-    cost_matrices: dict[str, pd.DataFrame],
-    target_cost_distributions: dict[str, pd.DataFrame],
+    cost_matrices: dict[str, dict[str, pd.DataFrame]],
+    target_cost_distributions: dict[str, dict[str, pd.DataFrame]],
 ) -> None:
     """Calibrate gravity model to target distribution and output development matrices."""
     LOG.info(
@@ -401,14 +410,21 @@ def _development_gravity_distribute(
             i: getattr(trip_ends, f"{trip_origin}_{i}") for i in ("productions", "attractions")
         }
 
+        calibration_matrix = list(cost_matrices[trip_origin].values())[0]
+
+        calibration_matrix = pd.DataFrame(np.ones_like(calibration_matrix), index=calibration_matrix.index, columns=calibration_matrix.columns)
+
         distributor.distribute(
-            **{k: v.to_df() for k, v in dvecs.items()},
+            **{k: v[2050].to_df() for k, v in dvecs.items()},
             running_segmentation=matrix_segmentations[trip_origin],
             # Use the same costs and TLD for each segment
-            cost_matrices={1: cost_matrices},
-            calibration_matrix=np.ones_like(list(cost_matrices.values())[0]),
-            target_cost_distributions={1: target_cost_distributions},
+            cost_matrices=cost_matrices[trip_origin].copy(),
+            calibration_matrix=calibration_matrix,
+            target_cost_distributions={1: {i: target_cost_distributions[trip_origin][i].copy() for i in matrix_segmentations[trip_origin].segment_names}},
             calibration_naming={},
+            cost_function=nd.BuiltInCostFunction.LOG_NORMAL.get_cost_function(),
+            furness_max_iters=5000,
+            furness_tol=1e-3,
         )
 
 
@@ -469,13 +485,13 @@ def _load_cost_distributions(
 
         for seg_params in seg_level:
             path = folder / seg_level.generate_file_name_from_template(
-                f"{trip_origin}_tlb_{{segment_params}}.csv", seg_params
+                f"cost_distribution_{{segment_params}}.csv", seg_params
             )
 
             data = pd.read_csv(
-                path, usecols=["lower", "upper", "ave_km", "trips", "band_share"], dtype=float
+                path, usecols=["min (km)", "max (km)", "mean (km)", "trips", "share"], dtype=float
             )
-
+            data.rename(columns={"min (km)": "min", "max (km)": "max", "mean (km)": "ave_km", "share":"band_share"}, inplace = True)
             distributions[trip_origin][seg_level.get_segment_name(seg_params)] = data
 
     return distributions
@@ -484,10 +500,12 @@ def _load_cost_distributions(
 def _combine_development_matrices(
     background_folder: pathlib.Path,
     developments_folder: pathlib.Path,
+    trip_ends: tempro_trip_ends.TEMProTripEnds,
     years: list[int],
     matrix_segmentation: dict[str, nd.SegmentationLevel],
     zoning: nd.ZoningSystem,
     export_folder: pathlib.Path,
+    development_zones: list[int],
 ) -> None:
     """Add development matrices onto background and output."""
     LOG.info(
@@ -506,8 +524,23 @@ def _combine_development_matrices(
 
                 background = _read_matrix(background_folder / filename, zoning)
                 developments = _read_matrix(developments_folder / filename, zoning)
+                if trip_origin =="hb":
+                    row_totals = trip_ends.hb_productions[year].get_segment_data(segment_dict=seg_params)
+                    col_totals = trip_ends.hb_attractions[year].get_segment_data(segment_dict=seg_params)
+                elif trip_origin =="nhb":
+                    row_totals = trip_ends.nhb_productions[year].get_segment_data(segment_dict=seg_params)
+                    col_totals = trip_ends.nhb_attractions[year].get_segment_data(segment_dict=seg_params)
+                else:
+                    raise ValueError(f"Trip origin is neither HB or NHB it is {trip_origin}")
 
+
+                zero_mask = developments.index[developments.index.isin(development_zones)]
+                developments.loc[zero_mask, zero_mask] = 0
                 combined = background + developments
+
+                # Furness to match dev matrix totals as this matrix should include all trip ends
+                furnessed = furness.doubly_constrained_furness(combined.values, row_totals, col_totals)
+                combined = pd.DataFrame(furnessed, index=combined.index, columns=combined.columns)
 
                 out_path = export_folder / filename
                 combined.to_csv(out_path)
@@ -517,25 +550,30 @@ def _combine_development_matrices(
 def dlog_forecasting(params: forecast_cnfg.DLOGForecastParameters) -> None:
     # TODO Test and fix any issues with dlog forecasting
     warnings.warn("dlog forecasting function is WIP and needs testing")
-    if isinstance(params.background_trip_end_parameters, forecast_cnfg.TEMDataParameters):
+
+    matrix_segmentation = {k: nd.get_segmentation_level(v) for k, v in _MATRIX_SEGMENTATION.items()}
+
+    if isinstance(params.dlog_trip_end_parameters, forecast_cnfg.TEMDataParameters):
         background_model = forecast_cnfg.ForecastModel.TRIP_END
-    elif isinstance(params.background_trip_end_parameters, forecast_cnfg.NTEMDataParameters):
+    elif isinstance(params.dlog_trip_end_parameters, forecast_cnfg.NTEMDataParameters):
         background_model = forecast_cnfg.ForecastModel.NTEM
     else:
         raise TypeError(
             "unexpected background_trip_end_parameters type: "
-            f"{type(params.background_trip_end_parameters)}"
+            f"{type(params.dlog_trip_end_parameters)}"
         )
 
-    # Create background growth matrices
-    background_trip_ends, background_name = _get_trip_end_data(
+    trip_ends, background_name = _get_trip_end_data(
         background_model,
-        params.background_trip_end_parameters,
+        params.dlog_trip_end_parameters,
         params,
-        name_suffix="Background",
     )
+
+    dev_zones_mask = np.isin(list(trip_ends.hb_productions.values())[0].zoning_system.unique_zones, params.development_zones)
+    background_trip_ends = trip_ends.segment_apply(lambda x: np.where(dev_zones_mask, 0, x))
+
     background_output_folder = (
-        params.export_path / "Matrices" / "PA" / f"Background {background_name} Growth"
+        params.export_path / "Matrices" / "PA" / f"BG {background_name} Growth"
     )
     base_matrix_paths = _trip_end_grow_matrices(
         params,
@@ -544,21 +582,13 @@ def dlog_forecasting(params: forecast_cnfg.DLOGForecastParameters) -> None:
         background_output_folder,
     )
 
-    # Developments growth matrix
-    dlog_trip_ends, _ = _get_trip_end_data(
-        forecast_cnfg.ForecastModel.NTEM,
-        params.dlog_trip_end_parameters,
-        params,
-        name_suffix="Developments",
-    )
-
     cost_matrices = _load_cost_matrices(
-        _MATRIX_SEGMENTATION,
+        matrix_segmentation,
         params.assignment_model.get_zoning_system(),
         params.cost_matrix_path,
     )
     cost_distributions = _load_cost_distributions(
-        _MATRIX_SEGMENTATION, params.cost_distribution_folder
+        matrix_segmentation, params.cost_distribution_folder
     )
 
     pa_matrix_folder = params.export_path / r"Matrices\PA"
@@ -569,8 +599,8 @@ def dlog_forecasting(params: forecast_cnfg.DLOGForecastParameters) -> None:
             params=params,
             year=year,
             export_folder=dev_matrix_folder,
-            trip_ends=dlog_trip_ends,
-            matrix_segmentations=_MATRIX_SEGMENTATION,
+            trip_ends=trip_ends,
+            matrix_segmentations=matrix_segmentation,
             cost_matrices=cost_matrices,
             target_cost_distributions=cost_distributions,
         )
@@ -579,9 +609,11 @@ def dlog_forecasting(params: forecast_cnfg.DLOGForecastParameters) -> None:
         background_folder=background_output_folder,
         developments_folder=dev_matrix_folder,
         years=params.future_years,
-        matrix_segmentation=_MATRIX_SEGMENTATION,
+        matrix_segmentation=matrix_segmentation,
         zoning=params.assignment_model.get_zoning_system(),
         export_folder=pa_matrix_folder,
+        development_zones=params.development_zones,
+        trip_ends=trip_ends
     )
 
     _matrix_conversions(

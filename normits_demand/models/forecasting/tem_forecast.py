@@ -7,6 +7,7 @@
 # Standard imports
 import os
 from pathlib import Path
+from typing import Optional
 
 # Third party imports
 
@@ -31,7 +32,7 @@ def _overwrite_notem_segment_name(filename: str, segmentation: nd.SegmentationLe
 
 
 def read_tripends(
-    base_year: int,
+    base_year: Optional[int],
     forecast_years: list[int],
     tripend_path: Path,
     zoning_system: nd.ZoningSystem,
@@ -40,7 +41,7 @@ def read_tripends(
 
     Parameters
     ----------
-    base_year : int
+    base_year : int | None
         Base year for the forecast.
     forecast_years : list[int]
         List of forecast years.
@@ -80,6 +81,9 @@ def read_tripends(
             years = {}
             key = f"{i}_{j}"
             for year in [base_year] + forecast_years:
+                if year is None:
+                    continue
+
                 segmentation = nd.get_segmentation_level(input_segmentations[f"{i}_{j}"])
                 filename = nd.DVector.build_filename_from_attributes(
                     segmentation, zoning_system, year

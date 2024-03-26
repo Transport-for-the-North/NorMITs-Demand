@@ -36,8 +36,8 @@ from normits_demand.utils import file_ops
 
 # GLOBAL VARIABLES
 # TODO(BT): Make these command line arguments
-MODE = nd_core.Mode.BUS
-ZONING_NAME = "noham"
+MODE = nd_core.Mode.CAR
+ZONING_NAME = "miham_dev"
 YEAR = 2018
 IMPORT_DRIVE = "I:/"
 # EXPORT_HOME = r"E:\temp\tour props"

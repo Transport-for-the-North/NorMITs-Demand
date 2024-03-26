@@ -58,7 +58,7 @@ class NTEMImportMatrices:
     def __init__(self, matrix_folder: Path, year: int, model: nd.AssignmentModel) -> None:
         self.year = int(year)
         self.model = model
-        if self.model not in (nd.AssignmentModel.NOHAM, nd.AssignmentModel.MIHAM):
+        if self.model not in (nd.AssignmentModel.NOHAM, nd.AssignmentModel.MIHAM, nd.AssignmentModel.MIHAM_DEV):
             raise NotImplementedError(
                 f"NTEM forecasting not yet implemented for {model.get_name()}"
             )
@@ -501,6 +501,13 @@ def grow_matrix(
     if verbose_output:
         verbose_folder.mkdir(exist_ok=True)
 
+    unique_zones = attractions.zoning_system.unique_zones
+    matrix = matrix.sort_index(axis=0).sort_index(axis=1)
+    if not matrix.index.equals(matrix.columns):
+        raise ValueError("Matrix columns don't equal indices")
+    if not np.array_equal(matrix.index.values, np.sort(unique_zones)):
+        raise ValueError(f"Matrix index don't match attraction zones {len(matrix.index.values)} vs {len(unique_zones)}")
+
     # Calculate internal-internal target trip ends by
     # applying growth to matrix trip ends
     internals = attractions.zoning_system.internal_zones
@@ -573,14 +580,17 @@ def grow_matrix(
     # Write future to file
     file_ops.write_df(combined_future, output_path)
     LOG.info("Written: %s", output_path)
-    _pa_growth_comparison(
-        {"base": matrix, "forecast": combined_future},
-        {"attractions": growth["col_targets"], "productions": growth["row_targets"]},
-        internals,
-        output_path.with_name(
-            file_ops.remove_suffixes(output_path).stem + "-growth_comparison.xlsx"
-        ),
-    )
+    try:
+        _pa_growth_comparison(
+            {"base": matrix, "forecast": combined_future},
+            {"attractions": growth["col_targets"], "productions": growth["row_targets"]},
+            internals,
+            output_path.with_name(
+                file_ops.remove_suffixes(output_path).stem + "-growth_comparison.xlsx"
+            ),
+        )
+    except Exception:
+        LOG.error("PA growth comparison is not happy", exc_info=True)
     return combined_future
 
 

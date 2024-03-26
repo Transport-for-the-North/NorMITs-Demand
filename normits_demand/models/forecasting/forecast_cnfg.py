@@ -159,7 +159,7 @@ class TEMForecastParameters(ForecastParameters):
         in from the class attributes.
         """
         return self._build_export_path(
-            self.forecasting_model_name, self.forecasting_model_version, self.tem_scenario.name
+            self.forecasting_model_name, self.forecasting_model_version, self.data_parameters.tem_scenario.name
         )
 
 
@@ -215,8 +215,8 @@ class NTEMForecastParameters(ForecastParameters):
 class DLOGForecastParameters(ForecastParameters):
     """Parameters for DLOG forecasting."""
 
-    background_trip_end_parameters: Union[TEMDataParameters, NTEMDataParameters]
     dlog_trip_end_parameters: TEMDataParameters
+    development_zones: list[int]
     forecasting_model_version: str
     forecasting_model_name: str
     # TODO(MB) replace this with a folder containing cost matrices by purpose and mode
@@ -226,15 +226,15 @@ class DLOGForecastParameters(ForecastParameters):
     @property
     def scenario_name(self) -> str:
         """Name of background growth scenario."""
-        if isinstance(self.background_trip_end_parameters, TEMDataParameters):
-            scenario = self.background_trip_end_parameters.tem_scenario.value
-        elif isinstance(self.background_trip_end_parameters, NTEMDataParameters):
-            scenario = self.background_trip_end_parameters.scenario
+        if isinstance(self.dlog_trip_end_parameters, TEMDataParameters):
+            scenario = self.dlog_trip_end_parameters.tem_scenario.value
+        elif isinstance(self.dlog_trip_end_parameters, NTEMDataParameters):
+            scenario = self.dlog_trip_end_parameters.scenario
             if scenario is None:
                 scenario = "NTEM"
         else:
             raise TypeError(
-                f"unexpected type ({type(self.background_trip_end_parameters)}) "
+                f"unexpected type ({type(self.dlog_trip_end_parameters)}) "
                 "for background_trip_end_parameters"
             )
 

@@ -545,17 +545,18 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
 
     # ## CHECK ZONE NAME DTYPES ## #
     # Check the matrix index and column dtypes match
-    if matrix.columns.dtype != matrix.index.dtype:
-        raise ValueError(
-            "The datatype of the index and columns in matrix must be the same "
-            "for the zone translation to work.\n"
-            "Index Dtype: %s\n"
-            "Column Dtype: %s"
-            % (matrix.index.dtype, matrix.columns.dtype)
-        )
+    if matrix.columns.dtype.kind != matrix.index.dtype.kind:
+
+            raise ValueError(
+                "The datatype of the index and columns in matrix must be the same "
+                "for the zone translation to work.\n"
+                "Index Dtype: %s\n"
+                "Column Dtype: %s"
+                % (matrix.index.dtype, matrix.columns.dtype)
+            )
 
     # Check the matrix and translation dtypes match
-    if matrix.index.dtype != row_translation[from_zone_col].dtype:
+    if matrix.index.dtype.kind != row_translation[from_zone_col].dtype.kind:
         raise ValueError(
             "The datatype of the matrix index and columns must be the same "
             "as the translation datatype in from_zone_col for the zone "
@@ -565,7 +566,7 @@ def pandas_matrix_zone_translation(matrix: pd.DataFrame,
             % (matrix.index.dtype, row_translation[from_zone_col].dtype)
         )
 
-    if matrix.index.dtype != col_translation[from_zone_col].dtype:
+    if matrix.index.dtype.kind != col_translation[from_zone_col].dtype.kind:
         raise ValueError(
             "The datatype of the matrix index and columns must be the same "
             "as the translation datatype in from_zone_col for the zone "

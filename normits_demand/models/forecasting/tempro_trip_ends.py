@@ -485,3 +485,12 @@ class TEMProTripEnds:
                 for yr, dvec in getattr(self, attr_name).items()
             }
         return TEMProTripEnds(**new_data)
+
+    def segment_apply(self, func):
+        new_data = {}
+        for attr_name in ("hb_productions", "hb_attractions", "nhb_productions", "nhb_attractions"):
+            new_data[attr_name] = {
+                yr: dvec.segment_apply(func)
+                for yr, dvec in getattr(self, attr_name).items()
+            }
+        return TEMProTripEnds(**new_data)

@@ -237,8 +237,8 @@ def tms_tour_prop():
                 tqdm.write("Writing files out...")
                 out_file = out_seg.generate_file_name(
                     seg_params,
-                    MODEL_DESC,
-                    TRIP_ORIGIN,
+                    file_desc = MODEL_DESC,
+                    trip_origin = TRIP_ORIGIN,
                     year=year,
                 )
                 out_path = os.path.join(out_folder, out_file + ".pkl")
