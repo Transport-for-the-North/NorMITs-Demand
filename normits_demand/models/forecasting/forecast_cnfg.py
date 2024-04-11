@@ -252,7 +252,7 @@ class TicketSplitParams(caf.toolkit.BaseConfig):
     edge_flows_path: Path
     flow_cat_path: Path
     splits_path: Path
-    info: Optional[str]
+    # info: Optional[str]
     
     @pydantic.validator("splits_path")
     def _check_contents(cls, value):
@@ -301,7 +301,7 @@ class EDGEParameters(caf.toolkit.BaseConfig):
 
     # Input files
     demand_segments: Path
-    ticket_type_splits: Union[TicketSplitParams, Path]
+    ticket_type_splits: TicketSplitParams
     norms_to_edge_stns_path: Path
     cube_exe: Path
 

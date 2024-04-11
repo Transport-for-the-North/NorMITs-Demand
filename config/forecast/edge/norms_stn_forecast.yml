@@ -1,6 +1,6 @@
-iteration: 1.review
-forecast_scenario: Regional
-export_folder: E:\NorMITs Demand\Rotherham
+iteration: 1.1
+forecast_scenario: Central
+export_folder: E:\NorMITs Demand\bradford
 assignment_model: NoRMS
 
 # Input paths
@@ -18,10 +18,13 @@ ticket_type_splits:
 cube_exe: C:\Program Files\Citilabs\CubeVoyager\VOYAGER.EXE
 
 # EDGE outputs
-edge_growth_dir: I:\NorMITs Demand\import\edge_replicant\edge_inputs\output_data\Outputs\Apr 23 Reg
+edge_growth_dir: I:\NorMITs Demand\import\edge_replicant\edge_inputs\output_data\Outputs\Jan 24 Central - Growth
 
 # Forecast years dictionary
 # forecast year: EDGE growth factors file
 forecast_years:
-  2028: Out_Apr 23 Reg_2028_rate.csv.bz2
-  2043: Out_Apr 23 Reg_2043_rate.csv.bz2
+  2035: Out_Jan 24 Central - Growth_2035_rate.csv.bz2
+  2036: Out_Jan 24 Central - Growth_2036_rate.csv.bz2
+  2042: Out_Jan 24 Central - Growth_2042_rate.csv.bz2
+  2043: Out_Jan 24 Central - Growth_2043_rate.csv.bz2
+  2044: Out_Jan 24 Central - Growth_2044_rate.csv.bz2
