@@ -19,6 +19,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet import worksheet
 from openpyxl.utils import get_column_letter
 from tqdm import tqdm
+from caf.toolkit import translation
 
 # Local imports
 import normits_demand as nd
@@ -28,7 +29,7 @@ from normits_demand.models.forecasting import (
     ntem_forecast,
     tempro_trip_ends,
 )
-from normits_demand.utils import file_ops, translation
+from normits_demand.utils import file_ops
 
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
@@ -466,7 +467,7 @@ def translate_matrix(
     weighting: str = None,
     **kwargs,
 ) -> pd.DataFrame:
-    """Tranlate square matrix into new zoning system.
+    """Translate square matrix into new zoning system.
 
     Wrapper for `translation.pandas_matrix_zone_translation`.
 
@@ -500,12 +501,10 @@ def translate_matrix(
     # Translate matrix
     return translation.pandas_matrix_zone_translation(
         matrix,
+        lookup,
         f"{matrix_zoning_name}_zone_id",
         f"{new_zoning_name}_zone_id",
         f"{matrix_zoning_name}_to_{new_zoning_name}",
-        matrix_zoning.unique_zones,
-        new_zoning.unique_zones,
-        translation=lookup,
         **kwargs,
     )
 

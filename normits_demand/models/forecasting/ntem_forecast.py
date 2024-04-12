@@ -621,7 +621,7 @@ def _pa_growth_comparison(
         mat = mat.copy()
         mat.index = new_index
         mat.columns = new_index
-        matrices[nm] = mat.groupby(level=0).sum().groupby(level=0, axis=1).sum()
+        matrices[nm] = mat.groupby(level=0).sum().T.groupby(level=0).sum()
         matrix_te[nm] = pd.DataFrame(
             {
                 "Attractions": matrices[nm].sum(axis=1),
