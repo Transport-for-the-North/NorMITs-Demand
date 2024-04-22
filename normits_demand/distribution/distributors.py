@@ -802,8 +802,8 @@ class GravityDistributor(AbstractDistributor):
             running_log_path=log_path,
             cost_function=kwargs.get('cost_function'),
             target_convergence=kwargs.get('target_convergence'),
-            furness_max_iters=kwargs.get('furness_max_iters'),
-            furness_tol=kwargs.get('furness_tol'),
+            furness_max_iters=kwargs.get('furness_max_iters', 1000),
+            furness_tol=kwargs.get('furness_tol', 1e-3),
             use_perceived_factors=kwargs.get('use_perceived_factors'),
         )
 

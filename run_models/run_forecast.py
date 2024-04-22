@@ -518,18 +518,29 @@ def _combine_development_matrices(
     for year in years:
         for trip_origin, seg_level in matrix_segmentation.items():
             for seg_params in seg_level:
-                filename = seg_level.generate_file_name(
-                    seg_params, trip_origin=trip_origin, year=year, csv=True
-                )
+                LOG.info(f"{seg_params}")
+                filename_background = seg_level.generate_file_name(
+                    seg_params, file_desc="pa", trip_origin=trip_origin, year=year, csv=True
+                ) + ".bz2"
 
-                background = _read_matrix(background_folder / filename, zoning)
-                developments = _read_matrix(developments_folder / filename, zoning)
+                filename_development = seg_level.generate_file_name(
+                    seg_params, file_desc="synthetic_pa", trip_origin=trip_origin, year=year, csv=True
+                ) + ".bz2"
+
+                background = _read_matrix(background_folder / filename_background, zoning)
+                developments = _read_matrix(developments_folder / filename_development, zoning)
                 if trip_origin =="hb":
-                    row_totals = trip_ends.hb_productions[year].get_segment_data(segment_dict=seg_params)
-                    col_totals = trip_ends.hb_attractions[year].get_segment_data(segment_dict=seg_params)
+                    prod_seg_name = trip_ends.hb_productions[year].segmentation.get_segment_name(seg_params)
+                    attr_seg_name = trip_ends.hb_attractions[year].segmentation.get_segment_name(seg_params)
+
+                    row_totals = trip_ends.hb_productions[year].get_segment_data(segment_name=prod_seg_name)
+                    col_totals = trip_ends.hb_attractions[year].get_segment_data(segment_name=attr_seg_name)
                 elif trip_origin =="nhb":
-                    row_totals = trip_ends.nhb_productions[year].get_segment_data(segment_dict=seg_params)
-                    col_totals = trip_ends.nhb_attractions[year].get_segment_data(segment_dict=seg_params)
+                    prod_seg_name = trip_ends.nhb_productions[year].segmentation.get_segment_name(seg_params)
+                    attr_seg_name = trip_ends.nhb_attractions[year].segmentation.get_segment_name(seg_params)
+
+                    row_totals = trip_ends.nhb_productions[year].get_segment_data(segment_name=prod_seg_name)
+                    col_totals = trip_ends.nhb_attractions[year].get_segment_data(segment_name=attr_seg_name)
                 else:
                     raise ValueError(f"Trip origin is neither HB or NHB it is {trip_origin}")
 
@@ -539,10 +550,17 @@ def _combine_development_matrices(
                 combined = background + developments
 
                 # Furness to match dev matrix totals as this matrix should include all trip ends
-                furnessed = furness.doubly_constrained_furness(combined.values, row_totals, col_totals)
-                combined = pd.DataFrame(furnessed, index=combined.index, columns=combined.columns)
+                furnessed = furness.doubly_constrained_furness(
+                    combined.values,
+                    row_totals,
+                    col_totals,
+                    1e-3,
+                    5000,
+                )
+                LOG.info(f"post combine Furness RMSE: {furnessed[2]}, iterations: {furnessed[1]}")
+                combined = pd.DataFrame(furnessed[0], index=combined.index, columns=combined.columns)
 
-                out_path = export_folder / filename
+                out_path = export_folder / filename_background
                 combined.to_csv(out_path)
                 LOG.info("Written: '%s'", out_path)
 
@@ -582,6 +600,8 @@ def dlog_forecasting(params: forecast_cnfg.DLOGForecastParameters) -> None:
         background_output_folder,
     )
 
+
+
     cost_matrices = _load_cost_matrices(
         matrix_segmentation,
         params.assignment_model.get_zoning_system(),
@@ -593,6 +613,9 @@ def dlog_forecasting(params: forecast_cnfg.DLOGForecastParameters) -> None:
 
     pa_matrix_folder = params.export_path / r"Matrices\PA"
     dev_matrix_folder = params.export_path / "Development Forecast Matrices"
+
+    #gravity model adds "matrices" sub-dir to path
+    dev_matrix_results_folder = dev_matrix_folder / "Matrices"
 
     for year in params.future_years:
         _development_gravity_distribute(
@@ -607,7 +630,7 @@ def dlog_forecasting(params: forecast_cnfg.DLOGForecastParameters) -> None:
 
     _combine_development_matrices(
         background_folder=background_output_folder,
-        developments_folder=dev_matrix_folder,
+        developments_folder=dev_matrix_results_folder,
         years=params.future_years,
         matrix_segmentation=matrix_segmentation,
         zoning=params.assignment_model.get_zoning_system(),
