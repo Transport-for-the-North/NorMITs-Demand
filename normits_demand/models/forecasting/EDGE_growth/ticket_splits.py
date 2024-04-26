@@ -181,6 +181,10 @@ def produce_ticketype_splitting_matrices(
     edge_flows = edge_flows.merge(
         ticket_split_proportions, how="left", on=["TAG_Flow"]
     )
+    if edge_flows.isna().any().any():
+        raise IndexError("Mismatch between TAG_Flow columns in ticket_splits and edge_flows. "
+                         "Check this column in the file TicketTypeSplits.csv in splits_path "
+                         "folder for phantom characters, e.g. spaces.")
     # get list of purposes
     purposes = edge_flows["Purpose"].dropna().unique()
     # create matrices dictionary
