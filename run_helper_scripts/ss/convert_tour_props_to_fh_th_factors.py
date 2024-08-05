@@ -36,28 +36,24 @@ from normits_demand.utils import file_ops
 
 # ## GLOBALS ## #
 # Running variables
-MODEL_NAME = 'tfgm_pt'
+MODEL_NAME = 'noham'
 NOTEM_ITER = '9.8'
-MODE = nd.Mode.BUS
+MODE = nd.Mode.CAR
 
 TOUR_PROP_DIR = (
-    f'I:/NorMITs Demand/import/modal/{MODE.get_name()}'
-    f'/pre_me_tour_proportions/v{NOTEM_ITER}/{MODEL_NAME}'
+    f'I:/NorMITs Demand/import/noham'
+    f'/post_me_tour_proportions'
 )
 TOUR_FACTOR_DIR = os.path.join(TOUR_PROP_DIR, 'fh_th_factors')
 
 # CONSTANTS
-BASE_YEAR = 2021
+BASE_YEAR = 2023
 TRIP_ORIGIN = 'hb'
 PURPOSES = [1, 2, 3, 4, 5, 6, 7, 8]
 TP_NEEDED = [1, 2, 3, 4]
-ZONE_TRANSLATION_DIR = r'I:\NorMITs Demand\import\zone_translation\one_to_one'
+ZONE_TRANSLATION_DIR = r'I:\NorMITs Demand\import\.archive\zone_translation\one_to_one'
 TOUR_PROPS_SEGMENTATIONS = {
-    nd.Mode.WALK: nd.get_segmentation_level("hb_p_m_walk"),
-    nd.Mode.CYCLE: nd.get_segmentation_level("hb_p_m_cycle"),
-    nd.Mode.BUS: nd.get_segmentation_level("hb_p_m_bus"),
     nd.Mode.CAR: nd.get_segmentation_level("hb_p_m_car"),
-    nd.Mode.TRAIN: nd.get_segmentation_level("hb_p_m_ca_rail"),
 }
 
 

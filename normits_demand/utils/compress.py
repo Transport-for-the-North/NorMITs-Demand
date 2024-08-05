@@ -6,6 +6,7 @@ For further research!
 """
 # Builtins
 import bz2
+import pickle
 import _pickle as cPickle
 import pathlib
 
@@ -77,8 +78,8 @@ def write_out(o: Any,
         path = pathlib.Path(path)
     path = file_ops.maybe_add_suffix(path, consts.COMPRESSION_SUFFIX, overwrite_suffix)
 
-    with bz2.BZ2File(path, 'w') as f:
-        cPickle.dump(o, f)
+    with open(path, 'wb') as f:
+        pickle.dump(o, f)
 
     return path
 

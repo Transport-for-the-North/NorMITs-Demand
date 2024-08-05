@@ -2120,7 +2120,7 @@ def build_24hr_mats(
     if splitting_factors_export:
         print("Writing tp splitting factors to disk - might take a while...")
         decompile_factors = du.defaultdict_to_regular(decompile_factors)
-        return compress.write_out(decompile_factors, splitting_factors_export)
+        return compress.write_out(decompile_factors, splitting_factors_export, overwrite_suffix=False)
 
 
 def match_distribution_params(
