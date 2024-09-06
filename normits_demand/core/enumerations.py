@@ -340,6 +340,7 @@ class AssignmentModel(IsValidEnum):
 
     NOHAM = "NoHAM"
     NORMS = "NoRMS"
+    NOHAM_LOCAL = "NoHAM_local"
     # Models for Midlands Connect
     MIHAM = "MiHAM"
     MIRANDA = "MiRANDA"
@@ -383,6 +384,7 @@ class AssignmentModel(IsValidEnum):
         """Dictionary lookup for the assignment model modes."""
         return {
             cls.NOHAM: Mode.CAR,
+            cls.NOHAM_LOCAL: Mode.CAR,
             cls.NORMS: Mode.TRAIN,
             cls.MIHAM: Mode.CAR,
             cls.MIRANDA: Mode.TRAIN,

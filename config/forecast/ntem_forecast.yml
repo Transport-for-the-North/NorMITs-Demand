@@ -1,15 +1,15 @@
-iteration: 2
+iteration: 1
 import_path: I:\NorMITs Demand\import
-assignment_model: NoHAM
-base_year: 2023
+assignment_model: NoHAM_local
+base_year: 2018
 future_years:
 - 2028
 - 2038
 - 2043
 - 2048
-export_folder: E:\noham-to-nocarb\compiled_od\forecast
+export_folder: E:\noham\localisation\forecast
 export_path_fmt: '{export_folder}/Forecasting/{forecast_model}/{forecast_version}/iter{iteration}/{scenario}/{mode}'
-matrix_import_path: E:\noham-to-nocarb\compiled_od\post-me\pa\24hr
+matrix_import_path: E:\noham\localisation\pa\24hr
 hb_purposes_needed:
 - 1
 - 2
@@ -38,9 +38,9 @@ user_classes:
 - commute
 - business
 - other
-output_trip_end_data: no
-output_trip_end_growth: no
+output_trip_end_data: yes
+output_trip_end_growth: yes
 ntem_parameters:
   data_path: I:\Data\NTEM
   version: 8.0
-  scenario: Low
+  scenario: Core
