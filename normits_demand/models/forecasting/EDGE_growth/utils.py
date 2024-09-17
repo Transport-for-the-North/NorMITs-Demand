@@ -391,6 +391,8 @@ def split_irsj(irsj_dir: pathlib.Path, split_col: str, tp: str):
     with pd.HDFStore(write_path, mode='w') as store:
         for df in dfs:
             # Save each split DataFrame as a separate key in the HDF5 store
+            if isinstance(df, pd.Series):
+                df = df.reset_index()
             key = f'{split_col}_{df[split_col].unique()[0]}'
             store[key] = df
 

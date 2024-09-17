@@ -229,7 +229,7 @@ def splits_loop(
     """
     split_dict = {}
     edge_flows = file_ops.read_df(
-        ticket_split_params.edge_flows_path, usecols=[0, 2, 5]
+        ticket_split_params.edge_flows_path, usecols=['FromCaseZoneID', 'ToCaseZoneID', 'FlowCatName']
     )
     flows_lookup = file_ops.read_df(ticket_split_params.flow_cat_path)
     ticket_splits_df = file_ops.read_df(
@@ -237,7 +237,7 @@ def splits_loop(
     )
     for tp in tps:
         dist_mx = pd.read_csv(
-            ticket_split_params.splits_path / f"{tp}_stn2stn_costs.csv", usecols=[0, 1, 4]
+            ticket_split_params.splits_path / f"{tp}_stn2stn_costs.csv", usecols=['from_stn_zone_id', 'to_stn_zone_id', 'tran_distance']
         )
         splitting_matrices = produce_ticketype_splitting_matrices(
             edge_flows,

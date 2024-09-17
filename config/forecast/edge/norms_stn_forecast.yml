@@ -1,19 +1,20 @@
-iteration: 1.1
+iteration: 1.2
 forecast_scenario: Central
-export_folder: E:\NorMITs Demand\bradford
+export_folder: E:\NorMITs Demand\test
 assignment_model: NoRMS
 
 # Input paths
-matrices_to_grow_dir: E:\NorMITs Demand\edge_rewrite\matrices_to_grow_dir
-irsj_props_dir: E:\NorMITs Demand\edge_rewrite\irsj_props_dir
+matrices_to_grow_dir: T:\edge_training\files_needed\matrices
+irsj_props_dir: T:\edge_training\files_needed\irsj_props
 
 # Custom inputs files
-demand_segments: I:\NorMITs Demand\import\edge_replicant\apply_growth\demand_segments.csv
-norms_to_edge_stns_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\TLCs_MOIRA.csv
+demand_segments: U:\00_Inputs\GATInputs\demand_segments.csv
+norms_to_edge_stns_path: U:\00_Inputs\GATInputs\TLCs_MOIRA.csv
 ticket_type_splits:
-  edge_flows_path: I:\NorMITs Demand\import\edge_replicant\edge_inputs\Base and Mappings\FC_fullfat1819_NEW_DDG.csv
-  splits_path: E:\NorMITs Demand\edge_rewrite\ticket_splits_dir
-  flow_cat_path: I:\NorMITs Demand\import\edge_replicant\apply_growth\FlowCats.csv
+  edge_flows_path: U:\00_Inputs\GATInputs\FC_fullfat1819_NEW_DDG.csv
+  splits_path: T:\edge_training\files_needed\ticket_splits
+  flow_cat_path: U:\00_Inputs\GATInputs\FlowCats.csv
+  info: info
 
 cube_exe: C:\Program Files\Citilabs\CubeVoyager\VOYAGER.EXE
 
@@ -23,8 +24,5 @@ edge_growth_dir: I:\NorMITs Demand\import\edge_replicant\edge_inputs\output_data
 # Forecast years dictionary
 # forecast year: EDGE growth factors file
 forecast_years:
-  2035: Out_Jan 24 Central - Growth_2035_rate.csv.bz2
-  2036: Out_Jan 24 Central - Growth_2036_rate.csv.bz2
-  2042: Out_Jan 24 Central - Growth_2042_rate.csv.bz2
-  2043: Out_Jan 24 Central - Growth_2043_rate.csv.bz2
-  2044: Out_Jan 24 Central - Growth_2044_rate.csv.bz2
+  2023: Out_Jan 24 Central - Growth_2023_rate.csv.bz2
+

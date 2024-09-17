@@ -252,7 +252,7 @@ class TicketSplitParams(caf.toolkit.BaseConfig):
     edge_flows_path: Path
     flow_cat_path: Path
     splits_path: Path
-    # info: Optional[str]
+    info: Optional[str]
     
     @pydantic.validator("splits_path")
     def _check_contents(cls, value):
