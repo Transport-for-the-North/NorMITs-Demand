@@ -28,12 +28,14 @@ def factor_dir(mat_dir, years):
             mat *= factors[uc]
             if year == 2045: # check if this should be 44
                 mat *= 1.016472257
-                year = 2053 # check if this should be 52
+                out_year = 2052 # check if this should be 52
+            else:
+                out_year = year - 1
             mat.to_csv(mat_dir / f"{segment}.csv", header=False)
             factored[segment] = mat_dir / f"{segment}.csv"
-        con.csv_to_mat(1300, factored, mat_dir / f"PT_24hr_Demand_{year}.MAT")
+        con.csv_to_mat(1300, factored, mat_dir / f"PT_24hr_Demand_{out_year}_covid_adjusted.MAT")
 
 if __name__ == "__main__":
     factor_dir(Path(r"E:\NorMITs Demand\Rotherham\Forecasting\edge\1.0\iter1.review\High\train"),
-               [2028])
+               [2036, 2043, 2045])
 
