@@ -26,6 +26,9 @@ def factor_dir(mat_dir, years):
         for segment, uc in lookup.items():
             mat = pd.read_csv(mat_dir / f"{year}_24Hr_{segment}.csv", index_col=[0,1])
             mat *= factors[uc]
+            if year == 2045: # check if this should be 44
+                mat *= 1.016472257
+                year = 2053 # check if this should be 52
             mat.to_csv(mat_dir / f"{segment}.csv", header=False)
             factored[segment] = mat_dir / f"{segment}.csv"
         con.csv_to_mat(1300, factored, mat_dir / f"PT_24hr_Demand_{year}.MAT")
