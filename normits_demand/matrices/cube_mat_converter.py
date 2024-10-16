@@ -229,3 +229,10 @@ def _stdout_decode(stdout: bytes) -> str:
     if stdout != "":
         stdout = "\n" + stdout
     return stdout
+
+# if __name__ == "__main__":
+#     con = CUBEMatConverter(Path(r"C:\Program Files\Citilabs\CubeVoyager\VOYAGER.EXE"))
+#     base_dir = Path(r"U:\00_Inputs\RunInputs\Demand")
+#     for ver in [66, 67, 68]:
+#         con.mat_2_omx(base_dir / "v66" / "PT_24hr_Demand.mat",
+#                       )

@@ -36,6 +36,12 @@ def factor_dir(mat_dir, years):
         con.csv_to_mat(1300, factored, mat_dir / f"PT_24hr_Demand_{out_year}_covid_adjusted.MAT")
 
 if __name__ == "__main__":
+    con = CUBEMatConverter(Path(r"C:\Program Files\Citilabs\CubeVoyager\VOYAGER.EXE"))
+    # dir = Path(r"T:\Isaac\edge\1.0\iter1.2\High\train")
+    # import os
+    # for file in os.listdir(dir):
+    #     if file != 'omx':
+    #         con.mat_2_omx(dir / file, dir / 'omx', file.split(',')[0])
     factor_dir(Path(r"E:\NorMITs Demand\Rotherham\Forecasting\edge\1.0\iter1.review\High\train"),
                [2036, 2043, 2045])
 
