@@ -208,11 +208,9 @@ def model_mode_subset(
 
 
 def tem_forecasting(
-    params: Union[
-        forecast_cnfg.TEMForecastParameters,
-        forecast_cnfg.NTEMForecastParameters,
-    ],
-    forecast_model: forecast_cnfg.ForecastModel,
+    params: Union[forecast_cnfg.TEMForecastParameters,forecast_cnfg.NTEMForecastParameters],
+    forecast_model: forecast_cnfg.ForecastModel
+
 ) -> None:
     """Run the NTEM or trip end forecasting.
 
@@ -225,13 +223,14 @@ def tem_forecasting(
     --------
     normits_demand.models.ntem_forecast
     """
+
     if forecast_model == forecast_cnfg.ForecastModel.NTEM:
         if not isinstance(params, forecast_cnfg.NTEMForecastParameters):
             raise TypeError(
                 "expected NTEMForecastParameters for "
                 f"{forecast_model.value} forecasting not {type(params)}"
             )
-
+        scenario = params.ntem_parameters.scenario
         trip_end_name = "TEMPro"
         tripend_data = ntem_forecast.get_tempro_data(
             params.ntem_parameters.data_path,
@@ -250,6 +249,7 @@ def tem_forecasting(
         tripend_data = tem_forecast.read_tripends(
             params.base_year, params.future_years, params.tripend_path
         )
+        scenario = None
     else:
         raise ValueError(
             f"forecasting for trip end or NTEM only not {forecast_model}"
@@ -278,7 +278,8 @@ def tem_forecasting(
     )
     pa_output_folder = params.export_path / "Matrices" / "PA"
     ntem_forecast.grow_all_matrices(
-        ntem_inputs, tripend_growth, pa_output_folder
+        ntem_inputs, tripend_growth, pa_output_folder, scenario=scenario
+
     )
 
     ntem_forecast_checks.pa_matrix_comparison(
@@ -288,6 +289,7 @@ def tem_forecasting(
         params.assignment_model.get_mode(),
         params.comparison_zone_systems,
         params.base_year,
+        scenario=scenario,
     )
     od_folder = pa_output_folder.with_name("OD")
     ntem_forecast.convert_to_od(
@@ -302,6 +304,7 @@ def tem_forecasting(
         },
         params.pa_to_od_factors,
         params.export_path,
+        scenario=scenario,
     )
 
     # Compile to output formats
@@ -309,11 +312,13 @@ def tem_forecasting(
         pa_output_folder,
         params.future_years,
         params.assignment_model.get_mode().get_mode_values(),
+        scenario=scenario,
     )
     compiled_od_path = ntem_forecast.compile_highway(
         od_folder,
         params.future_years,
         params.car_occupancies_path,
+        scenario=scenario,
     )
 
     ntem_forecast_checks.od_matrix_comparison(
@@ -324,6 +329,7 @@ def tem_forecasting(
         params.user_classes,
         params.time_periods,
         params.future_years,
+        scenario=scenario,
     )
 
 
