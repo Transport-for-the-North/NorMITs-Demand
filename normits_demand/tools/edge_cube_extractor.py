@@ -40,7 +40,7 @@ def omx_2_df(omx_mx: np.array) -> pd.DataFrame:
     """
     # get omx array to pandas dataframe and reset productions
     mx_df = pd.DataFrame(omx_mx).reset_index().rename(columns={"index": "from_model_zone_id"})
-    # melt DF to get attarctions vector
+    # melt DF to get attractions vector
     mx_df = mx_df.melt(
         id_vars=["from_model_zone_id"], var_name="to_model_zone_id", value_name="Demand"
     )
@@ -56,7 +56,7 @@ def stnzone_2_stn_tlc(
 ) -> pd.DataFrame:
     """Prepare the NoRMS 2 EDGE TLC codes dataframe.
 
-    Produce a stn zone ID to TLC lookup while overwritting the NoRMS TLC with a
+    Produce a stn zone ID to TLC lookup while overwriting the NoRMS TLC with a
     more suitable and EDGE matching TLC
 
     Parameters
@@ -73,7 +73,7 @@ def stnzone_2_stn_tlc(
     Returns
     -------
     zones_df : pd.DataFrame
-        lookup betwee nstation zone ID and station TLC.
+        lookup between station zone ID and station TLC.
 
     """
     # check files exists
@@ -154,16 +154,15 @@ def export_mat_2_csv_via_omx(
     with omx_file.OMXFile(pathlib.Path(out_path, f"{out_csv}.omx")) as omx_mat:
         for mx_lvl in omx_mat.matrix_levels:
             # move matrix level to a dataframe
-            mat = omx_2_df(
-                omx_mat.get_matrix_level(mx_lvl)
-            )
+            mat = omx_2_df(omx_mat.get_matrix_level(mx_lvl))
             # export matrix to csv
             file_ops.write_df(mat, f"{out_path}/{out_csv}_{mx_lvl}.csv", index=False)
 
     # delete .omx file
-    os.remove(f"{out_path}/{out_csv}.omx")
+    # os.remove(f"{out_path}/{out_csv}.omx")
     # delete .MAT files
     os.remove(f"{out_path}/PT_{segment}.MAT")
+
 
 def pt_demand_from_to(
     exe_cube: pathlib.Path,
