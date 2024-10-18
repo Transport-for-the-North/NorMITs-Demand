@@ -19,13 +19,17 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet import worksheet
 from openpyxl.utils import get_column_letter
 from tqdm import tqdm
+from caf.toolkit import translation
 
 # Local imports
 import normits_demand as nd
 from normits_demand import core as nd_core
 from normits_demand import logging as nd_log
-from normits_demand.models.forecasting import ntem_forecast, tempro_trip_ends
-from normits_demand.utils import file_ops, translation
+from normits_demand.models.forecasting import (
+    ntem_forecast,
+    tempro_trip_ends,
+)
+from normits_demand.utils import file_ops
 
 ##### CONSTANTS #####
 LOG = nd_log.get_logger(__name__)
@@ -68,6 +72,7 @@ def _filename_contents(filename: str) -> Dict[str, Any]:
         r"_yr(?P<year>\d{4})"
         r"_p(?P<purpose>\d{,2})"
         r"_m(?P<mode>\d)"
+        r"_(?P<scenario>core|high|low|regional|technology|behavioural)"
         "$",
         re.IGNORECASE,
     )
@@ -82,7 +87,9 @@ def _filename_contents(filename: str) -> Dict[str, Any]:
     return data
 
 
-def _matrix_trip_ends(matrix: Matrix, trip_end_type: str) -> pd.DataFrame:
+def _matrix_trip_ends(
+    matrix: Matrix, trip_end_type: str
+) -> pd.DataFrame:
     """Calculate trip ends for a matrix file.
 
     Parameters
@@ -116,11 +123,15 @@ def _matrix_trip_ends(matrix: Matrix, trip_end_type: str) -> pd.DataFrame:
             f"trip_end_type should be 'pa' or 'od' not {trip_end_type}"
         )
     if isinstance(matrix, (str, Path)):
-        matrix = file_ops.read_df(matrix, index_col=0, find_similar=True)
+        matrix = file_ops.read_df(
+            matrix, index_col=0, find_similar=True
+        )
     elif isinstance(matrix, pd.DataFrame):
         pass
     else:
-        raise ntem_forecast.NTEMForecastError(f"matrix should be {Matrix} not {type(matrix)}")
+        raise ntem_forecast.NTEMForecastError(
+            f"matrix should be {Matrix} not {type(matrix)}"
+        )
     trip_ends = []
     for i, nm in enumerate(te_names):
         df = matrix.sum(axis=i)
@@ -129,7 +140,9 @@ def _matrix_trip_ends(matrix: Matrix, trip_end_type: str) -> pd.DataFrame:
         df.insert(0, "trip_end_type", nm)
         trip_ends.append(df.reset_index())
     trip_ends = pd.concat(trip_ends, axis=0)
-    trip_ends.loc[:, "zone_id"] = pd.to_numeric(trip_ends["zone_id"], downcast="integer")
+    trip_ends.loc[:, "zone_id"] = pd.to_numeric(
+        trip_ends["zone_id"], downcast="integer"
+    )
     return trip_ends
 
 
@@ -147,13 +160,19 @@ def _compare_trip_ends(
     tempro_comparison = []
     for mat_type in base_trip_ends:
         if mat_type not in forecast_trip_ends:
-            raise KeyError(f"{mat_type!r} key not in forecast_trip_ends")
+            raise KeyError(
+                f"{mat_type!r} key not in forecast_trip_ends"
+            )
         for te_type in base_trip_ends[mat_type]:
             if te_type not in forecast_trip_ends[mat_type]:
-                raise KeyError(f"{te_type!r} not in forecast_trip_ends[{mat_type!r}]")
+                raise KeyError(
+                    f"{te_type!r} not in forecast_trip_ends[{mat_type!r}]"
+                )
             dvectors = {
                 f"matrix_{years[0]}": base_trip_ends[mat_type][te_type],
-                f"matrix_{years[1]}": forecast_trip_ends[mat_type][te_type],
+                f"matrix_{years[1]}": forecast_trip_ends[mat_type][
+                    te_type
+                ],
             }
             # Check TEMPro DVector
             for y in years:
@@ -175,7 +194,11 @@ def _compare_trip_ends(
 
             # Convert to DataFrames
             dataframes = []
-            index_cols = ["p", "m", f"{comparison_zone_system['trip end']}_zone_id"]
+            index_cols = [
+                "p",
+                "m",
+                f"{comparison_zone_system['trip end']}_zone_id",
+            ]
             for nm, dvec in dvectors.items():
                 df = dvec.to_df().rename(columns={"val": nm})
                 df = df.set_index(index_cols)
@@ -185,21 +208,27 @@ def _compare_trip_ends(
             df.loc[:, "matrix_type"] = mat_type
             df.loc[:, "trip_end_type"] = te_type
             tempro_comparison.append(
-                df.set_index(["matrix_type", "trip_end_type"] + index_cols)
+                df.set_index(
+                    ["matrix_type", "trip_end_type"] + index_cols
+                )
             )
     tempro_comparison = pd.concat(tempro_comparison)
     # Calculate growth differences
     tempro_comparison.loc[:, "matrix_growth"] = (
-        tempro_comparison[f"matrix_{years[1]}"] / tempro_comparison[f"matrix_{years[0]}"]
+        tempro_comparison[f"matrix_{years[1]}"]
+        / tempro_comparison[f"matrix_{years[0]}"]
     )
     tempro_comparison.loc[:, "tempro_growth"] = (
-        tempro_comparison[f"tempro_{years[1]}"] / tempro_comparison[f"tempro_{years[0]}"]
+        tempro_comparison[f"tempro_{years[1]}"]
+        / tempro_comparison[f"tempro_{years[0]}"]
     )
     tempro_comparison.loc[:, "growth_difference"] = (
-        tempro_comparison["matrix_growth"] - tempro_comparison["tempro_growth"]
+        tempro_comparison["matrix_growth"]
+        - tempro_comparison["tempro_growth"]
     )
     tempro_comparison.loc[:, "growth_%_diff"] = (
-        tempro_comparison["matrix_growth"] / tempro_comparison["tempro_growth"]
+        tempro_comparison["matrix_growth"]
+        / tempro_comparison["tempro_growth"]
     ) - 1
     return tempro_comparison
 
@@ -247,7 +276,9 @@ def matrix_dvectors(
     trip_ends = pd.concat(trip_ends)
 
     matrix_zoning = nd_core.get_zoning_system(matrix_zoning)
-    comparison_zoning = nd_core.get_zoning_system(comparison_zone_systems["trip end"])
+    comparison_zoning = nd_core.get_zoning_system(
+        comparison_zone_systems["trip end"]
+    )
     dvectors = {}
     columns = ["zone_id", "trips", "p", "m"]
     for te_type in trip_ends.trip_end_type.unique():
@@ -304,7 +335,9 @@ def _find_matrices(folder: Path) -> pd.DataFrame:
     files_df = pd.DataFrame(files)
     files_df.to_csv(folder / "Matrices list.csv", index=False)
     index_cols = ["matrix_type", "year", "mode", "purpose"]
-    files_df = files_df.loc[:, index_cols + ["path"]].set_index(index_cols)
+    files_df = files_df.loc[:, index_cols + ["path"]].set_index(
+        index_cols
+    )
     return files_df
 
 
@@ -313,7 +346,9 @@ def _read_matrices(paths: Dict[int, Path]) -> Dict[int, pd.DataFrame]:
     matrices = {}
     for i, p in paths.items():
         df = file_ops.read_df(p, index_col=0, find_similar=True)
-        df.columns = pd.to_numeric(df.columns, downcast="integer", errors="ignore")
+        df.columns = pd.to_numeric(
+            df.columns, downcast="integer", errors="ignore"
+        )
         matrices[i] = df
     return matrices
 
@@ -325,6 +360,7 @@ def pa_matrix_comparison(
     mode: nd.Mode,
     comparison_zone_system: dict[str, str],
     base_year: int,
+    scenario: str = "TEM",
 ):
     """Produce TEMPro comparisons for PA matrices.
 
@@ -338,6 +374,8 @@ def pa_matrix_comparison(
         TEMPro trip end data.
     base_year : int
         Base model year.
+    scenario : str
+        NTEM scenarios, defaults to TEM (if not provided for TEM forecasting.)
     """
     LOG.info("PA matrix trip ends comparison with TEMPro")
     output_folder = pa_folder / "TEMPro Comparisons"
@@ -347,13 +385,20 @@ def pa_matrix_comparison(
 
     # Read base matrices
     if ntem_imports.mode != 3:
-        raise NotImplementedError("PA matrix comparison only works for mode 3")
-    segmentation = {"hb": f"hb_p_m_{mode.name.lower()}", "nhb": f"nhb_p_m_{mode.name.lower()}"}
+        raise NotImplementedError(
+            "PA matrix comparison only works for mode 3"
+        )
+    segmentation = {
+        "hb": f"hb_p_m_{mode.name.lower()}",
+        "nhb": f"nhb_p_m_{mode.name.lower()}",
+    }
     base_matrices = {}
     base_trip_ends = {}
     for nm, seg in segmentation.items():
         LOG.info("Getting trip ends for base %s", nm.upper())
-        base_matrices[nm] = _read_matrices(getattr(ntem_imports, f"{nm}_paths"))
+        base_matrices[nm] = _read_matrices(
+            getattr(ntem_imports, f"{nm}_paths")
+        )
         base_trip_ends[nm] = matrix_dvectors(
             base_matrices[nm],
             seg,
@@ -364,7 +409,9 @@ def pa_matrix_comparison(
         )
 
     # Convert tempro_data to LA zoning and make sure segmentation is (n)hb_p_m
-    tempro_data_comp = tempro_data.translate_zoning(comparison_zone_system["trip end"])
+    tempro_data_comp = tempro_data.translate_zoning(
+        comparison_zone_system["trip end"]
+    )
     # Compare trip ends to tempro for all purposes and years
     for yr in files.index.get_level_values("year").unique():
         forecast_matrices = {}
@@ -372,7 +419,9 @@ def pa_matrix_comparison(
         for nm, seg in segmentation.items():
             LOG.info("Getting trip ends for %s %s", yr, nm.upper())
             indices = pd.IndexSlice[nm, yr, ntem_imports.mode]
-            forecast_matrices[nm] = _read_matrices(files.loc[indices, "path"].to_dict())
+            forecast_matrices[nm] = _read_matrices(
+                files.loc[indices, "path"].to_dict()
+            )
             forecast_trip_ends[nm] = matrix_dvectors(
                 forecast_matrices[nm],
                 seg,
@@ -390,7 +439,7 @@ def pa_matrix_comparison(
         )
         out = (
             output_folder
-            / f"PA_TEMPro_comparisons-{yr}-{comparison_zone_system['trip end']}.csv"
+            / f"PA_TEMPro_comparisons-{yr}-{comparison_zone_system['trip end']}_{scenario}.csv"
         )
         file_ops.write_df(comparison, out)
         LOG.info("Written: %s", out)
@@ -406,7 +455,8 @@ def pa_matrix_comparison(
                 tempro_data,
                 comp_zone,
                 (base_year, yr),
-                output_folder / f"PA_TEMPro_comparisons-{yr}-{comp_zone}",
+                output_folder
+                / f"PA_TEMPro_comparisons-{yr}-{comp_zone}_{scenario}",
             )
 
 
@@ -417,7 +467,7 @@ def translate_matrix(
     weighting: str = None,
     **kwargs,
 ) -> pd.DataFrame:
-    """Tranlate square matrix into new zoning system.
+    """Translate square matrix into new zoning system.
 
     Wrapper for `translation.pandas_matrix_zone_translation`.
 
@@ -445,16 +495,16 @@ def translate_matrix(
     # Get correspondence DataFrame
     matrix_zoning = nd_core.get_zoning_system(matrix_zoning_name)
     new_zoning = nd_core.get_zoning_system(new_zoning_name)
-    lookup = matrix_zoning._get_translation_definition(new_zoning, weighting)
+    lookup = matrix_zoning._get_translation_definition(
+        new_zoning, weighting
+    )
     # Translate matrix
     return translation.pandas_matrix_zone_translation(
         matrix,
+        lookup,
         f"{matrix_zoning_name}_zone_id",
         f"{new_zoning_name}_zone_id",
         f"{matrix_zoning_name}_to_{new_zoning_name}",
-        matrix_zoning.unique_zones,
-        new_zoning.unique_zones,
-        translation=lookup,
         **kwargs,
     )
 
@@ -488,9 +538,15 @@ def _matrix_comparison_write(
     MATRIX_SHEETS = [f"{s} Matrices Data" for s in ("Base", "Forecast")]
     out = output_path.with_suffix(".xlsx")
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
-        tempro_data[TEMPRO_COLUMNS].to_excel(writer, sheet_name="TEMPro Data", index=False)
-        for nm, mat in zip(MATRIX_SHEETS, (base_matrices, forecast_matrices)):
-            mat[MATRIX_COLUMNS].to_excel(writer, sheet_name=nm, index=False)
+        tempro_data[TEMPRO_COLUMNS].to_excel(
+            writer, sheet_name="TEMPro Data", index=False
+        )
+        for nm, mat in zip(
+            MATRIX_SHEETS, (base_matrices, forecast_matrices)
+        ):
+            mat[MATRIX_COLUMNS].to_excel(
+                writer, sheet_name=nm, index=False
+            )
 
         # Create summary sheet
         wb: openpyxl.Workbook = writer.book
@@ -510,7 +566,9 @@ def _matrix_comparison_write(
         zones = tempro_data[zone_col].unique().tolist()
         endrow = 3
         for nm in MATRIX_SHEETS:
-            endrow, _ = _excel_matrix_formula(ws, nm, endrow + 2, 2, zones, PURP_CELL)
+            endrow, _ = _excel_matrix_formula(
+                ws, nm, endrow + 2, 2, zones, PURP_CELL
+            )
         _excel_growth_matrix(ws, endrow + 2, 2, zones)
 
     LOG.info("Written: %s", out)
@@ -644,7 +702,10 @@ def _excel_matrix_formula(
 
 
 def _excel_growth_matrix(
-    ws: worksheet.Worksheet, startrow: int, startcol: int, zones: List[Any]
+    ws: worksheet.Worksheet,
+    startrow: int,
+    startcol: int,
+    zones: List[Any],
 ):
     """Add growth matrix summary for `_matrix_comparison_write`."""
     cell_id = lambda r, c: f"{get_column_letter(c)}{r}"
@@ -656,9 +717,17 @@ def _excel_growth_matrix(
             if row == 1:
                 ws.cell(startrow, startcol + col, czone)
             row_diff = len(row_list) + 2
-            base_pos = cell_id(startrow + row - (2 * row_diff), startcol + col)
-            forecast_pos = cell_id(startrow + row - row_diff, startcol + col)
-            ws.cell(startrow + row, startcol + col, f"={forecast_pos}/{base_pos}")
+            base_pos = cell_id(
+                startrow + row - (2 * row_diff), startcol + col
+            )
+            forecast_pos = cell_id(
+                startrow + row - row_diff, startcol + col
+            )
+            ws.cell(
+                startrow + row,
+                startcol + col,
+                f"={forecast_pos}/{base_pos}",
+            )
 
 
 def matrix_comparison(
@@ -701,12 +770,16 @@ def matrix_comparison(
     tempro_data = tempro_data.translate_zoning(comparison_zoning)
     zone_col = f"{comparison_zoning}_zone_id"
     mat_translation = functools.partial(
-        translate_matrix, matrix_zoning_name=matrix_zoning, new_zoning_name=comparison_zoning
+        translate_matrix,
+        matrix_zoning_name=matrix_zoning,
+        new_zoning_name=comparison_zoning,
     )
     # Translate matrices and convert to long format with
     # columns for matrix type and purpose
     long_matrices = {"base": [], "forecast": []}
-    matrix_iterator = tuple(zip(long_matrices, (base_matrices, forecast_matrices)))
+    matrix_iterator = tuple(
+        zip(long_matrices, (base_matrices, forecast_matrices))
+    )
     tempro_df = []
     for mat_type in base_matrices:
         # Extract both trip ends from tempro for all purposes
@@ -718,14 +791,28 @@ def matrix_comparison(
                 df.loc[:, "matrix_type"] = mat_type
                 df.loc[:, "trip_end_type"] = pa
                 temp_tempro.append(
-                    df.set_index(["matrix_type", "trip_end_type", "p", "m", zone_col])
+                    df.set_index(
+                        [
+                            "matrix_type",
+                            "trip_end_type",
+                            "p",
+                            "m",
+                            zone_col,
+                        ]
+                    )
                 )
-            tempro_df.append(pd.concat(temp_tempro, axis=1).reset_index())
+            tempro_df.append(
+                pd.concat(temp_tempro, axis=1).reset_index()
+            )
         # Convert each matrix to long format and add information
         # about mat type and purpose
         for p in base_matrices[mat_type]:
             for nm, mat in matrix_iterator:
-                df = mat_translation(mat[mat_type][p]).stack().to_frame("trips")
+                df = (
+                    mat_translation(mat[mat_type][p])
+                    .stack()
+                    .to_frame("trips")
+                )
                 df.index.names = ["from_zone", "to_zone"]
                 df.loc[:, "matrix_type"] = mat_type
                 df.loc[:, "purpose"] = p
@@ -751,7 +838,14 @@ def matrix_comparison(
             + df["to_zone"].astype(str)
         )
         long_matrices[nm] = df[
-            ["matrix_type", "purpose", "from_zone", "to_zone", "id", "trips"]
+            [
+                "matrix_type",
+                "purpose",
+                "from_zone",
+                "to_zone",
+                "id",
+                "trips",
+            ]
         ]
 
     # Save data to Excel
@@ -773,6 +867,7 @@ def od_matrix_comparison(
     user_classes: list[str],
     time_periods: list[int],
     future_years: list[int],
+    scenario: str = None,
 ):
     """Write spreadsheet summarising OD matrix growth.
 
@@ -794,11 +889,16 @@ def od_matrix_comparison(
     OD_MATRIX_NAMES = {
         "base": "od_m3_{purp}_tp{tp}_postME.csv",
         "base2": "od_m3_{purp}_tp{tp}.csv",
-        "forecast": "od_{purp}_yr{yr}_m3_tp{tp}.csv",
+        "forecast": "od_{purp}_yr{yr}_m3_{scen}_tp{tp}.csv",
     }
-    for name, folder in (("base", base_folder), ("forecast", forecast_folder)):
+    for name, folder in (
+        ("base", base_folder),
+        ("forecast", forecast_folder),
+    ):
         if not folder.is_dir():
-            raise NotADirectoryError(f"{name} folder doesn't exist: {folder}")
+            raise NotADirectoryError(
+                f"{name} folder doesn't exist: {folder}"
+            )
     LOG.info(
         "Creating OD matrix summary using:\n\t"
         "base folder: %s\n\tforecast folder: %s\n\t"
@@ -807,7 +907,10 @@ def od_matrix_comparison(
         forecast_folder,
         comparison_zoning,
     )
-    out_path = forecast_folder / f"OD_matrix_growth_summary-{comparison_zoning}.xlsx"
+    out_path = (
+        forecast_folder
+        / f"OD_matrix_growth_summary-{comparison_zoning}.xlsx"
+    )
     pbar = tqdm(
         desc="Creating OD Matrix Summary",
         total=len(user_classes) * len(time_periods),
@@ -816,17 +919,25 @@ def od_matrix_comparison(
     with pd.ExcelWriter(out_path) as writer:
         for purpose in user_classes:
             for tp in time_periods:
-                base_path = base_folder / OD_MATRIX_NAMES["base"].format(purp=purpose, tp=tp)
+                base_path = base_folder / OD_MATRIX_NAMES[
+                    "base"
+                ].format(purp=purpose, tp=tp)
                 if not base_path.exists():
                     print(base_path)
                     base_path = base_path.with_name(
-                        OD_MATRIX_NAMES["base2"].format(purp=purpose, tp=tp)
+                        OD_MATRIX_NAMES["base2"].format(
+                            purp=purpose, tp=tp
+                        )
                     )
-                forecast_name = lambda p, t, y: OD_MATRIX_NAMES["forecast"].format(
-                    purp=p, tp=t, yr=y
+                forecast_name = (
+                    lambda p, t, y, scenario: OD_MATRIX_NAMES[
+                        "forecast"
+                    ].format(purp=p, tp=t, yr=y, scen=scenario)
                 )
                 forecast_paths = {
-                    y: forecast_folder / forecast_name(purpose, tp, y) for y in future_years
+                    y: forecast_folder
+                    / forecast_name(purpose, tp, y, scenario)
+                    for y in future_years
                 }
                 _compare_od_matrices(
                     writer,
@@ -887,7 +998,9 @@ def _compare_od_matrices(
             )
             forecast.fillna(0, inplace=True)
 
-        forecast = translate_matrix(forecast, matrix_zoning, comparison_zoning)
+        forecast = translate_matrix(
+            forecast, matrix_zoning, comparison_zoning
+        )
         forecast = matrix_totals(forecast)
 
         col = i * (len(forecast) + 2)

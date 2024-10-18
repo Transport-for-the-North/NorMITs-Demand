@@ -58,7 +58,10 @@ class NTEMImportMatrices:
     def __init__(self, matrix_folder: Path, year: int, model: nd.AssignmentModel) -> None:
         self.year = int(year)
         self.model = model
-        if self.model not in (nd.AssignmentModel.NOHAM, nd.AssignmentModel.MIHAM):
+        if self.model not in (
+            nd.AssignmentModel.NOHAM,
+            nd.AssignmentModel.MIHAM,
+        ):
             raise NotImplementedError(
                 f"NTEM forecasting not yet implemented for {model.get_name()}"
             )
@@ -172,6 +175,7 @@ class NTEMImportMatrices:
         trip_origin: str,
         purpose: int,
         year: int,
+        scenario: str,
         compressed: bool = True,
         **kwargs,
     ) -> str:
@@ -185,6 +189,9 @@ class NTEMImportMatrices:
             Purpose number.
         year : int
             The year for the output matrix
+        scenario:
+            The NTEM scenario for this run. Don't include if this is used for
+            non-NTEM forecasting.
         compressed: bool, default True
             Whether the return should be a compressed filetype or not.
         kwargs: keyword arguments, optional
@@ -208,6 +215,7 @@ class NTEMImportMatrices:
             file_desc="pa",
             trip_origin=trip_origin,
             year=str(year),
+            scenario=scenario,
             compressed=compressed,
             **kwargs,
         )
@@ -476,7 +484,10 @@ def grow_matrix(
     internals = attractions.zoning_system.internal_zones
     int_targets = {}
     growth = {}
-    dvectors = (("row_targets", productions), ("col_targets", attractions))
+    dvectors = (
+        ("row_targets", productions),
+        ("col_targets", attractions),
+    )
     for nm, dvec in dvectors:
         mat_te = matrix.loc[internals, internals].sum(axis=1 if nm == "row_targets" else 0)
         mat_te.name = "base_trips"
@@ -518,7 +529,10 @@ def grow_matrix(
     ext_future.loc[internals, internals] = 0
     combined_future = pd.concat([int_future, ext_future], axis=0)
     combined_future = combined_future.groupby(level=0).sum()
-    combined_future.rename(columns={i: int(i) for i in combined_future.columns}, inplace=True)
+    combined_future.rename(
+        columns={i: int(i) for i in combined_future.columns},
+        inplace=True,
+    )
     combined_future.sort_index(axis=1, inplace=True)
     _check_matrix(combined_future, output_path.stem)
     # Write future to file
@@ -526,7 +540,10 @@ def grow_matrix(
     LOG.info("Written: %s", output_path)
     _pa_growth_comparison(
         {"base": matrix, "forecast": combined_future},
-        {"attractions": growth["col_targets"], "productions": growth["row_targets"]},
+        {
+            "attractions": growth["col_targets"],
+            "productions": growth["row_targets"],
+        },
         internals,
         output_path.with_name(
             file_ops.remove_suffixes(output_path).stem + "-growth_comparison.xlsx"
@@ -604,7 +621,7 @@ def _pa_growth_comparison(
         mat = mat.copy()
         mat.index = new_index
         mat.columns = new_index
-        matrices[nm] = mat.groupby(level=0).sum().groupby(level=0, axis=1).sum()
+        matrices[nm] = mat.groupby(level=0).sum().T.groupby(level=0).sum()
         matrix_te[nm] = pd.DataFrame(
             {
                 "Attractions": matrices[nm].sum(axis=1),
@@ -642,6 +659,7 @@ def grow_all_matrices(
     matrices: NTEMImportMatrices,
     growth: TEMProTripEnds,
     output_folder: Path,
+    scenario: str,
 ) -> None:
     """Grow all base year `matrices` to all forecast years in `trip_ends`.
 
@@ -696,7 +714,7 @@ def grow_all_matrices(
                     ) from err
                 grow_matrix(
                     base,
-                    output_folder / matrices.output_filename(hb, purp, yr),
+                    output_folder / matrices.output_filename(hb, purp, yr, scenario=scenario),
                     f"{purp}_{matrices.mode}",
                     attr,
                     prod,
@@ -712,6 +730,7 @@ def convert_to_od(
     purposes: Dict[str, List[int]],
     pa_to_od_factors: Dict[str, Path],
     export_path: Path,
+    scenario: Optional[str] = None,
 ) -> None:
     """Converts PA matrices from folder to OD.
 
@@ -750,6 +769,7 @@ def convert_to_od(
         years_needed=future_years,
         seg_level="tms",
         seg_params={"p_needed": purposes["hb"], "m_needed": modes},
+        scenario=scenario,
     )
 
     matrix_processing.nhb_tp_split_via_factors(
@@ -762,10 +782,16 @@ def convert_to_od(
         m_needed=modes,
         export_path=export_path,
         compress_out=True,
+        scenario=scenario,
     )
 
 
-def compile_highway_for_rail(pa_folder: Path, years: list[int], mode: list[int]) -> Path:
+def compile_highway_for_rail(
+    pa_folder: Path,
+    years: list[int],
+    mode: list[int],
+    scenario: str = None,
+) -> Path:
     """Compile the PA matrices into the 24hr VDM PA matrices format.
 
     The outputs are saved in a new folder called
@@ -795,6 +821,7 @@ def compile_highway_for_rail(pa_folder: Path, years: list[int], mode: list[int])
         years_needed=years,
         m_needed=mode,
         split_hb_nhb=True,
+        scenario=scenario,
     )
     for path in paths:
         matrix_processing.compile_matrices(
@@ -807,7 +834,10 @@ def compile_highway_for_rail(pa_folder: Path, years: list[int], mode: list[int])
 
 
 def compile_highway(
-    import_od_path: Path, years: List[int], car_occupancies_path: Path
+    import_od_path: Path,
+    years: List[int],
+    car_occupancies_path: Path,
+    scenario: str = None,
 ) -> Path:
     """Compile OD matrices into the formats required for NoHAM.
 
@@ -819,6 +849,9 @@ def compile_highway(
         List of years to compile.
     car_occupancies_path : Path
         Path to CSV containing car occupancies.
+    scenario:
+        The NTEM scenario for this run. Don't include if this is used for
+        non-NTEM forecasting.
 
     Returns
     -------
@@ -838,6 +871,7 @@ def compile_highway(
         years_needed=years,
         m_needed=[3],
         tp_needed=[1, 2, 3, 4],
+        scenario=scenario,
     )
     for path in compile_params_paths:
         matrix_processing.compile_matrices(
@@ -890,7 +924,10 @@ def get_tempro_data(
         attributes for base and all future years.
     """
     tempro_data = TEMProData(
-        data_path, years, ntem_version=ntem_version, ntem_scenario=ntem_scenario
+        data_path,
+        years,
+        ntem_version=ntem_version,
+        ntem_scenario=ntem_scenario,
     )
     # Read data and convert to DVectors
     trip_ends = tempro_data.produce_dvectors()
