@@ -3,7 +3,7 @@
     Module containing functionality for reading and writing to
     OMX files.
 """
-
+import os
 ##### IMPORTS #####
 # Standard imports
 from pathlib import Path
@@ -17,7 +17,7 @@ import tables
 from normits_demand import logging as nd_log
 
 ##### CONSTANTS #####
-LOG = nd_log.get_logger(__name__)
+# LOG = nd_log.get_logger(__name__)
 
 ##### CLASSES #####
 class OMXFile(tables.File):
@@ -224,3 +224,34 @@ class OMXFile(tables.File):
         if matrix.shape != self.shape:
             raise ValueError(f"matrix shape should be {self.shape} no {matrix.shape}")
         self.create_array("/data", str(level_name), matrix)
+
+if __name__ == "__main__":
+    lookup = {'HBEBCA_Int': 'business', 'HBEBNCA_Int': 'business', 'NHBEBCA_Int': 'business',
+              'NHBEBNCA_Int': 'business', 'HBWCA_Int': 'commute',
+              'HBWNCA_Int': 'commute', 'HBOCA_Int': 'other', 'HBONCA_Int': 'other',
+              'NHBOCA_Int': 'other', 'NHBONCA_Int': 'other',
+              'EBCA_Ext_FM': 'business',
+              'EBCA_Ext_TO': 'business',
+              'EBNCA_Ext': 'business',
+              'HBWCA_Ext_FM': 'commute',
+              'HBWCA_Ext_TO': 'commute',
+              'HBWNCA_Ext': 'commute',
+              'OCA_Ext_FM': 'other',
+              'OCA_Ext_TO': 'other',
+              'ONCA_Ext': 'other'
+              }
+    dir = Path(r"E:\NoRMS\covid_adjusted")
+    for ver in [66,67,68]:
+        mats = OMXFile(dir / f"v{ver}.omx")
+        summed = 0
+        for mat in mats.matrix_levels:
+            summed += mats.get_matrix_level(mat).sum().sum()
+        print(f"{ver}: {summed}")
+    summed = 0
+    dir = Path(r"T:\edge_training\files_needed\matrices")
+    for tp in ['AM','IP','PM','OP']:
+        file = OMXFile(dir / f"PT_{tp}.omx")
+        for level in file.matrix_levels:
+            if level in lookup:
+                summed += file.get_matrix_level(level).sum().sum()
+    print(summed)

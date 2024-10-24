@@ -1,12 +1,13 @@
 """Config files and options for `run_forecast`."""
 import enum
+import os
 from pathlib import Path
-from typing import Any, Optional
-
+from typing import Any, Optional, Union
 import pydantic
+import caf.toolkit
 
 import normits_demand as nd
-from normits_demand.utils import config_base, ntem_extractor
+from normits_demand.utils import ntem_extractor
 from normits_demand.core import enumerations as nd_enum
 
 
@@ -25,7 +26,7 @@ class ForecastModel(nd_enum.IsValidEnumWithAutoNameLower):
     EDGE = enum.auto()
 
 
-class ForecastParameters(config_base.BaseConfig):
+class ForecastParameters(caf.toolkit.BaseConfig):
     """Base class for storing the parameters for running forecasting."""
 
     iteration: str
@@ -45,7 +46,10 @@ class ForecastParameters(config_base.BaseConfig):
     output_trip_end_growth: bool = False
 
     def _build_export_path(
-        self, forecast_model: str, forecast_version: str, forecast_scenario: str
+        self,
+        forecast_model: str,
+        forecast_version: str,
+        forecast_scenario: str,
     ) -> Path:
         """Build export path from `export_path_fmt`."""
         return Path(
@@ -85,7 +89,9 @@ class ForecastParameters(config_base.BaseConfig):
         }
         for nm, p in paths.items():
             if not p.is_dir():
-                raise NotADirectoryError(f"cannot find {nm} folder: {p}")
+                raise NotADirectoryError(
+                    f"cannot find {nm} folder: {p}"
+                )
         return paths
 
     @property
@@ -93,9 +99,14 @@ class ForecastParameters(config_base.BaseConfig):
         """Path
         Path to the vehicle occupancies CSV file.
         """
-        path = self.import_path / "vehicle_occupancies/car_vehicle_occupancies.csv"
+        path = (
+            self.import_path
+            / "vehicle_occupancies/car_vehicle_occupancies.csv"
+        )
         if not path.exists():
-            raise FileNotFoundError(f"cannot find vehicle occupancies CSV: {path}")
+            raise FileNotFoundError(
+                f"cannot find vehicle occupancies CSV: {path}"
+            )
         return path
 
 
@@ -109,7 +120,9 @@ class TEMForecastParameters(ForecastParameters):
     forecasting_model_name: str
 
     @staticmethod
-    def _build_tripend_path(base: Path, tripend_iteration: str, scenario: nd.Scenario) -> Path:
+    def _build_tripend_path(
+        base: Path, tripend_iteration: str, scenario: nd.Scenario
+    ) -> Path:
         return base / f"iter{tripend_iteration}/{scenario.value}"
 
     @pydantic.root_validator(skip_on_failure=True)
@@ -135,7 +148,9 @@ class TEMForecastParameters(ForecastParameters):
     def tripend_path(self) -> Path:
         """Folder containing trip end data."""
         return self._build_tripend_path(
-            self.base_tripend_path, self.tem_iteration, self.tem_scenario
+            self.base_tripend_path,
+            self.tem_iteration,
+            self.tem_scenario,
         )
 
     @property
@@ -146,7 +161,9 @@ class TEMForecastParameters(ForecastParameters):
         in from the class attributes.
         """
         return self._build_export_path(
-            self.forecasting_model_name, self.forecasting_model_version, self.tem_scenario.name
+            self.forecasting_model_name,
+            self.forecasting_model_version,
+            self.tem_scenario.name,
         )
 
 
@@ -161,9 +178,17 @@ class NTEMDataParameters(pydantic.BaseModel):
     def _check_scenario(  # pylint: disable=no-self-argument
         cls, value: Optional[str]
     ) -> Optional[str]:
-        if value is not None and value not in ntem_extractor.TemproParser._scenario_list:
-            scenarios = ", ".join(f"'{s}'" for s in ntem_extractor.TemproParser._scenario_list)
-            raise ValueError(f"scenario should be one of {scenarios}, not '{value}'")
+        if (
+            value is not None
+            and value not in ntem_extractor.TemproParser._scenario_list
+        ):
+            scenarios = ", ".join(
+                f"'{s}'"
+                for s in ntem_extractor.TemproParser._scenario_list
+            )
+            raise ValueError(
+                f"scenario should be one of {scenarios}, not '{value}'"
+            )
 
         return value
 
@@ -171,8 +196,13 @@ class NTEMDataParameters(pydantic.BaseModel):
     def _check_version_and_scenario(  # pylint: disable=no-self-argument
         cls, values: dict[str, Any]
     ) -> dict[str, Any]:
-        if values["version"] > 7.2 and values.get("scenario", None) is None:
-            raise ValueError("scenario required for NTEM versions > 7.2")
+        if (
+            values["version"] > 7.2
+            and values.get("scenario", None) is None
+        ):
+            raise ValueError(
+                "scenario required for NTEM versions > 7.2"
+            )
 
         return values
 
@@ -196,11 +226,65 @@ class NTEMForecastParameters(ForecastParameters):
         else:
             raise ValueError("expected scenario for NTEM version > 7.2")
 
-        return self._build_export_path("NTEM", str(self.ntem_parameters.version), scenario)
+        return self._build_export_path(
+            "NTEM", str(self.ntem_parameters.version), scenario
+        )
 
 
-class EDGEParameters(config_base.BaseConfig):
-    """Parameters for the EDGE forecasting model."""
+class TicketSplitParams(caf.toolkit.BaseConfig):
+    """
+    Everything needed to generate ticket splitting factors.
+
+    Parameters
+    ----------
+
+    edge_flows_path: Path
+        Path to edge flows file
+    flow_cat_path: Path
+        Path to flow cat file
+    splits_path: Path
+        Dir containing TicketTypeSplits.csv as well as stn2stn_costs csvs (for each time period). This doubles as the cache
+        for processed ticket type splits, which are saved as a pickle file accompanied by a yml of this class.
+    info: str
+        Hard coded info about the corresponding pickle file. Can be changed by the user if wanted.
+    """
+
+    edge_flows_path: Path
+    flow_cat_path: Path
+    splits_path: Path
+    info: Optional[str]
+    
+    @pydantic.validator("splits_path")
+    def _check_contents(cls, value):
+        files = os.listdir(value)
+        if "TicketTypeSplits.csv" not in files:
+            raise ValueError("splits_path must contain a file called TicketTypeSplits.csv, containing ticket type split data.")
+        for i in files:
+            if '_stn2stn_costs.csv' in i:
+                return value
+        raise ValueError("splits_path must contain files called {tp}_stn2stn_costs.csv, where tp are time periods (usually 'AM', 'IP', 'PM', 'OP')")
+
+
+class EDGEParameters(caf.toolkit.BaseConfig):
+    """Parameters for the EDGE forecasting model.
+
+    forecast_years: Self explanatory
+
+    iteration: used in naming dir
+    forecast_version: used in naming dir
+    forecast_scenario: used in naming dir
+    export_folder: where export dir is built
+    assignment_model: default to NoRMs
+
+    matrices_to_grow_dir: folder containing matrices to be grown
+
+    demand_segments: path to csv containing demand segments
+    ticket_type_splits: If this has been generated already provide a path to it,
+    if not provide parameters specified in TicketSplitParameters.
+    norms_to_edge_stns_path: path to csv containing lookup
+
+
+    """
 
     forecast_years: dict[int, Any]
 
@@ -213,16 +297,13 @@ class EDGEParameters(config_base.BaseConfig):
 
     # Input folders
     matrices_to_grow_dir: Path
+    irsj_props_dir: Path
 
     # Input files
     demand_segments: Path
-    flow_cat_path: Path
-    ticket_type_splits_path: Path
+    ticket_type_splits: TicketSplitParams
     norms_to_edge_stns_path: Path
     cube_exe: Path
-
-    # EDGE file
-    edge_flows_path: Path
 
     # EDGE outputs
     edge_growth_dir: Path
@@ -257,7 +338,9 @@ class EDGEParameters(config_base.BaseConfig):
         """Check the factors Path."""
         path: Path = values["edge_growth_dir"]
         if not path.is_dir():
-            raise ValueError(f"EDGE factors folder doesn't exist: {path}")
+            raise ValueError(
+                f"EDGE factors folder doesn't exist: {path}"
+            )
 
         return values
 
@@ -267,18 +350,20 @@ class EDGEParameters(config_base.BaseConfig):
     ) -> dict[str, Any]:
         """Check the factors file."""
         for forecast_year in values["forecast_years"]:
-            path: Path = Path(values["edge_growth_dir"]) / values["forecast_years"][
-                forecast_year
-            ].format(**values)
+            path: Path = Path(values["edge_growth_dir"]) / values[
+                "forecast_years"
+            ][forecast_year].format(**values)
             if not path.is_file():
-                raise ValueError(f"EDGE factors file doesn't exist: {path}")
+                raise ValueError(
+                    f"EDGE factors file doesn't exist: {path}"
+                )
 
         return values
 
     @property
     def export_path(self) -> Path:
         """Build export path from `export_path_fmt`."""
-        return Path(
+        path = Path(
             self._export_path_fmt.format(
                 forecast_model=ForecastModel.EDGE.value,
                 scenario=self.forecast_scenario,
@@ -286,6 +371,8 @@ class EDGEParameters(config_base.BaseConfig):
                 **self.dict(),
             )
         )
+        path.mkdir(exist_ok=True, parents=True)
+        return path
 
 
 # TODO(MB) Function to create an example config file
